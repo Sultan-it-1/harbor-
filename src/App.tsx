@@ -18,7 +18,7 @@ import { exitWindowFullscreen, toggleWindowFullscreen } from "@/lib/fullscreen-s
 import { flushCloudSync } from "@/views/player/hooks/use-stremio-sync";
 import { setNativeMemoryActive } from "@/lib/native-memory";
 import { useOverlayPinned } from "@/lib/overlay-pin";
-import { isMobileDevice, isWeb } from "@/lib/platform";
+
 import { activeLayout } from "@/lib/theme";
 import { useThemePreview } from "@/lib/theme-preview";
 import { DevErrorTrigger } from "@/components/dev-error-trigger";
@@ -32,7 +32,7 @@ import { UpdateRoot } from "@/components/update/update-root";
 import { CustomCodeMount } from "@/components/custom-code-mount";
 import { MemoryHud } from "@/components/memory-hud";
 import { OfflineBanner } from "@/chrome/offline-banner";
-import { MobileNotice } from "@/components/mobile-notice";
+
 import { WebhookLoopMount } from "@/components/webhook-loop-mount";
 import { TogetherChatToast } from "@/components/together-chat-toast";
 import { TogetherCursors } from "@/components/together-cursors";
