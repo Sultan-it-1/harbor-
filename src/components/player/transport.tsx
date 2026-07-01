@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import type { PlayerCapabilities, PlayerSnapshot } from "@/lib/player/bridge";
 import type { Meta } from "@/lib/cinemeta";
 import { CastModal } from "./cast-modal";
-import type { DownloadStatus } from "@/views/player/hooks/use-video-download";
+
 import { TransportStremio } from "./transport-stremio";
 import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
@@ -137,7 +137,7 @@ export function Transport({
   engine: "html5" | "mpv";
   useOverlayPopups?: boolean;
   onMenuOpenChange?: (open: boolean) => void;
-  download?: DownloadStatus;
+  download?: ReturnType<typeof import("@/views/player/hooks/use-video-download").useVideoDownload>;
   onDownloadStart?: () => void;
   onDownloadCancel?: () => void;
   onDownloadReveal?: () => void;

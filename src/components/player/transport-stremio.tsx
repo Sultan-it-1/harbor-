@@ -9,7 +9,7 @@ import {
   type PlayerSlot,
 } from "@/lib/player-chrome";
 import { CastModal } from "./cast-modal";
-import type { DownloadStatus } from "@/views/player/hooks/use-video-download";
+
 import { SeekBar } from "./transport/seek-bar";
 import { LiveBadge, GoToLive, LiveSeekBar } from "./transport/live-controls";
 import {

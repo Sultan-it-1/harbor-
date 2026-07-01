@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { PlayerCapabilities, PlayerSnapshot } from "@/lib/player/bridge";
 import type { Meta } from "@/lib/cinemeta";
 import { getCustomIcon, type ControlVariant, type CustomIconMap, type PlayerControlId, type TimeFormat, type VolumeStyle } from "@/lib/player-chrome";
-import type { DownloadStatus } from "@/views/player/hooks/use-video-download";
+
 import { renderCustomIconControl } from "./custom-icon-renderer";
 
 function getControlState(id: PlayerControlId, ctx: ControlContext): string | undefined {
@@ -24,7 +24,7 @@ function getControlState(id: PlayerControlId, ctx: ControlContext): string | und
     case "pip":
       return "inactive";
     case "download":
-      return ctx.download?.kind ?? "idle";
+      return ctx.download?.status?.kind ?? "idle";
   }
   return undefined;
 }
@@ -86,7 +86,7 @@ export type ControlContext = {
   metaReleaseDate?: string | null;
   season?: number | null;
   episode?: number | null;
-  download?: DownloadStatus;
+  download?: ReturnType<typeof import("@/views/player/hooks/use-video-download").useVideoDownload>;
   sleep?: import("@/views/player/hooks/use-sleep-timer").SleepTimerState;
   onPlayPause: () => void;
   onSeekStep: (delta: number) => void;
@@ -237,7 +237,7 @@ export function renderControl(id: PlayerControlId, ctx: ControlContext): ReactNo
       }
       return (
         <DownloadButton
-          status={ctx.download}
+          status={ctx.download.status}
           onStart={ctx.onDownloadStart}
           onCancel={ctx.onDownloadCancel}
           onReveal={ctx.onDownloadReveal}

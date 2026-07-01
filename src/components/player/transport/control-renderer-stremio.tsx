@@ -15,7 +15,7 @@ import {
 import type { PlayerCapabilities, PlayerSnapshot } from "@/lib/player/bridge";
 import type { Meta } from "@/lib/cinemeta";
 import { getCustomIcon, type CustomIconMap, type PlayerControlId, type TimeFormat, type VolumeStyle } from "@/lib/player-chrome";
-import type { DownloadStatus } from "@/views/player/hooks/use-video-download";
+
 import { useT } from "@/lib/i18n";
 import { SubtitleMenu } from "../subtitle-menu";
 import { AudioMenu } from "../audio-menu";
@@ -135,7 +135,7 @@ function getStremioState(id: PlayerControlId, ctx: StremioRenderCtx): string | u
     case "pip":
       return "inactive";
     case "download":
-      return ctx.download?.kind ?? "idle";
+      return ctx.download?.status?.kind ?? "idle";
   }
   return undefined;
 }
@@ -293,7 +293,7 @@ export function RenderedStremioControl({
       if (!ctx.download || !ctx.onDownloadStart || !ctx.onDownloadCancel || !ctx.onDownloadReveal || !ctx.onDownloadReset) return null;
       return (
         <DownloadButton
-          status={ctx.download}
+          status={ctx.download.status}
           onStart={ctx.onDownloadStart}
           onCancel={ctx.onDownloadCancel}
           onReveal={ctx.onDownloadReveal}
