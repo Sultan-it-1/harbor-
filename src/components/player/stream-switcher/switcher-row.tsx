@@ -43,15 +43,21 @@ export function SwitcherRow({
 
   return (
     <li className={divider ? "border-t border-edge-soft/60" : ""}>
-      <button
-        onClick={onPick}
-        disabled={resolving || isCurrent}
-        className={`group flex w-full items-center gap-3.5 px-5 py-3 text-start transition-colors ${
+      <div
+        className={`group relative flex w-full items-center px-5 py-3 text-start transition-colors ${
           isCurrent
             ? "cursor-default bg-canvas/40"
-            : "hover:bg-canvas/55 disabled:cursor-wait disabled:opacity-60"
-        }`}
+            : "hover:bg-canvas/55"
+        } ${resolving ? "cursor-wait opacity-60" : ""}`}
       >
+        <button
+          className="absolute inset-0"
+          onClick={() => {
+            if (!resolving && !isCurrent) onPick();
+          }}
+          aria-label={headline}
+        />
+        <div className="pointer-events-none relative flex flex-1 items-center gap-3.5 min-w-0">
         <AddonLogo
           addonId={stream.addonId}
           addonName={addonName}
@@ -68,7 +74,8 @@ export function SwitcherRow({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        </div>
+        <div className="pointer-events-auto relative z-10 flex shrink-0 items-center gap-2">
           {filterReason && (
             <span
               title={t("Hidden by filter: {reason}", { reason: filterReason })}
@@ -104,10 +111,19 @@ export function SwitcherRow({
               {t("Now Playing")}
             </span>
           )}
+          {link && !resolving && (
+            <a
+              href={`vlc://${link}`}
+              className="flex h-7 items-center justify-center rounded-md bg-orange-500/80 px-2 text-[10.5px] font-bold uppercase tracking-wider text-white shadow transition-colors hover:bg-orange-500 active:scale-95"
+              title="Play in VLC"
+            >
+              VLC
+            </a>
+          )}
           {link && !resolving && <CopyLinkButton url={link} />}
           {resolving && <Loader2 size={13} className="animate-spin text-ink-muted" />}
         </div>
-      </button>
+      </div>
     </li>
   );
 }
