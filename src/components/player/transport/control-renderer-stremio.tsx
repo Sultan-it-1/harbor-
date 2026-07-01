@@ -1,6 +1,9 @@
+import { useEffect, useRef, useState } from "react";
 import {
   Camera,
   ChevronLeft,
+  Copy,
+  Check,
   Info,
   Maximize,
   Minimize,
@@ -148,6 +151,15 @@ export function RenderedStremioControl({
   ctx: StremioRenderCtx;
 }) {
   const tr = useT();
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
+
   const state = getStremioState(id, ctx);
   const iconUrl = getCustomIcon(ctx.customIcons, id, state);
   if (iconUrl) {
@@ -276,14 +288,31 @@ export function RenderedStremioControl({
     case "pick-another":
       if (!ctx.canPickAnother) return null;
       return (
-        <Tooltip label={ctx.isLiveChannel ? tr("TV Guide") : tr("Switch stream")}>
-          <StremioBtn
-            onClick={ctx.onPickAnother}
-            ariaLabel={ctx.isLiveChannel ? tr("TV Guide") : tr("Switch stream")}
-          >
-            {ctx.isLiveChannel ? <Tv size={26} strokeWidth={1.9} /> : <Replace size={26} strokeWidth={1.9} />}
-          </StremioBtn>
-        </Tooltip>
+        <div className="flex items-center gap-1">
+          <Tooltip label={ctx.isLiveChannel ? tr("TV Guide") : tr("Switch stream")}>
+            <StremioBtn
+              onClick={ctx.onPickAnother}
+              ariaLabel={ctx.isLiveChannel ? tr("TV Guide") : tr("Switch stream")}
+            >
+              {ctx.isLiveChannel ? <Tv size={26} strokeWidth={1.9} /> : <Replace size={26} strokeWidth={1.9} />}
+            </StremioBtn>
+          </Tooltip>
+          {ctx.download?.url && (
+            <Tooltip label={copied ? tr("Copied") : tr("Copy stream link")}>
+              <StremioBtn
+                onClick={() => {
+                  navigator.clipboard.writeText(ctx.download!.url!).catch(()=>{});
+                  setCopied(true);
+                  if (copyTimer.current) clearTimeout(copyTimer.current);
+                  copyTimer.current = window.setTimeout(() => setCopied(false), 1500);
+                }}
+                ariaLabel={tr("Copy stream link")}
+              >
+                {copied ? <Check size={26} strokeWidth={2.5} className="text-green-400" /> : <Copy size={24} strokeWidth={1.9} />}
+              </StremioBtn>
+            </Tooltip>
+          )}
+        </div>
       );
     case "dvr":
       if (!ctx.isLiveChannel || !ctx.onOpenDvr) return null;
