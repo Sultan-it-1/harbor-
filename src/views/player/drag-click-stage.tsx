@@ -40,12 +40,7 @@ export function DragClickStage(props: {
         const onUp = () => {
           window.removeEventListener("mousemove", onMove);
           window.removeEventListener("mouseup", onUp);
-          if (!dragStarted) {
-            const isMobileOrTouch = window.innerWidth <= 768 || navigator.maxTouchPoints > 0;
-            if (!isMobileOrTouch) {
-              onClick();
-            }
-          }
+          if (!dragStarted) onClick();
         };
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
