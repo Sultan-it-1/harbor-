@@ -68,7 +68,7 @@ export type TransportStremioProps = {
   engine: "html5" | "mpv";
   useOverlayPopups?: boolean;
   onMenuOpenChange?: (open: boolean) => void;
-  download?: DownloadStatus;
+  download?: ReturnType<typeof import("@/views/player/hooks/use-video-download").useVideoDownload>;
   onDownloadStart?: () => void;
   onDownloadCancel?: () => void;
   onDownloadReveal?: () => void;

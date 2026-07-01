@@ -117,6 +117,7 @@ function HdrOverlayChrome() {
   const act = (event: string, args: unknown = {}) => void hdrOverlayEmitAction(event, args);
   const download = {
     status: { kind: "idle" } as const,
+    url: src.url,
     start: async () => {},
     cancel: () => {},
     reveal: async () => {},

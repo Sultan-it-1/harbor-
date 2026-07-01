@@ -206,7 +206,7 @@ export function ShellLayer({
       tmdbKey={tmdbKey}
       season={season}
       episode={episode}
-      download={download.status}
+      download={download}
       onDownloadStart={download.start}
       onDownloadCancel={download.cancel}
       onDownloadReveal={download.reveal}

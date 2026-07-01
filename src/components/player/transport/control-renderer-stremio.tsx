@@ -80,7 +80,7 @@ export type StremioRenderCtx = {
   metaReleaseDate?: string | null;
   season?: number | null;
   episode?: number | null;
-  download?: DownloadStatus;
+  download?: ReturnType<typeof import("@/views/player/hooks/use-video-download").useVideoDownload>;
   sleep?: import("@/views/player/hooks/use-sleep-timer").SleepTimerState;
   setShowRemaining: (fn: (r: boolean) => boolean) => void;
   setAudioMenuOpen: (v: boolean) => void;

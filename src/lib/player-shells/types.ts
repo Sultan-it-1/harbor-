@@ -57,7 +57,7 @@ export type PlayerShellProps = {
   engine: "html5" | "mpv";
   useOverlayPopups?: boolean;
   onMenuOpenChange?: (open: boolean) => void;
-  download?: import("@/views/player/hooks/use-video-download").DownloadStatus;
+  download?: ReturnType<typeof import("@/views/player/hooks/use-video-download").useVideoDownload>;
   onDownloadStart?: () => void;
   onDownloadCancel?: () => void;
   onDownloadReveal?: () => void;
