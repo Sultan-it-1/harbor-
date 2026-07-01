@@ -114,6 +114,7 @@ export const HOTKEY_MAP: Record<HotkeyId, HotkeyDef> = Object.fromEntries(
 export function eventToBinding(e: KeyboardEvent): string {
   const mods: string[] = [];
   let key = e.key;
+  if (!key) return "";
   const isLetter = key.length === 1 && /[a-zA-Z]/.test(key);
   if (e.ctrlKey) mods.push("ctrl");
   if (e.shiftKey && !isLetter) mods.push("shift");
