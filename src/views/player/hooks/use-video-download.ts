@@ -139,5 +139,5 @@ export function useVideoDownload({ url, meta, episode }: Args) {
     setStatus({ kind: "idle" });
   }, []);
 
-  return { status, start, cancel, reveal, reset };
+  return { status, url, start, cancel, reveal, reset };
 }

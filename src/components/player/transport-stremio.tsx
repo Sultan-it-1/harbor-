@@ -258,7 +258,16 @@ export function TransportStremio(p: TransportStremioProps) {
         <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-3">
           {renderSlot("top-left")}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {download?.url && (
+            <a
+              href={`vlc://${download.url}`}
+              className="pointer-events-auto flex items-center justify-center rounded-full bg-orange-500/80 px-3 py-1 text-[13px] font-bold text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
+              aria-label="Play in VLC"
+            >
+              VLC
+            </a>
+          )}
           <div className="pointer-events-auto flex items-center gap-1">
             {renderSlot("top-right")}
           </div>
