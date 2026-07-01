@@ -131,6 +131,7 @@ function HdrOverlayChrome() {
         pipMode={payload.pipMode}
         onClick={() => act("hdr-stage://play-pause")}
         onDoubleClick={() => act("hdr-stage://fullscreen")}
+        onSeekStep={(delta) => act("hdr-stage://seek-step", { delta })}
       />
       <ShellLayer
         shellId={payload.shellId}

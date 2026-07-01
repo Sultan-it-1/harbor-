@@ -200,6 +200,7 @@ export function PlayerOverlayLayers(p: PlayerOverlayLayersProps) {
         onClick={p.playPauseToggle}
         onDoubleClick={p.toggleFullscreen}
         onWheelVolume={p.onVolumeWheel}
+        onSeekStep={p.onSeekStep}
       />
 
       <LoaderLayer

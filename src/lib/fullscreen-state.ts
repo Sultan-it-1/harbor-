@@ -36,6 +36,16 @@ export function setWindowFullscreen(v: boolean): void {
 
 export async function enterWindowFullscreen(): Promise<void> {
   setWindowFullscreen(true);
+  
+  // Try to lock to landscape on mobile devices
+  if (typeof screen !== "undefined" && screen.orientation && (screen.orientation as any).lock) {
+    try {
+      await (screen.orientation as any).lock("landscape");
+    } catch {
+      /* ignore */
+    }
+  }
+
   if (isTauri()) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -57,6 +67,16 @@ export async function exitWindowFullscreen(): Promise<void> {
     return;
   }
   setWindowFullscreen(false);
+  
+  // Unlock orientation
+  if (typeof screen !== "undefined" && screen.orientation && screen.orientation.unlock) {
+    try {
+      screen.orientation.unlock();
+    } catch {
+      /* ignore */
+    }
+  }
+
   if (isTauri()) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");

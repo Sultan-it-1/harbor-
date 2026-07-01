@@ -4,8 +4,9 @@ export function DragClickStage(props: {
   onClick: () => void;
   onDoubleClick: () => void;
   onWheelVolume?: (deltaY: number) => void;
+  onSeekStep?: (delta: number) => void;
 }) {
-  const { drawMode, pipMode, onClick, onDoubleClick, onWheelVolume } = props;
+  const { drawMode, pipMode, onClick, onDoubleClick, onWheelVolume, onSeekStep } = props;
   return (
     <div
       className="pointer-events-auto absolute inset-0 z-[3]"
@@ -47,6 +48,19 @@ export function DragClickStage(props: {
       onDoubleClick={(e) => {
         if (e.target !== e.currentTarget) return;
         if (drawMode || pipMode) return;
+        
+        const isMobileOrTouch = window.innerWidth <= 768 || navigator.maxTouchPoints > 0;
+        if (isMobileOrTouch && onSeekStep) {
+          const third = window.innerWidth / 3;
+          if (e.clientX < third) {
+            onSeekStep(-10);
+            return;
+          } else if (e.clientX > third * 2) {
+            onSeekStep(10);
+            return;
+          }
+        }
+        
         onDoubleClick();
       }}
     />
