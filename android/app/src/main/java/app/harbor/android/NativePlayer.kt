@@ -205,6 +205,12 @@ class NativePlayer(
         }.start()
     }
 
+    /** Switch the panel to the best refresh rate for this video's frame rate. */
+    private fun matchRefreshToVideo() {
+        val fps = player?.videoFormat?.frameRate ?: return
+        if (fps > 1f) RefreshRate.apply(activity, fps)
+    }
+
     private fun baseLang(l: String) = l.lowercase().substringBefore('-').substringBefore('_')
 
     private fun toast(msg: String) = Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -253,7 +259,10 @@ class NativePlayer(
         val dataSource = DefaultDataSource.Factory(ctx, http)
         val renderers = DefaultRenderersFactory(ctx)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            // Hardware MediaCodec decoders first (FFmpeg is only used for audio the phone
+            // can't decode); asynchronous queueing keeps high-bitrate 4K/HEVC smooth.
             .setEnableDecoderFallback(true)
+            .forceEnableMediaCodecAsynchronousQueueing()
         val p = ExoPlayer.Builder(ctx, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
             .setAudioAttributes(
@@ -270,8 +279,14 @@ class NativePlayer(
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) = sendState()
-            override fun onVideoSizeChanged(videoSize: VideoSize) = sendState()
-            override fun onTracksChanged(tracks: Tracks) = maybeAutoSelectSub(tracks)
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                matchRefreshToVideo()
+                sendState()
+            }
+            override fun onTracksChanged(tracks: Tracks) {
+                matchRefreshToVideo()
+                maybeAutoSelectSub(tracks)
+            }
 
             override fun onPlayerError(error: PlaybackException) {
                 // A subtitle ExoPlayer can't parse would fail the whole playback; retry once without them.
@@ -450,6 +465,7 @@ class NativePlayer(
         overlay.forEach { it.visibility = View.GONE }
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         activity.setFullscreenMode(false)
+        RefreshRate.apply(activity)
     }
 
     fun onHostPause() {

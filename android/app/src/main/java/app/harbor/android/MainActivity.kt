@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
         }
         root.addView(webView, FrameLayout.LayoutParams(MATCH, MATCH))
         setContentView(root)
+        RefreshRate.apply(this)
 
         player = NativePlayer(this, root) { event -> sendToJs("__harborNativeEvent", event) }
         fetcher = NativeFetch { id, result -> sendToJs("__harborNativeFetchDone", id, result) }
@@ -206,6 +207,11 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         webView.saveState(outState)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!player.isShowing) RefreshRate.apply(this)
     }
 
     override fun onPause() {
