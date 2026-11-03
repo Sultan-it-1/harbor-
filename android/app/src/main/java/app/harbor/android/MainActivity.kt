@@ -66,7 +66,11 @@ class MainActivity : ComponentActivity() {
             }
             WindowInsetsCompat.CONSUMED
         }
-        webView = WebView(this).apply { setBackgroundColor(0xFF000000.toInt()) }
+        webView = WebView(this).apply {
+            setBackgroundColor(0xFF000000.toInt())
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isHorizontalScrollBarEnabled = false
+        }
         root.addView(webView, FrameLayout.LayoutParams(MATCH, MATCH))
         setContentView(root)
 
@@ -84,6 +88,12 @@ class MainActivity : ComponentActivity() {
         ws.loadWithOverviewMode = true
         ws.useWideViewPort = true
         ws.setSupportMultipleWindows(false)
+        // Feel like an app, not a web page: no pinch zoom, and the phone's font-size setting
+        // doesn't blow the layout up (the UI has its own scale setting).
+        ws.setSupportZoom(false)
+        ws.builtInZoomControls = false
+        ws.displayZoomControls = false
+        ws.textZoom = 100
         ws.userAgentString = ws.userAgentString + " HarborAndroid/" + BuildConfigInfo.versionName(this)
         fetcher.userAgent = ws.userAgentString
         player.userAgent = ws.userAgentString

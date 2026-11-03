@@ -65,6 +65,8 @@ import { MediaFavoritesProvider } from "@/lib/media-favorites";
 import { LocalWatchlistProvider } from "@/lib/local-watchlist";
 import { useSettings } from "@/lib/settings";
 import { effectiveBinding, eventToBinding } from "@/lib/hotkeys";
+import { PhoneTabBar, PHONE_TABBAR_H } from "@/chrome/phone-tabbar";
+import { isPhoneLayout } from "@/lib/platform";
 import { ViewProvider, useView, type Frame, type MetaFilter, type View } from "@/lib/view";
 import type { MetaType } from "@/lib/cinemeta";
 import { useDiscordPresence } from "@/lib/discord/use-discord-presence";
@@ -612,6 +614,7 @@ function Shell() {
   }, [topKind]);
 
   const layer = (top: boolean) => (top ? "contents" : "hidden");
+  const phone = isPhoneLayout();
 
   const overlayPinned = useOverlayPinned();
   const settingsAlive = useIdleEvict(settingsTop, overlayPinned);
@@ -649,28 +652,37 @@ function Shell() {
 
   return (
     <div className="relative flex h-full">
-      {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "sidebar" && <Sidebar />}
-      {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "dracula" && <DraculaSidebar />}
-      {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "nord" && <NordSidebar />}
-      {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "forest" && <ForestSidebar />}
-      {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "stremio" && <StremioRail />}
-      {!settingsTop && !playerActive && !pickerTop && layout === "topdock" && <TopDock />}
-      {!settingsTop && !playerActive && !pickerTop && layout === "cinematic" && <CinematicOverlay />}
-      {!settingsTop && !playerActive && !pickerTop && layout === "royal" && <RoyalTopbar />}
-      {!settingsTop && !playerActive && !pickerTop && layout === "rail" && <SideRail />}
-      {!playerActive && !pickerTop && layout === "minui" && <MinUIDock />}
-      {!playerActive && !pickerTop && layout === "topdock" && <FloatingBack offsetTop={92} />}
-      {!playerActive && !pickerTop && layout === "cinematic" && <FloatingBack offsetTop={92} />}
-      {!playerActive && !pickerTop && layout === "royal" && <FloatingBack offsetTop={92} />}
-      {!playerActive && !pickerTop && layout === "rail" && <FloatingBack offsetLeft={settings.sidebarCollapsed ? 88 : 220} offsetTop={28} />}
-      {!playerActive && !pickerTop && layout === "custom" && <FloatingBack offsetLeft={20} offsetTop={20} />}
-      {!playerActive && !pickerTop && layout === "custom" && (
-        <div className="fixed end-3 top-3 z-[120]">
-          <WindowControls />
-        </div>
+      {phone ? (
+        !settingsTop && !playerActive && !pickerTop && !immersive && <PhoneTabBar />
+      ) : (
+        <>
+        {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "sidebar" && <Sidebar />}
+        {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "dracula" && <DraculaSidebar />}
+        {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "nord" && <NordSidebar />}
+        {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "forest" && <ForestSidebar />}
+        {!settingsTop && !playerActive && !liveTop && !pickerTop && layout === "stremio" && <StremioRail />}
+        {!settingsTop && !playerActive && !pickerTop && layout === "topdock" && <TopDock />}
+        {!settingsTop && !playerActive && !pickerTop && layout === "cinematic" && <CinematicOverlay />}
+        {!settingsTop && !playerActive && !pickerTop && layout === "royal" && <RoyalTopbar />}
+        {!settingsTop && !playerActive && !pickerTop && layout === "rail" && <SideRail />}
+        {!playerActive && !pickerTop && layout === "minui" && <MinUIDock />}
+        {!playerActive && !pickerTop && layout === "topdock" && <FloatingBack offsetTop={92} />}
+        {!playerActive && !pickerTop && layout === "cinematic" && <FloatingBack offsetTop={92} />}
+        {!playerActive && !pickerTop && layout === "royal" && <FloatingBack offsetTop={92} />}
+        {!playerActive && !pickerTop && layout === "rail" && <FloatingBack offsetLeft={settings.sidebarCollapsed ? 88 : 220} offsetTop={28} />}
+        {!playerActive && !pickerTop && layout === "custom" && <FloatingBack offsetLeft={20} offsetTop={20} />}
+        {!playerActive && !pickerTop && layout === "custom" && (
+          <div className="fixed end-3 top-3 z-[120]">
+            <WindowControls />
+          </div>
+        )}
+        {!playerActive && <WindowResizeEdges />}
+        </>
       )}
-      {!playerActive && <WindowResizeEdges />}
-      <div className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${playerActive ? "invisible" : ""}`}>
+      <div
+        className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${playerActive ? "invisible" : ""}`}
+        style={phone && !settingsTop && !playerActive && !pickerTop && !immersive ? { paddingBottom: `calc(${PHONE_TABBAR_H}px + env(safe-area-inset-bottom))` } : undefined}
+      >
         <div className={layer(homeTop)}>
           <Home active={homeTop} />
         </div>

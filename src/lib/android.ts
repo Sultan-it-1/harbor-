@@ -143,3 +143,24 @@ export function onNativePlayerEvent(cb: (e: NativePlayerEvent) => void): () => v
   playerListeners.add(cb);
   return () => playerListeners.delete(cb);
 }
+
+// ---- back button interceptors --------------------------------------------------------
+
+const backInterceptors: Array<() => boolean> = [];
+
+/** Lets a screen handle the Android back gesture first (e.g. Settings: section -> list).
+ *  The handler returns true when it consumed the back press. */
+export function pushAndroidBackHandler(fn: () => boolean): () => void {
+  backInterceptors.push(fn);
+  return () => {
+    const i = backInterceptors.lastIndexOf(fn);
+    if (i >= 0) backInterceptors.splice(i, 1);
+  };
+}
+
+export function runAndroidBackHandlers(): boolean {
+  for (let i = backInterceptors.length - 1; i >= 0; i--) {
+    if (backInterceptors[i]()) return true;
+  }
+  return false;
+}

@@ -1,3 +1,6 @@
+import { ChevronLeft } from "lucide-react";
+import { isPhoneLayout } from "@/lib/platform";
+import { pushAndroidBackHandler } from "@/lib/android";
 import { useEffect, useRef, useState } from "react";
 import { AccountStub } from "./settings/account";
 import { AdvancedPanel } from "./settings/advanced-panel";
@@ -134,13 +137,28 @@ export function Settings() {
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
   const scrollRef = useRef<HTMLElement>(null);
 
+  // Phone: list of sections first, then one section full screen (back returns to the list).
+  const phone = isPhoneLayout();
+  const [phoneSection, setPhoneSection] = useState(() => !!settingsSectionRequest.section);
+  useEffect(() => {
+    if (!phone || !phoneSection) return;
+    return pushAndroidBackHandler(() => {
+      setPhoneSection(false);
+      return true;
+    });
+  }, [phone, phoneSection]);
+
   const handleNav = (id: SectionId, anchor?: string) => {
     setActive(id);
     setPendingAnchor(anchor ?? null);
+    if (phone) setPhoneSection(true);
   };
 
   useEffect(() => {
-    if (settingsSectionRequest.section) setActive(settingsSectionRequest.section as SectionId);
+    if (settingsSectionRequest.section) {
+      setActive(settingsSectionRequest.section as SectionId);
+      if (phone) setPhoneSection(true);
+    }
   }, [settingsSectionRequest]);
 
   useEffect(() => {
@@ -222,15 +240,29 @@ export function Settings() {
   return (
     <SettingsActiveContext.Provider value={{ setActive }}>
     <div className="flex h-full bg-canvas">
-      <SettingsNav active={active} onChange={handleNav} />
+      {(!phone || !phoneSection) && (
+        <div className={phone ? "min-h-0 w-full overflow-y-auto" : "contents"}>
+          <SettingsNav active={active} onChange={handleNav} />
+        </div>
+      )}
+      {(!phone || phoneSection) && (
       <main
         ref={scrollRef}
-        className="flex-1 overflow-y-auto pt-28 pb-16"
+        className={`flex-1 overflow-y-auto ${phone ? "pt-24 pb-10" : "pt-28 pb-16"}`}
       >
-        <div data-tauri-drag-region className="mx-auto flex max-w-3xl flex-col gap-10 px-12">
+        <div data-tauri-drag-region className={`mx-auto flex max-w-3xl flex-col ${phone ? "gap-7 px-4" : "gap-10 px-12"}`}>
+          {phone && (
+            <button
+              onClick={() => setPhoneSection(false)}
+              className="-ms-1 flex h-9 w-fit items-center gap-1.5 rounded-full pe-3 ps-1 text-[14px] font-medium text-ink-muted active:bg-elevated"
+            >
+              <ChevronLeft size={18} className="dir-icon" />
+              {t("Settings")}
+            </button>
+          )}
           {!(active === "relay" && relayMode !== "panel") && (
             <header className="flex flex-col gap-2">
-              <h1 className="font-display text-[44px] font-medium leading-[1.05] tracking-tight text-ink">
+              <h1 className={`font-display font-medium leading-[1.05] tracking-tight text-ink ${phone ? "text-[30px]" : "text-[44px]"}`}>
                 {t(SECTION_META[active].label)}
               </h1>
               <p className="text-[15px] text-ink-muted">{t(SECTION_META[active].sub)}</p>
@@ -308,8 +340,9 @@ export function Settings() {
           {active === "advanced" && <AdvancedPanel />}
         </div>
       </main>
+      )}
       <BackToTop scrollRef={scrollRef} />
-      <SettingsJumpBar scrollRef={scrollRef} activeSection={active} />
+      {!phone && <SettingsJumpBar scrollRef={scrollRef} activeSection={active} />}
     </div>
     </SettingsActiveContext.Provider>
   );

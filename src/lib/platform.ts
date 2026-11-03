@@ -37,3 +37,8 @@ export function isMobileDevice(): boolean {
   }
   return false;
 }
+
+/** Native-app phone layout (the Android shell): bottom tab bar, device-width viewport. */
+export function isPhoneLayout(): boolean {
+  return typeof window !== "undefined" && "HarborAndroid" in window;
+}

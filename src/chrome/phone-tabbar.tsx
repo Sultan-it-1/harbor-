@@ -1,0 +1,184 @@
+import { useState, type ReactNode } from "react";
+import { MoreHorizontal, Search, X } from "lucide-react";
+import { AddonsIcon } from "@/components/icons/addons-icon";
+import { AnimeIcon } from "@/components/icons/anime-icon";
+import { CalendarIcon } from "@/components/icons/calendar-icon";
+import { DiscoverIcon } from "@/components/icons/discover-icon";
+import { HomeIcon } from "@/components/icons/home-icon";
+import { LibraryIcon } from "@/components/icons/library-icon";
+import { LiveTvIcon } from "@/components/icons/live-tv-icon";
+import { MoviesIcon } from "@/components/icons/movies-icon";
+import { PlaylistVodIcon } from "@/components/icons/playlist-vod-icon";
+import { SettingsIcon } from "@/components/icons/settings-icon";
+import { TvIcon } from "@/components/icons/tv-icon";
+import { DownloadsNavIcon } from "@/chrome/downloads-nav-icon";
+import { ParentalPinModal } from "@/components/parental-pin-modal";
+import { useT } from "@/lib/i18n";
+import { useParental, type LockableTab } from "@/lib/parental";
+import { useSearch } from "@/lib/search-context";
+import { useSettings } from "@/lib/settings";
+import { useView, type View } from "@/lib/view";
+
+/** Height of the bar above the safe-area inset; content gets this much bottom padding. */
+export const PHONE_TABBAR_H = 60;
+
+type Item = {
+  view: View;
+  label: string;
+  icon: (active: boolean) => ReactNode;
+  hideKey?: "anime" | "liveTv" | "sports";
+  parentalKey?: LockableTab;
+};
+
+const MORE: Item[] = [
+  { view: "movies", label: "Movies", icon: (a) => <MoviesIcon active={a} />, parentalKey: "movies" },
+  { view: "shows", label: "Shows", icon: (a) => <TvIcon active={a} />, parentalKey: "shows" },
+  { view: "anime", label: "Anime", icon: (a) => <AnimeIcon active={a} />, hideKey: "anime", parentalKey: "anime" },
+  { view: "live", label: "Live TV", icon: (a) => <LiveTvIcon active={a} />, hideKey: "liveTv", parentalKey: "liveTv" },
+  { view: "vod", label: "Playlists", icon: (a) => <PlaylistVodIcon active={a} /> },
+  { view: "calendar", label: "Calendar", icon: (a) => <CalendarIcon active={a} />, parentalKey: "calendar" },
+  { view: "downloads", label: "Downloads", icon: (a) => <DownloadsNavIcon active={a} /> },
+  { view: "addons", label: "Addons", icon: (a) => <AddonsIcon active={a} />, parentalKey: "addons" },
+  { view: "settings", label: "Settings", icon: (a) => <SettingsIcon active={a} /> },
+];
+
+/** Phone navigation: a native-style bottom tab bar instead of the desktop sidebar. */
+export function PhoneTabBar() {
+  const { view, setView } = useView();
+  const { setOpen: setSearchOpen, open: searchOpen } = useSearch();
+  const { locked, unlock, hiddenTabs } = useParental();
+  const { settings } = useSettings();
+  const t = useT();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [pinFor, setPinFor] = useState<View | null>(null);
+
+  const allowed = (it: Item) => {
+    if (it.view === "vod" && !settings.showPlaylistsTab) return false;
+    if (it.hideKey && settings.hideContent[it.hideKey]) return false;
+    return true;
+  };
+  const go = (it: Item) => {
+    setMoreOpen(false);
+    setSearchOpen(false);
+    if (it.parentalKey && locked && hiddenTabs[it.parentalKey]) {
+      setPinFor(it.view);
+      return;
+    }
+    setView(it.view);
+  };
+
+  const moreItems = MORE.filter(allowed);
+  const moreActive = !searchOpen && moreItems.some((it) => it.view === view);
+
+  return (
+    <>
+      {moreOpen && (
+        <div className="fixed inset-0 z-[180] flex flex-col justify-end bg-black/55" onClick={() => setMoreOpen(false)}>
+          <div
+            className="rounded-t-3xl border-t border-edge bg-surface px-4 pt-3"
+            style={{ paddingBottom: `calc(${PHONE_TABBAR_H + 12}px + env(safe-area-inset-bottom))` }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-ink-subtle/50" />
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="text-[15px] font-semibold text-ink">{t("More")}</span>
+              <button
+                aria-label={t("Close")}
+                onClick={() => setMoreOpen(false)}
+                className="grid h-8 w-8 place-items-center rounded-full text-ink-muted active:bg-elevated"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {moreItems.map((it) => {
+                const active = view === it.view;
+                return (
+                  <button
+                    key={it.view}
+                    onClick={() => go(it)}
+                    className={`flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-[12px] font-medium transition-colors active:scale-[0.97] ${
+                      active ? "bg-accent-soft text-ink" : "bg-elevated/60 text-ink-muted"
+                    }`}
+                  >
+                    <span className="grid h-7 w-7 place-items-center">{it.icon(active)}</span>
+                    {t(it.label)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav
+        data-phone-tabbar
+        className="fixed inset-x-0 bottom-0 z-[190] border-t border-edge-soft bg-canvas/95 backdrop-blur-xl"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="mx-auto flex max-w-xl items-stretch justify-around" style={{ height: PHONE_TABBAR_H }}>
+          <Tab label={t("Home")} active={!searchOpen && !moreOpen && view === "home"} onClick={() => go({ view: "home", label: "Home", icon: () => null })}>
+            {(a) => <HomeIcon active={a} />}
+          </Tab>
+          <Tab
+            label={t("Discover")}
+            active={!searchOpen && !moreOpen && view === "discover"}
+            onClick={() => go({ view: "discover", label: "Discover", icon: () => null, parentalKey: "discover" })}
+          >
+            {(a) => <DiscoverIcon active={a} />}
+          </Tab>
+          <Tab
+            label={t("Search")}
+            active={searchOpen}
+            onClick={() => {
+              setMoreOpen(false);
+              setSearchOpen(true);
+            }}
+          >
+            {(a) => <Search size={22} strokeWidth={a ? 2.4 : 1.8} />}
+          </Tab>
+          <Tab
+            label={t("Library")}
+            active={!searchOpen && !moreOpen && view === "library"}
+            onClick={() => go({ view: "library", label: "Library", icon: () => null, parentalKey: "library" })}
+          >
+            {(a) => <LibraryIcon active={a} />}
+          </Tab>
+          <Tab label={t("More")} active={moreOpen || moreActive} onClick={() => setMoreOpen((o) => !o)}>
+            {(a) => <MoreHorizontal size={22} strokeWidth={a ? 2.4 : 1.8} />}
+          </Tab>
+        </div>
+      </nav>
+
+      {pinFor !== null && (
+        <ParentalPinModal
+          mode={{
+            kind: "unlock",
+            onUnlock: () => {
+              const v = pinFor;
+              setPinFor(null);
+              if (v) setView(v);
+            },
+            onCancel: () => setPinFor(null),
+          }}
+          verify={unlock}
+        />
+      )}
+    </>
+  );
+}
+
+function Tab(props: { label: string; active: boolean; onClick: () => void; children: (active: boolean) => ReactNode }) {
+  return (
+    <button
+      onClick={props.onClick}
+      aria-current={props.active ? "page" : undefined}
+      className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition-colors active:scale-95 ${
+        props.active ? "text-accent" : "text-ink-subtle"
+      }`}
+    >
+      <span className="grid h-7 w-7 place-items-center">{props.children(props.active)}</span>
+      <span className="leading-none">{props.label}</span>
+    </button>
+  );
+}

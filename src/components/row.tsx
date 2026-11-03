@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import {
   Children,
   createContext,
@@ -15,7 +16,11 @@ import { useT } from "@/lib/i18n";
 import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 
-const GAP = 20;
+const PHONE = isPhoneLayout();
+// Phones: tighter gutters and a fixed number of cards per screen with a peek of the next one,
+// like native streaming apps, instead of the desktop min-width maths.
+const GAP = PHONE ? 12 : 20;
+const PHONE_PER_SCREEN: Partial<Record<RowShape, number>> = { portrait: 3.3, rank: 2.4, landscape: 1.7, tile: 2.3, service: 2.6 };
 const EAGER_COUNT = 6;
 const NEAR_MARGIN = "300px";
 
@@ -155,6 +160,11 @@ export function Row({
     if (!container) return;
     const available = container.clientWidth;
     if (available <= 0) return;
+    const perScreen = PHONE ? PHONE_PER_SCREEN[shape] : undefined;
+    if (perScreen) {
+      setCellWidth((available - Math.floor(perScreen) * GAP) / perScreen);
+      return;
+    }
     const fits = Math.max(1, Math.floor((available + GAP) / (effMin + GAP)));
     setCellWidth((available - (fits - 1) * GAP) / fits);
   };
@@ -470,7 +480,7 @@ export function Row({
             onPointerCancel={endDrag}
             onClickCapture={onClickCapture}
             onDragStart={(e) => e.preventDefault()}
-            className="grid grid-flow-col items-start gap-5 overflow-x-auto p-5 -m-5 scroll-ps-5 scroll-pe-5 [scroll-snap-type:x_mandatory] [&>*]:[scroll-snap-align:start] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] [overflow-anchor:none] [overscroll-behavior-x:contain] [&_img]:select-none [&_img]:[-webkit-user-drag:none]"
+            className={`grid grid-flow-col items-start ${PHONE ? "gap-3" : "gap-5"} overflow-x-auto p-5 -m-5 scroll-ps-5 scroll-pe-5 [scroll-snap-type:x_mandatory] [&>*]:[scroll-snap-align:start] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] [overflow-anchor:none] [overscroll-behavior-x:contain] [&_img]:select-none [&_img]:[-webkit-user-drag:none]`}
             style={{
               gridAutoColumns: cellWidth != null ? `${cellWidth}px` : `${effMin}px`,
               willChange: "transform",

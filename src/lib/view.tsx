@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { Meta } from "./cinemeta";
+import { runAndroidBackHandlers } from "./android";
 import { profileFromMeta, trackEvent } from "./discover";
 import type { StreamingService } from "./settings";
 import { useTogether } from "./together/provider";
@@ -379,6 +380,7 @@ export function ViewProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined" || !window.HarborAndroid) return;
     let lastModal: Element | null = null;
     window.__harborAndroidBack = () => {
+      if (runAndroidBackHandlers()) return true;
       const modal = document.querySelector('[role="dialog"], [aria-modal="true"]');
       if (modal && modal !== lastModal) {
         lastModal = modal;

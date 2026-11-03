@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useMemo, useState } from "react";
 import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
@@ -714,7 +715,7 @@ export function SettingsNav({
   };
 
   return (
-    <nav className="relative flex w-72 shrink-0 flex-col bg-surface pt-24 shadow-[1px_0_0_var(--color-edge)]">
+    <nav className={`relative flex shrink-0 flex-col bg-surface pt-24 ${isPhoneLayout() ? "w-full pb-6" : "w-72 shadow-[1px_0_0_var(--color-edge)]"}`}>
       <div data-tauri-drag-region className="h-3 shrink-0" />
       {showBack && (
         <div className="px-3 pb-1.5">

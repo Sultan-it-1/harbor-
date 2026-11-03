@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { ArrowLeft, Search, Users } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { BackChrome } from "@/chrome/back-chrome";
@@ -35,7 +36,9 @@ export function Topbar({ connecting = false }: { connecting?: boolean } = {}) {
   const layout = preview ? preview.layout : activeLayout(settings.theme);
   const onLiveRoot = topKind === "live";
   const sidebarHidden = connecting || view === "settings" || onLiveRoot || topKind === "picker";
-  const hideSearch = view === "addons";
+  // Phone app: search lives in the bottom tab bar, and there is no sidebar to clear.
+  const phone = isPhoneLayout();
+  const hideSearch = view === "addons" || phone;
   const sidebarOffset =
     layout === "stremio"
       ? "ps-[80px]"
@@ -55,7 +58,7 @@ export function Topbar({ connecting = false }: { connecting?: boolean } = {}) {
         <div
           {...dragProps}
           className={
-            sidebarHidden
+            sidebarHidden || phone
               ? "flex h-full min-w-0 items-center justify-start gap-3"
               : `flex h-full min-w-0 items-center justify-start ${sidebarOffset}`
           }
