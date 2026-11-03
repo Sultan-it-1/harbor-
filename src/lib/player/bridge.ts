@@ -57,6 +57,8 @@ export type PlayerSource = {
   startAtSec?: number;
   isLive?: boolean;
   headers?: Record<string, string>;
+  /** Identity of the title/episode; lets the Android player keep subtitles across stream swaps. */
+  contentKey?: string;
 };
 
 export type PlayerBridge = {

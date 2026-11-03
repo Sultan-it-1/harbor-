@@ -133,7 +133,7 @@ class MainActivity : ComponentActivity() {
 
     private fun onBack() {
         when {
-            player.isShowing -> player.close()
+            player.isShowing -> if (!player.handleBack()) player.close()
             customView != null -> hideCustomView()
             else -> webView.evaluateJavascript(
                 "(function(){try{return !!(window.__harborAndroidBack&&window.__harborAndroidBack())}catch(e){return false}})()",

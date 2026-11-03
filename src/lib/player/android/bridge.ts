@@ -92,7 +92,16 @@ function harborSubStyle(): Record<string, unknown> | null {
 
 type NativeSub = { url: string; lang?: string; label?: string };
 
-function nativeSub(url: string, lang?: string, title?: string): NativeSub {
+/** "OpenSubtitles · OpenSubtitles V3 #1" -> "OpenSubtitles V3 #1" */
+function tidyLabel(title?: string): string | undefined {
+  if (!title) return title;
+  const parts = title.split(" · ").map((p) => p.trim()).filter(Boolean);
+  const out = parts.filter((p, i) => !(i + 1 < parts.length && parts[i + 1].toLowerCase().startsWith(p.toLowerCase())));
+  return out.join(" · ");
+}
+
+function nativeSub(url: string, lang?: string, rawTitle?: string): NativeSub {
+  const title = tidyLabel(rawTitle);
   const name = langDisplayName(lang);
   const label = name && title ? `${name} · ${title}` : name ?? title;
   return { url, lang: lang ? toLangCode(lang) : undefined, label: label ?? undefined };
@@ -100,8 +109,8 @@ function nativeSub(url: string, lang?: string, title?: string): NativeSub {
 
 /** Plays through the Android shell's native ExoPlayer (FFmpeg audio decoders included). */
 /** Lets the native player say "no subtitles found" instead of staying silent. */
-export function notifyAndroidSubSearch(found: number) {
-  androidApi()?.command(JSON.stringify({ cmd: "subSearch", count: found }));
+export function notifyAndroidSubSearch(found: number, manual = false) {
+  androidApi()?.command(JSON.stringify({ cmd: "subSearch", count: found, manual }));
 }
 
 export function createAndroidBridge(): PlayerBridge {
@@ -187,6 +196,7 @@ export function createAndroidBridge(): PlayerBridge {
           subStyle: harborSubStyle(),
           title,
           isLive: src.isLive === true,
+          contentKey: src.contentKey ?? "",
         }),
       );
     },

@@ -9,7 +9,7 @@ import type { Addon } from "@/lib/addons";
 import { gatherSubtitleAddons } from "@/lib/subtitles/addon-source";
 import type { PlayerSrc } from "@/lib/view";
 import type { Settings } from "@/lib/settings";
-import { isAndroidApp } from "@/lib/android";
+import { isAndroidApp, onNativePlayerEvent } from "@/lib/android";
 import { notifyAndroidSubSearch } from "@/lib/player/android/bridge";
 
 export function useTrackAutoload(params: {
@@ -79,12 +79,15 @@ export function useTrackAutoload(params: {
     };
   }, [authKey]);
 
-  const autoSubLoadKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!resolvedImdbId) return;
-    if (snap.audioTracks.length === 0 && snap.durationSec === 0) return;
-    const key = `${resolvedImdbId}|${src.episode?.season ?? ""}|${src.episode?.episode ?? ""}|${src.url}`;
-    if (autoSubLoadKeyRef.current === key) return;
+  // One search routine for the automatic load and for the Android player's
+  // "fetch subtitles from addons" button. Kept in a ref so the native event handler
+  // always runs it with the current title/episode/settings.
+  const searchRef = useRef<(manual: boolean) => Promise<void>>(async () => {});
+  searchRef.current = async (manual: boolean) => {
+    if (!resolvedImdbId) {
+      if (manual) notifyAndroidSubSearch(0, true);
+      return;
+    }
     const subIsAnime =
       !!src.meta.id?.startsWith("kitsu:") ||
       !!src.meta.id?.startsWith("mal:") ||
@@ -94,69 +97,80 @@ export function useTrackAutoload(params: {
       settings.preferredLanguages,
     );
     const langs = subIsAnime ? rawLangs : rawLangs.filter((l) => !isJapanese(l));
-    autoSubLoadKeyRef.current = key;
     const enabled = settings.subProvidersEnabled ?? {};
-    void (async () => {
-      console.info("[subs/autoload] starting", {
+    console.info("[subs/autoload] starting", {
+      imdbId: resolvedImdbId,
+      season: src.episode?.season,
+      episode: src.episode?.episode,
+      langs,
+      manual,
+    });
+    const results = await searchSubtitles(
+      {
         imdbId: resolvedImdbId,
+        stremioId: src.meta.id,
+        type: src.meta.type === "series" ? "series" : "movie",
         season: src.episode?.season,
         episode: src.episode?.episode,
         langs,
-      });
-      const results = await searchSubtitles(
-        {
-          imdbId: resolvedImdbId,
-          stremioId: src.meta.id,
-          type: src.meta.type === "series" ? "series" : "movie",
-          season: src.episode?.season,
-          episode: src.episode?.episode,
-          langs,
+      },
+      {
+        providers: {
+          // A manual fetch asks every provider, even ones that are off for autoload.
+          wyzie: manual ? true : (enabled.wyzie ?? true),
+          addons: manual ? true : (enabled.addons ?? true),
+          opensubtitles: manual ? true : (enabled.opensubtitles ?? true),
         },
-        {
-          providers: {
-            wyzie: enabled.wyzie ?? true,
-            addons: enabled.addons ?? true,
-            opensubtitles: enabled.opensubtitles ?? true,
-          },
-          addons: userAddonsRef.current ?? [],
-          preferredLangs: langs,
-          streamHints: {
-            release: src.streamRef?.title ?? src.streamRef?.parsedTitle ?? null,
-            source: src.streamRef?.source ?? null,
-            resolution: src.streamRef?.resolution ?? null,
-          },
+        addons: userAddonsRef.current ?? [],
+        preferredLangs: langs,
+        streamHints: {
+          release: src.streamRef?.title ?? src.streamRef?.parsedTitle ?? null,
+          source: src.streamRef?.source ?? null,
+          resolution: src.streamRef?.resolution ?? null,
         },
-      );
-      console.info(`[subs/autoload] search returned ${results.length} subs`);
-      const b = bridgeRef.current;
-      if (!b) {
-        console.warn("[subs/autoload] no bridge ready, skipping");
-        return;
-      }
-      // Android's native player has no in-UI subtitle search, so offer every language the
-      // addons returned (preferred ones first — results are already ranked).
-      const android = isAndroidApp();
-      if (android) notifyAndroidSubSearch(results.length);
-      const matches = android ? results : results.filter((r) => langScore(r.lang ?? "", langs) >= 0);
-      console.info(`[subs/autoload] ${matches.length} match preferred langs`);
-      const perLang = new Map<string, number>();
-      const maxForLang = (lang: string) =>
-        langScore(lang, langs) > 0 ? (android ? 15 : 25) : android ? 3 : 6;
-      let attempted = 0;
-      let added = 0;
-      for (const r of matches) {
-        const k = (r.lang ?? "und").toLowerCase();
-        const n = perLang.get(k) ?? 0;
-        if (n >= maxForLang(r.lang ?? "")) continue;
-        perLang.set(k, n + 1);
-        attempted++;
-        const ok = await b.addSubtitle(r.url, r.lang, labelForTrack(r), false);
-        if (ok) added++;
-      }
-      console.info(
-        `[subs/autoload] ${added}/${attempted} subs added (selection handled by priority effect)`,
-      );
-    })();
+      },
+    );
+    console.info(`[subs/autoload] search returned ${results.length} subs`);
+    const b = bridgeRef.current;
+    if (!b) {
+      console.warn("[subs/autoload] no bridge ready, skipping");
+      if (manual) notifyAndroidSubSearch(0, true);
+      return;
+    }
+    // Android: the native player lists subtitles by language and only downloads the one you
+    // pick, so it gets every language the addons returned (preferred ones first — results are
+    // already ranked). Other engines keep the preferred-language filter.
+    const android = isAndroidApp();
+    const matches = android ? results : results.filter((r) => langScore(r.lang ?? "", langs) >= 0);
+    console.info(`[subs/autoload] ${matches.length} match preferred langs`);
+    const perLang = new Map<string, number>();
+    const maxForLang = (lang: string) =>
+      langScore(lang, langs) > 0 ? (android ? 30 : 25) : android ? 8 : 6;
+    let attempted = 0;
+    let added = 0;
+    for (const r of matches) {
+      const k = (r.lang ?? "und").toLowerCase();
+      const n = perLang.get(k) ?? 0;
+      if (n >= maxForLang(r.lang ?? "")) continue;
+      perLang.set(k, n + 1);
+      attempted++;
+      const ok = await b.addSubtitle(r.url, r.lang, labelForTrack(r), false);
+      if (ok) added++;
+    }
+    if (android) notifyAndroidSubSearch(attempted, manual);
+    console.info(
+      `[subs/autoload] ${added}/${attempted} subs added (selection handled by priority effect)`,
+    );
+  };
+
+  const autoSubLoadKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!resolvedImdbId) return;
+    if (snap.audioTracks.length === 0 && snap.durationSec === 0) return;
+    const key = `${resolvedImdbId}|${src.episode?.season ?? ""}|${src.episode?.episode ?? ""}|${src.url}`;
+    if (autoSubLoadKeyRef.current === key) return;
+    autoSubLoadKeyRef.current = key;
+    void searchRef.current(false);
   }, [
     engine,
     resolvedImdbId,
@@ -168,6 +182,14 @@ export function useTrackAutoload(params: {
     snap.subtitleTracks,
     settings,
   ]);
+
+  // Android player: "fetch subtitles from addons" button.
+  useEffect(() => {
+    if (!isAndroidApp()) return;
+    return onNativePlayerEvent((e) => {
+      if (e.type === "subSearch") void searchRef.current(true);
+    });
+  }, []);
 
   const autoTrackKeyRef = useRef<string | null>(null);
   const prefsAppliedRef = useRef<string | null>(null);

@@ -15,23 +15,15 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
 
 /**
- * Downloads addon subtitles to local files before ExoPlayer sees them, so a dead link
- * can't fail the whole playback. Also normalises them: gzip/zip unpacking, legacy
- * encodings (Arabic windows-1256 etc.) re-encoded as UTF-8, and format sniffing
- * (SRT / VTT / ASS) since addon URLs often have no file extension.
+ * Downloads an addon subtitle to a local file (only when it's picked), normalising it on the
+ * way: gzip/zip unpacking, legacy encodings (Arabic windows-1256 etc.) re-encoded as UTF-8,
+ * and format sniffing (SRT / VTT / ASS) since addon URLs often have no file extension.
  */
 class SubtitleStore(private val dir: File) {
     constructor(context: Context) : this(File(context.cacheDir, "subs"))
     init {
         dir.mkdirs()
     }
-
-    companion object {
-        // SRT "00:01:02,345" / VTT "01:02.345" or "00:01:02.345"
-        private val CUE_TIME = Regex("""(?:(\d{1,2}):)?(\d{1,2}):(\d{2})([,.])(\d{3})""")
-        private val ASS_TIME = Regex("""(\d):(\d{2}):(\d{2})\.(\d{2})""")
-    }
-
 
     data class LocalSub(val id: String, val file: File, val mime: String, val lang: String?, val label: String?, val sourceUrl: String)
 
@@ -58,54 +50,6 @@ class SubtitleStore(private val dir: File) {
         }
     } catch (_: Exception) {
         null
-    }
-
-    /** Copy of [sub] with every cue moved by [offsetMs] (positive = later). The original file is kept. */
-    fun shifted(sub: LocalSub, offsetMs: Long): LocalSub {
-        if (offsetMs == 0L) return sub
-        val text = sub.file.readText(Charsets.UTF_8)
-        val out = when (sub.mime) {
-            MimeTypes.TEXT_SSA -> text.lines().joinToString("\n") { line ->
-                if (!line.startsWith("Dialogue:")) {
-                    line
-                } else {
-                    // Dialogue: Layer,Start,End,Style,… — shift fields 1 and 2 only.
-                    val f = line.substringAfter("Dialogue:").split(",", limit = 4).toMutableList()
-                    if (f.size < 4) line
-                    else {
-                        for (i in 1..2) {
-                            ASS_TIME.matchEntire(f[i].trim())?.let { m -> f[i] = formatAss(parseAss(m) + offsetMs) }
-                        }
-                        "Dialogue:" + f.joinToString(",")
-                    }
-                }
-            }
-            else -> text.lines().joinToString("\n") { line ->
-                if (!line.contains("-->")) line
-                else CUE_TIME.replace(line) { m -> formatCue(parseCue(m) + offsetMs, m.groupValues[4].let { if (sub.mime == MimeTypes.TEXT_VTT) "." else it }) }
-            }
-        }
-        val f = File(dir, "${sub.id}_${offsetMs}.${sub.file.extension}")
-        f.writeText(out, Charsets.UTF_8)
-        return sub.copy(file = f)
-    }
-
-    private fun parseCue(m: MatchResult): Long {
-        val h = m.groupValues[1].ifEmpty { "0" }.toLong()
-        return ((h * 60 + m.groupValues[2].toLong()) * 60 + m.groupValues[3].toLong()) * 1000 + m.groupValues[5].toLong()
-    }
-
-    private fun formatCue(msIn: Long, sep: String): String {
-        val ms = msIn.coerceAtLeast(0)
-        return String.format("%02d:%02d:%02d%s%03d", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, sep, ms % 1000)
-    }
-
-    private fun parseAss(m: MatchResult): Long =
-        ((m.groupValues[1].toLong() * 60 + m.groupValues[2].toLong()) * 60 + m.groupValues[3].toLong()) * 1000 + m.groupValues[4].toLong() * 10
-
-    private fun formatAss(msIn: Long): String {
-        val ms = msIn.coerceAtLeast(0)
-        return String.format("%d:%02d:%02d.%02d", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000 / 10)
     }
 
     private fun download(url: String, userAgent: String): ByteArray {

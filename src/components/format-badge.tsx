@@ -264,6 +264,11 @@ const ALT: Record<BadgeKind, string> = {
   unknown: "Quality unverified",
 };
 
+/** Plain-text label for a badge (used by the native Android player's stream list). */
+export function badgeLabel(kind: BadgeKind): string {
+  return ALT[kind] ?? kind;
+}
+
 const WIDTH: Record<BadgeSize, number> = {
   sm: 30,
   md: 42,

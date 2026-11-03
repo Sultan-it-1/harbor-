@@ -27,7 +27,11 @@ export type NativePlayerEvent =
     }
   | { type: "ended" }
   | { type: "error"; code: string; message: string }
-  | { type: "closed"; positionMs: number; durationMs: number };
+  | { type: "closed"; positionMs: number; durationMs: number }
+  | { type: "requestStreams" }
+  | { type: "pickStream"; key: string }
+  | { type: "next" }
+  | { type: "subSearch" };
 
 type NativeFetchResult =
   | { ok: true; status: number; url: string; headers: Record<string, string>; body: string }

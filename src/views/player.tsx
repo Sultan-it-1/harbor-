@@ -5,6 +5,7 @@ import { useDebridClients } from "@/lib/debrid/registry";
 import { useSettings } from "@/lib/settings";
 import { isWeb } from "@/lib/platform";
 import { NATIVE_PLAYER_CLOSED_EVENT, isAndroidApp } from "@/lib/android";
+import { useAndroidPlayerExtras } from "./player/hooks/use-android-extras";
 import { writePlayerVolume } from "@/lib/player-volume";
 import { nameColor } from "@/lib/together/colors";
 import { useTogether } from "@/lib/together/provider";
@@ -288,6 +289,14 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     src,
     snap,
     debrids,
+  });
+  useAndroidPlayerExtras({
+    src,
+    liveUrl,
+    swapResolvingKey,
+    onSwitchStream,
+    nextEp: canChangeEpisode ? adjacent.next : null,
+    goNext: () => goToEpisode(adjacent.next),
   });
   const { hostSourceRef } = useHostSource({
     inRoom,

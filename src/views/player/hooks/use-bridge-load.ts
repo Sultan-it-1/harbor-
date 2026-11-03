@@ -105,6 +105,7 @@ export function useBridgeLoad(params: {
           notWebReady: src.notWebReady,
           isLive,
           headers: src.headers,
+          contentKey: `${src.meta.id}|${season ?? ""}|${episode ?? ""}`,
           startAtSec: guestInRoom
             ? undefined
             : eligibleForPrompt

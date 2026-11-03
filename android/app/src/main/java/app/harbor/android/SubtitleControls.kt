@@ -1,16 +1,8 @@
 package app.harbor.android
 
-import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
-import android.view.View
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.CaptionStyleCompat
@@ -96,7 +88,7 @@ data class SubStyle(
     }
 }
 
-/** The "Aa" panel: size, background, colour, position, bold and (addon-sub) delay. */
+/** Subtitle look + timing, rendered inside the player's subtitle side panel. */
 class SubtitleControls(
     private val ctx: Context,
     private val style: SubStyle,
@@ -104,136 +96,83 @@ class SubtitleControls(
     private val getDelayMs: () -> Long,
     private val onDelay: (Long) -> Unit,
 ) {
-    fun show() {
-        val dp = ctx.resources.displayMetrics.density
-        val col = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((20 * dp).toInt(), (12 * dp).toInt(), (20 * dp).toInt(), (8 * dp).toInt())
-        }
+    private lateinit var panel: SidePanel
+    private var delayWorks = true
 
-        val sizeLabel = valueLabel()
-        val posLabel = valueLabel()
-        val delayLabel = valueLabel()
-        fun refresh() {
-            sizeLabel.text = "${(style.scale * 100).toInt()}%"
-            posLabel.text = "${(style.bottom * 100).toInt()}%"
-            val d = getDelayMs()
-            delayLabel.text = (if (d > 0) "+" else "") + String.format("%.1f", d / 1000.0) + "s"
-        }
-
-        col.addView(row("الحجم", btn("−") { style.scale = (style.scale - 0.1f).coerceAtLeast(0.5f); changed(); refresh() }, sizeLabel,
-            btn("+") { style.scale = (style.scale + 0.1f).coerceAtMost(2.5f); changed(); refresh() }))
-
-        val bgButtons = listOf("shadow" to "ظل", "outline" to "إطار", "box" to "خلفية", "none" to "بدون")
-        val bgViews = ArrayList<Button>()
-        fun markBg() = bgViews.forEachIndexed { i, b -> highlight(b, bgButtons[i].first == style.background) }
-        bgButtons.forEach { (key, name) -> bgViews.add(btn(name) { style.background = key; changed(); markBg() }) }
-        col.addView(row("الخلفية", *bgViews.toTypedArray()))
-        markBg()
-
-        col.addView(row("شفافية الخلفية",
-            btn("−") { style.boxOpacity = (style.boxOpacity - 0.1f).coerceAtLeast(0.1f); changed() },
-            btn("+") { style.boxOpacity = (style.boxOpacity + 0.1f).coerceAtMost(1f); changed() }))
-
-        val colors = listOf(Color.WHITE, Color.parseColor("#FFE14D"), Color.parseColor("#7FE7FF"), Color.parseColor("#8CFF8C"))
-        val colorViews = ArrayList<Button>()
-        fun markColor() = colorViews.forEachIndexed { i, b -> highlight(b, colors[i] == style.color, colors[i]) }
-        colors.forEach { c -> colorViews.add(btn("A") { style.color = c; changed(); markColor() }.apply { setTextColor(c) }) }
-        col.addView(row("اللون", *colorViews.toTypedArray()))
-        markColor()
-
-        col.addView(row("المكان", btn("↓") { style.bottom = (style.bottom - 0.03f).coerceAtLeast(0.0f); changed(); refresh() }, posLabel,
-            btn("↑") { style.bottom = (style.bottom + 0.03f).coerceAtMost(0.45f); changed(); refresh() }))
-
-        val boldBtn = btn("عريض") { style.bold = !style.bold; changed() }
-        boldBtn.setOnClickListener { style.bold = !style.bold; changed(); highlight(boldBtn, style.bold) }
-        highlight(boldBtn, style.bold)
-        col.addView(row("الخط", boldBtn))
-
-        col.addView(row("التأخير", btn("−0.5") { onDelay(getDelayMs() - 500); refresh() }, delayLabel,
-            btn("+0.5") { onDelay(getDelayMs() + 500); refresh() }, btn("0") { onDelay(0); refresh() }))
-        col.addView(TextView(ctx).apply {
-            text = "التأخير يشتغل على ترجمات الإضافات (مو المدمجة في الملف)."
-            setTextColor(Color.argb(150, 255, 255, 255))
-            textSize = 12f
-            setPadding(0, (4 * dp).toInt(), 0, 0)
-        })
-        refresh()
-
-        AlertDialog.Builder(ctx, android.R.style.Theme_Material_Dialog_NoActionBar)
-            .setTitle("إعدادات الترجمة")
-            .setView(ScrollView(ctx).apply { addView(col) })
-            .setPositiveButton("تم", null)
-            .setNeutralButton("الافتراضي") { _, _ ->
-                val d = SubStyle()
-                style.scale = d.scale; style.background = d.background; style.color = d.color
-                style.bottom = d.bottom; style.bold = d.bold; style.boxOpacity = d.boxOpacity
-                changed()
-            }
-            .create()
-            .apply {
-                // Keep the immersive player behind the dialog.
-                window?.setFlags(
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                )
-                window?.setDimAmount(0.2f)
-                show()
-                window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
-            }
+    fun build(p: SidePanel, delayWorks: Boolean) {
+        panel = p
+        this.delayWorks = delayWorks
+        render()
     }
 
     private fun changed() {
         style.save(ctx)
         onStyle()
+        render()
     }
 
-    private fun row(title: String, vararg views: View): View {
-        val dp = ctx.resources.displayMetrics.density
-        return LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, (6 * dp).toInt(), 0, (6 * dp).toInt())
-            addView(TextView(ctx).apply {
-                text = title
-                setTextColor(Color.WHITE)
-                textSize = 14f
-                minWidth = (96 * dp).toInt()
+    private fun render() {
+        val p = panel
+        // Keep the two tab chips at the top (first child), rebuild everything below them.
+        while (p.body.childCount > 1) p.body.removeViewAt(1)
+
+        p.section("الحجم · ${(style.scale * 100).toInt()}%")
+        p.chips(listOf(
+            Triple("أصغر −", false) { style.scale = (style.scale - 0.1f).coerceAtLeast(0.5f); changed() },
+            Triple("أكبر +", false) { style.scale = (style.scale + 0.1f).coerceAtMost(2.5f); changed() },
+            Triple("90%", kotlin.math.abs(style.scale - 0.9f) < 0.05f) { style.scale = 0.9f; changed() },
+            Triple("100%", kotlin.math.abs(style.scale - 1f) < 0.05f) { style.scale = 1f; changed() },
+            Triple("130%", kotlin.math.abs(style.scale - 1.3f) < 0.05f) { style.scale = 1.3f; changed() },
+            Triple("160%", kotlin.math.abs(style.scale - 1.6f) < 0.05f) { style.scale = 1.6f; changed() },
+        ))
+
+        p.section("الخلفية")
+        p.chips(listOf("shadow" to "ظل", "outline" to "إطار", "box" to "خلفية", "none" to "بدون").map { (k, n) ->
+            Triple(n, style.background == k) { style.background = k; changed() }
+        })
+        if (style.background == "box") {
+            p.section("شفافية الخلفية · ${(style.boxOpacity * 100).toInt()}%")
+            p.chips(listOf(0.3f, 0.5f, 0.7f, 0.9f).map { o ->
+                Triple("${(o * 100).toInt()}%", kotlin.math.abs(style.boxOpacity - o) < 0.05f) { style.boxOpacity = o; changed() }
             })
-            views.forEach { v ->
-                addView(v, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, (40 * dp).toInt()).apply {
-                    marginEnd = (6 * dp).toInt()
-                })
-            }
         }
-    }
 
-    private fun valueLabel() = TextView(ctx).apply {
-        setTextColor(Color.WHITE)
-        textSize = 14f
-        gravity = Gravity.CENTER
-        minWidth = (56 * ctx.resources.displayMetrics.density).toInt()
-    }
+        p.section("اللون")
+        p.chips(listOf(
+            Color.WHITE to "أبيض", Color.parseColor("#FFE14D") to "أصفر",
+            Color.parseColor("#7FE7FF") to "سماوي", Color.parseColor("#8CFF8C") to "أخضر",
+        ).map { (c, n) -> Triple(n, style.color == c) { style.color = c; changed() } })
 
-    private fun btn(text: String, onClick: () -> Unit) = Button(ctx).apply {
-        this.text = text
-        isAllCaps = false
-        textSize = 14f
-        setTextColor(Color.WHITE)
-        minWidth = 0
-        minimumWidth = (44 * ctx.resources.displayMetrics.density).toInt()
-        setPadding((10 * ctx.resources.displayMetrics.density).toInt(), 0, (10 * ctx.resources.displayMetrics.density).toInt(), 0)
-        background = pill(false, Color.WHITE)
-        setOnClickListener { onClick() }
-    }
+        p.section("المكان")
+        p.chips(listOf(
+            Triple("أنزل ↓", false) { style.bottom = (style.bottom - 0.03f).coerceAtLeast(0f); changed() },
+            Triple("أرفع ↑", false) { style.bottom = (style.bottom + 0.03f).coerceAtMost(0.45f); changed() },
+            Triple("الافتراضي", kotlin.math.abs(style.bottom - 0.08f) < 0.01f) { style.bottom = 0.08f; changed() },
+        ))
 
-    private fun highlight(b: Button, on: Boolean, accent: Int = Color.WHITE) {
-        b.background = pill(on, accent)
-    }
+        p.section("الخط")
+        p.chips(listOf(Triple("عريض", style.bold) { style.bold = !style.bold; changed() }))
 
-    private fun pill(on: Boolean, accent: Int) = GradientDrawable().apply {
-        cornerRadius = 999f
-        setColor(if (on) Color.argb(70, 255, 255, 255) else Color.argb(28, 255, 255, 255))
-        setStroke((1.5f * ctx.resources.displayMetrics.density).toInt(), if (on) accent else Color.argb(60, 255, 255, 255))
+        val d = getDelayMs()
+        p.section("التأخير · " + (if (d > 0) "+" else "") + String.format(java.util.Locale.US, "%.1f", d / 1000.0) + " ث")
+        if (!delayWorks) {
+            p.note("التأخير يشتغل على ترجمات الإضافات. اختر ترجمة من الإضافات أول.")
+        } else {
+            p.chips(listOf(
+                Triple("−1", false) { onDelay(getDelayMs() - 1000); render() },
+                Triple("−0.1", false) { onDelay(getDelayMs() - 100); render() },
+                Triple("0", d == 0L) { onDelay(0); render() },
+                Triple("+0.1", false) { onDelay(getDelayMs() + 100); render() },
+                Triple("+1", false) { onDelay(getDelayMs() + 1000); render() },
+            ))
+            p.note("موجب = الترجمة تتأخر، سالب = تطلع أبكر.")
+        }
+
+        p.action("رجّع المظهر الافتراضي") {
+            val def = SubStyle()
+            style.scale = def.scale; style.background = def.background; style.color = def.color
+            style.bottom = def.bottom; style.bold = def.bold; style.boxOpacity = def.boxOpacity
+            changed()
+        }
     }
 }
