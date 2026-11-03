@@ -145,13 +145,18 @@ class SidePanel(private val ctx: Context, private val host: FrameLayout, title: 
         body.addView(ctx.label(text, 13f, HarborColors.MUTED).apply { setPadding(ctx.dp(4), ctx.dp(10), ctx.dp(4), ctx.dp(10)) })
     }
 
-    /** A tappable list row: title, optional subtitle, optional right text, check when selected. */
+    /** A tappable list row: title, optional subtitle, optional right text, check when selected,
+     *  and an optional small round button at the end (e.g. "save for offline"). */
     fun row(
         title: String,
         subtitle: String? = null,
         trailing: String? = null,
         selected: Boolean = false,
         loading: Boolean = false,
+        actionIcon: Int? = null,
+        actionDesc: String? = null,
+        actionBusy: Boolean = false,
+        onAction: (() -> Unit)? = null,
         onClick: (() -> Unit)?,
     ): View {
         val r = LinearLayout(ctx).apply {
@@ -179,6 +184,20 @@ class SidePanel(private val ctx: Context, private val host: FrameLayout, title: 
             selected -> r.addView(ctx.icon(R.drawable.ic_check, 20, HarborColors.ACCENT).apply {
                 layoutParams = LinearLayout.LayoutParams(ctx.dp(20), ctx.dp(20)).apply { marginStart = ctx.dp(10) }
             })
+        }
+        if (actionIcon != null && onAction != null) {
+            val b = FrameLayout(ctx).apply {
+                contentDescription = actionDesc
+                background = rounded(HarborColors.CHIP, 999f)
+                isClickable = true
+                setOnClickListener { if (!actionBusy) onAction() }
+                if (actionBusy) {
+                    addView(ProgressBar(ctx).apply { isIndeterminate = true }, FrameLayout.LayoutParams(ctx.dp(16), ctx.dp(16), Gravity.CENTER))
+                } else {
+                    addView(ctx.icon(actionIcon, 18, HarborColors.MUTED), FrameLayout.LayoutParams(ctx.dp(18), ctx.dp(18), Gravity.CENTER))
+                }
+            }
+            r.addView(b, LinearLayout.LayoutParams(ctx.dp(38), ctx.dp(38)).apply { marginStart = ctx.dp(10) })
         }
         body.addView(r, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = ctx.dp(2) })
         return r

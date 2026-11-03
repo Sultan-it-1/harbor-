@@ -15,6 +15,11 @@ type HarborAndroidApi = {
   dlAddSubs?(id: string, json: string): boolean;
   dlFiles?(id: string): string;
   dlStorage?(): string;
+  /** Background work in the page (season queue, subtitle searches): keep the app running. */
+  dlKeepAlive?(on: boolean): void;
+  /** Whether Harbor may run in the background without battery limits, and the system prompt for it. */
+  bgAllowed?(): boolean;
+  bgRequest?(): void;
 };
 
 export type NativePlayerEvent =

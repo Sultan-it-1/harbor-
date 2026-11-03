@@ -5,6 +5,9 @@ import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -54,11 +57,15 @@ import java.util.concurrent.Executors
  * swipes, pinch), a top bar (title, streams, subtitles, audio, aspect, lock), a next-episode
  * button, and side panels for streams, subtitles (embedded + addon, grouped by language,
  * own renderer with instant delay) and audio/speed.
+ *
+ * Subtitles saved with a download are listed on their own and are all that shows offline;
+ * online, every addon subtitle shows too, each with a button that saves it with the download.
  */
 @OptIn(UnstableApi::class)
 class NativePlayer(
     private val activity: MainActivity,
     private val root: FrameLayout,
+    private val downloads: Downloads,
     private val emit: (String) -> Unit,
 ) {
     var userAgent: String = "HarborAndroid"
@@ -82,8 +89,9 @@ class NativePlayer(
     private var locked = false
 
     // ---- subtitles -------------------------------------------------------------------------
-    /** An addon subtitle the user can pick; downloaded only when picked. */
-    private data class CatalogSub(val id: String, val url: String, val lang: String?, val label: String)
+    /** A subtitle the user can pick; downloaded only when picked. For one saved with a
+     *  download, url is the local file and src the address it was saved from. */
+    private data class CatalogSub(val id: String, val url: String, val lang: String?, val label: String, val src: String = url)
 
     private val subStore = SubtitleStore(activity)
     private val subPool = Executors.newFixedThreadPool(3)
@@ -102,6 +110,11 @@ class NativePlayer(
     private var shownLangs: MutableSet<String>? = null
     private var extView: SubtitleView? = null
     private var ext: ExternalSubs? = null
+    /** The download of what's playing (when there is one): its saved subtitles, and where the
+     *  save button puts new ones. */
+    private var downloadId: String? = null
+    private val saved = ArrayList<CatalogSub>()
+    private val saving = HashSet<String>()
 
     // ---- chrome ----------------------------------------------------------------------------
     private var topBar: LinearLayout? = null
@@ -133,6 +146,7 @@ class NativePlayer(
             // A different title/episode: forget subtitles from the previous one.
             contentKey = key
             catalog.clear(); catalogUrls.clear(); parsed.clear(); loading.clear()
+            saved.clear(); saving.clear()
             subStore.clear()
             activeExtId = null; subsOff = false; userPickedSub = false; autoSubDone = false
             ext?.delayMs = 0
@@ -141,6 +155,8 @@ class NativePlayer(
             // arrive before this play() — don't wipe them here.
         }
         source = src
+        downloadId = src.optString("downloadId").takeIf { it.isNotBlank() }
+        loadSaved()
         src.optString("title").takeIf { it.isNotBlank() }?.let { title = it }
         prefSubLangs = jsonStrings(src.optJSONArray("prefSubLangs")).ifEmpty { prefSubLangs }
         subStyle = SubStyle.load(activity) ?: SubStyle.fromHarbor(src.optJSONObject("subStyle"))
@@ -693,12 +709,40 @@ class NativePlayer(
             }
         }
 
-        // Addon subtitles, grouped by language.
-        p.section(if (catalog.isEmpty()) "من الإضافات" else "من الإضافات (${catalog.size})")
-        if (catalog.isEmpty()) {
+        // Saved with the download: local files, so they also work offline.
+        if (saved.isNotEmpty()) {
+            p.section("محفوظة على الجهاز (${saved.size})")
+            saved.sortedBy { prefRank(it.lang) }.forEach { s ->
+                p.row(
+                    s.label,
+                    langName(s.lang).takeIf { s.lang != null && !s.label.contains(it) },
+                    selected = activeExtId == s.id,
+                    loading = s.id in loading,
+                ) {
+                    userPickedSub = true
+                    selectExternal(s)
+                }
+            }
+        }
+
+        // Offline: addon subtitles can't be fetched, so only the saved ones are offered.
+        if (!isOnline()) {
+            p.section("من الإضافات")
+            p.note(
+                if (saved.isEmpty()) "أنت بدون إنترنت. ترجمات الإضافات تحتاج إنترنت، وما فيه ترجمات محفوظة مع هذا الفيديو."
+                else "أنت بدون إنترنت، فتظهر الترجمات المحفوظة على الجهاز فقط.",
+            )
+            return
+        }
+
+        // Addon subtitles, grouped by language (the saved ones aren't repeated here).
+        val online = catalog.filter { !isSaved(it) }
+        p.section(if (online.isEmpty()) "من الإضافات" else "من الإضافات (${online.size})")
+        if (online.isEmpty()) {
             p.note(if (searching) "جارٍ البحث في الإضافات…" else "ما وصلت ترجمات من الإضافات بعد.")
         } else {
-            val byLang = catalog.groupBy { baseLang(it.lang).ifBlank { "und" } }
+            if (downloadId != null) p.note("زر التحميل جنب كل ترجمة يحفظها مع الفيديو عشان تشتغل بدون إنترنت.")
+            val byLang = online.groupBy { baseLang(it.lang).ifBlank { "und" } }
             val order = byLang.keys.sortedWith(compareBy<String>({ prefRank(it) }, { langName(it) }))
             val chosen = shownLangs ?: loadShownLangs(order).also { shownLangs = it }
             p.chips(
@@ -721,7 +765,15 @@ class NativePlayer(
                 p.section("${langName(l)} (${list.size})")
                 list.forEach { s ->
                     val label = s.label.substringAfter(" · ", s.label)
-                    p.row(label, selected = activeExtId == s.id, loading = s.id in loading) {
+                    p.row(
+                        label,
+                        selected = activeExtId == s.id,
+                        loading = s.id in loading,
+                        actionIcon = if (downloadId != null) R.drawable.ic_download else null,
+                        actionDesc = "حفظ الترجمة مع الفيديو",
+                        actionBusy = s.id in saving,
+                        onAction = { saveSub(s) },
+                    ) {
                         userPickedSub = true
                         selectExternal(s)
                     }
@@ -752,6 +804,62 @@ class NativePlayer(
         activity.getSharedPreferences("harbor.player", Context.MODE_PRIVATE).edit()
             .putString("subLangs", (shownLangs ?: emptySet()).joinToString(","))
             .apply()
+    }
+
+    // ---- saved subtitles ---------------------------------------------------------------
+
+    private fun savedId(key: String) = "v" + Integer.toHexString(key.hashCode())
+
+    /** Reads the subtitles saved with the current download; keeps local ones the page handed
+     *  over that aren't in it (e.g. a download the page couldn't match). */
+    private fun loadSaved() {
+        val id = downloadId
+        val list = if (id == null) emptyList() else downloads.savedSubtitles(id)
+        val fromDownload = list.map { s ->
+            val uri = Uri.fromFile(s.file).toString()
+            val src = s.src.ifBlank { uri }
+            CatalogSub(savedId(src), uri, s.lang, s.label ?: langName(s.lang), src)
+        }
+        val extra = saved.filter { old -> fromDownload.none { it.url == old.url } }
+        saved.clear()
+        saved.addAll(fromDownload)
+        saved.addAll(extra)
+    }
+
+    private fun isSaved(c: CatalogSub) = saved.any { it.src == c.url || it.url == c.url }
+
+    /** The save button on an addon subtitle: store it with the download for offline use. */
+    private fun saveSub(s: CatalogSub) {
+        val id = downloadId ?: return
+        if (!saving.add(s.id)) return
+        refreshPanel()
+        val gen = contentKey
+        downloads.saveSubtitle(id, s.url, s.lang, s.label.substringAfter(" · ", s.label)) { ok ->
+            handler.post {
+                saving.remove(s.id)
+                if (gen != contentKey || downloadId != id) return@post
+                if (ok) {
+                    loadSaved()
+                    // Showing this one right now: carry on with the saved copy.
+                    saved.firstOrNull { it.src == s.url }?.let { copy ->
+                        parsed[s.id]?.let { parsed[copy.id] = it }
+                        if (activeExtId == s.id) activeExtId = copy.id
+                    }
+                    toast("انحفظت الترجمة مع الفيديو")
+                } else {
+                    toast("تعذّر حفظ هذه الترجمة، جرّب غيرها")
+                }
+                refreshPanel()
+            }
+        }
+    }
+
+    /** Connected with working internet (an unvalidated network counts once addons answered). */
+    private fun isOnline(): Boolean {
+        val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+        val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) } ?: return false
+        if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) || catalog.isNotEmpty()
     }
 
     private data class TextTrack(val group: Tracks.Group, val index: Int)
@@ -830,7 +938,9 @@ class NativePlayer(
         val p = player ?: return
         if (p.currentTracks.isEmpty) return
         val embeddedRank = selectedEmbedded(p)?.let { prefRank(it.group.getTrackFormat(it.index).language) } ?: 999
-        val candidates = catalog.filter { prefRank(it.lang) < embeddedRank }.sortedBy { prefRank(it.lang) }.take(4)
+        // Saved ones first (local, work offline), then addon ones when online.
+        val pool = saved + if (isOnline()) catalog.filter { !isSaved(it) } else emptyList()
+        val candidates = pool.filter { prefRank(it.lang) < embeddedRank }.sortedBy { prefRank(it.lang) }.take(4)
         if (candidates.isEmpty()) return
         autoSubDone = true
         autoTry(candidates, 0)
@@ -848,9 +958,18 @@ class NativePlayer(
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
             val url = o.optString("url").takeIf { it.isNotBlank() } ?: continue
-            if (!catalogUrls.add(url)) continue
             val lang = o.optString("lang").takeIf { it.isNotBlank() }
-            catalog.add(CatalogSub("s${++subSeq}", url, lang, o.optString("label").ifBlank { langName(lang) }))
+            val label = o.optString("label").ifBlank { langName(lang) }
+            if (url.startsWith("file:")) {
+                // A subtitle saved on the phone (offline playback): list it with the saved ones.
+                if (saved.none { it.url == url }) {
+                    saved.add(CatalogSub(savedId(url), url, lang, if (lang != null) label.substringAfter(" · ", label) else label))
+                    added++
+                }
+                continue
+            }
+            if (!catalogUrls.add(url)) continue
+            catalog.add(CatalogSub("s${++subSeq}", url, lang, label))
             added++
         }
         if (added == 0) return

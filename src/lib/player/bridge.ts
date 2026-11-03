@@ -59,6 +59,9 @@ export type PlayerSource = {
   headers?: Record<string, string>;
   /** Identity of the title/episode; lets the Android player keep subtitles across stream swaps. */
   contentKey?: string;
+  /** Android: the download of this title/episode, whose saved subtitles the player lists
+   *  (and where its "save subtitle" button stores new ones). */
+  downloadId?: string;
 };
 
 export type PlayerBridge = {

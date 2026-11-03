@@ -197,6 +197,7 @@ export function createAndroidBridge(): PlayerBridge {
           title,
           isLive: src.isLive === true,
           contentKey: src.contentKey ?? "",
+          downloadId: src.downloadId ?? "",
         }),
       );
     },

@@ -13,7 +13,7 @@ const OUT = join(root, "android/app/src/main/res/drawable");
 const ICONS = [
   "x", "captions", "audio-lines", "layers", "lock", "lock-open", "scan", "sun", "volume-2",
   "volume-x", "rewind", "fast-forward", "skip-forward", "gauge", "check", "refresh-cw", "type",
-  "arrow-left", "languages", "chevron-right", "play", "pause",
+  "arrow-left", "languages", "chevron-right", "play", "pause", "download",
 ];
 
 const n = (v) => Number(v);

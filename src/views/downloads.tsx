@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { androidDownloadsAvailable, nativeFiles, nativeStorage } from "@/lib/download/android-downloads";
-import { Check, Download as DownloadIcon, FolderOpen, Play, Trash2, X } from "lucide-react";
+import {
+  androidDownloadsAvailable,
+  nativeBgAllowed,
+  nativeBgRequest,
+  nativeFiles,
+  nativeStorage,
+} from "@/lib/download/android-downloads";
+import { stopSeasonDownload, useRunningSeasonJobs } from "@/lib/download/season-download";
+import { BatteryCharging, Check, Download as DownloadIcon, FolderOpen, Loader2, Play, Trash2, X } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { useView } from "@/lib/view";
 import { DownloadDirBar } from "./downloads/download-dir-bar";
 import {
   cancelDownload,
   fetchDownloadSubtitles,
+  refreshDownloads,
   removeDownload,
   revealDownload,
   useDownloads,
@@ -91,9 +99,68 @@ function StorageLine({ items }: { items: DownloadItem[] }) {
   );
 }
 
+/**
+ * Android: downloads run in the background, but battery savers (especially on Xiaomi, Samsung,
+ * Huawei…) can still stop them. Offers the system "let it run in the background" prompt.
+ */
+function BackgroundRunCard({ busy }: { busy: boolean }) {
+  const [allowed, setAllowed] = useState<boolean | null>(() => nativeBgAllowed());
+  useEffect(() => {
+    const recheck = () => setAllowed(nativeBgAllowed());
+    window.addEventListener("harbor:resume", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    return () => {
+      window.removeEventListener("harbor:resume", recheck);
+      document.removeEventListener("visibilitychange", recheck);
+    };
+  }, []);
+  if (allowed !== false || !busy) return null;
+  return (
+    <div className="mb-5 flex items-center gap-3 rounded-2xl border border-accent/25 bg-accent/10 px-4 py-3">
+      <BatteryCharging size={20} className="shrink-0 text-accent" strokeWidth={2} />
+      <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-muted">
+        Downloads keep going when you leave the app. If your phone still stops them, let Harbor run without battery limits.
+      </p>
+      <button
+        type="button"
+        onClick={() => nativeBgRequest()}
+        className="h-9 shrink-0 rounded-lg bg-accent px-3 text-[12.5px] font-semibold text-canvas"
+      >
+        Allow
+      </button>
+    </div>
+  );
+}
+
+/** "Download season" queues still looking for sources for the next episodes. */
+function SeasonJobs() {
+  const jobs = useRunningSeasonJobs();
+  if (jobs.length === 0) return null;
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      {jobs.map((j) => (
+        <div key={j.key} className="flex items-center gap-3 rounded-2xl border border-edge-soft bg-elevated/40 px-4 py-2.5">
+          <Loader2 size={16} className="shrink-0 animate-spin text-ink-subtle" />
+          <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-muted">
+            {`Finding sources · ${j.title}${j.season != null ? ` S${j.season}` : ""} · ${Math.min(j.progress.done + 1, j.progress.total)}/${j.progress.total}`}
+          </span>
+          <RowBtn label="Stop" onClick={() => stopSeasonDownload(j.key)}>
+            <X size={16} strokeWidth={2.2} />
+          </RowBtn>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function DownloadsView() {
   const items = useDownloads();
+  const seasonJobs = useRunningSeasonJobs();
   const active = items.filter((d) => d.status === "downloading").length;
+  // Subtitles saved from the player etc. show up without waiting for a download to run.
+  useEffect(() => {
+    refreshDownloads();
+  }, []);
   const savedBytes = items.reduce(
     (sum, d) => (d.status === "done" ? sum + (d.totalBytes ?? d.receivedBytes) : sum),
     0,
@@ -119,6 +186,8 @@ export function DownloadsView() {
         </header>
 
         {ANDROID ? <StorageLine items={items} /> : <DownloadDirBar />}
+        {ANDROID && <BackgroundRunCard busy={active > 0 || seasonJobs.length > 0} />}
+        <SeasonJobs />
 
         {items.length === 0 ? (
           <EmptyState />

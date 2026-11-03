@@ -68,6 +68,30 @@ export function nativeStorage(): { free?: number; used?: number } {
   return parse(androidApi()?.dlStorage?.(), {});
 }
 
+/** Tells the app the page has background work, so it keeps running after you leave it. */
+export function nativeKeepAlive(on: boolean): void {
+  try {
+    androidApi()?.dlKeepAlive?.(on);
+  } catch {
+    /* older shell */
+  }
+}
+
+/** null when the shell can't tell (older version). */
+export function nativeBgAllowed(): boolean | null {
+  const api = androidApi();
+  if (typeof api?.bgAllowed !== "function") return null;
+  try {
+    return api.bgAllowed() === true;
+  } catch {
+    return null;
+  }
+}
+
+export function nativeBgRequest(): void {
+  androidApi()?.bgRequest?.();
+}
+
 function readSettings(): { preferredSubLangs?: string[]; preferredLanguages?: string[]; tmdbKey?: string } {
   try {
     return JSON.parse(localStorage.getItem("harbor.settings") || "{}");

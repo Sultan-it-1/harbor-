@@ -1,6 +1,8 @@
 // "Download season": for every episode, run the same stream query + ranking the source
 // picker uses, take the best stream that can actually be saved, resolve it (debrid /
-// direct) and queue the download. Runs one episode at a time.
+// direct) and queue the download. Runs one episode at a time, and keeps running when you
+// leave the page (or, on Android, the app).
+import { useSyncExternalStore } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import type { DebridStore } from "@/lib/debrid/types";
 import type { Settings } from "@/lib/settings";
@@ -12,7 +14,7 @@ import { tmdbImdbId } from "@/lib/providers/tmdb";
 import type { PlayEpisode } from "@/lib/view";
 import { loadPickerAddons } from "@/views/play-picker/use-addons";
 import { buildPipelineInput } from "@/views/play-picker/use-pipeline-result";
-import { activeDownloadFor, enqueueDownload } from "./downloads-store";
+import { activeDownloadFor, beginBackgroundJob, endBackgroundJob, enqueueDownload } from "./downloads-store";
 
 export type SeasonDownloadProgress = {
   total: number;
@@ -122,4 +124,89 @@ export async function downloadSeason(opts: {
   state.finished = true;
   emit();
   return state;
+}
+
+// ---- running season downloads ---------------------------------------------------------
+// Held here rather than in the button, so leaving the show's page doesn't stop the queue.
+
+type SeasonJob = {
+  key: string;
+  title: string;
+  season: number | null;
+  progress: SeasonDownloadProgress;
+  ac: AbortController;
+};
+
+const jobs = new Map<string, SeasonJob>();
+const jobListeners = new Set<() => void>();
+let jobList: SeasonJob[] = [];
+
+function notifyJobs() {
+  jobList = [...jobs.values()];
+  jobListeners.forEach((l) => l());
+}
+
+function subscribeJobs(l: () => void) {
+  jobListeners.add(l);
+  return () => {
+    jobListeners.delete(l);
+  };
+}
+
+export function seasonJobKey(metaId: string, episodes: PlayEpisode[]): string {
+  return `${metaId}|s${episodes[0]?.season ?? ""}`;
+}
+
+export function startSeasonDownload(
+  key: string,
+  opts: Omit<Parameters<typeof downloadSeason>[0], "signal" | "onProgress">,
+): void {
+  const cur = jobs.get(key);
+  if (cur && !cur.progress.finished) return;
+  const ac = new AbortController();
+  const job: SeasonJob = {
+    key,
+    title: opts.meta.name ?? "",
+    season: opts.episodes[0]?.season ?? null,
+    ac,
+    progress: { total: opts.episodes.length, done: 0, queued: 0, skipped: 0, failed: [], current: null, finished: false },
+  };
+  jobs.set(key, job);
+  notifyJobs();
+  const bgKey = `season:${key}`;
+  beginBackgroundJob(bgKey);
+  void downloadSeason({
+    ...opts,
+    signal: ac.signal,
+    onProgress: (p) => {
+      job.progress = p;
+      notifyJobs();
+    },
+  })
+    .catch((e: unknown) => console.warn("[season-download] stopped", e))
+    .finally(() => {
+      job.progress = { ...job.progress, current: null, finished: true };
+      endBackgroundJob(bgKey);
+      notifyJobs();
+      // Keep the summary up for a moment, then forget the job.
+      window.setTimeout(() => {
+        if (jobs.get(key) !== job) return;
+        jobs.delete(key);
+        notifyJobs();
+      }, 10_000);
+    });
+}
+
+export function stopSeasonDownload(key: string): void {
+  jobs.get(key)?.ac.abort();
+}
+
+export function useSeasonDownload(key: string): SeasonDownloadProgress | null {
+  return useSyncExternalStore(subscribeJobs, () => jobs.get(key)?.progress ?? null);
+}
+
+/** Season queues still looking for sources (Downloads page). */
+export function useRunningSeasonJobs(): { key: string; title: string; season: number | null; progress: SeasonDownloadProgress }[] {
+  const all = useSyncExternalStore(subscribeJobs, () => jobList);
+  return all.filter((j) => !j.progress.finished);
 }

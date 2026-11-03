@@ -1,9 +1,14 @@
 package app.harbor.android
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -44,6 +49,8 @@ class MainActivity : ComponentActivity() {
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fullscreen = false
     private var lastBackAt = 0L
+    private var pageLoaded = false
+    private var pendingOpenDownloads = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,9 +83,11 @@ class MainActivity : ComponentActivity() {
         setContentView(root)
         RefreshRate.apply(this)
 
-        player = NativePlayer(this, root) { event -> sendToJs("__harborNativeEvent", event) }
         fetcher = NativeFetch { id, result -> sendToJs("__harborNativeFetchDone", id, result) }
         downloads = Downloads(this) { fetcher.userAgent }
+        player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
+        DownloadService.createChannel(this)
+        pendingOpenDownloads = intent?.getBooleanExtra(EXTRA_OPEN_DOWNLOADS, false) == true
 
         val assets = WebAssets(this)
         val ws = webView.settings
@@ -101,10 +110,19 @@ class MainActivity : ComponentActivity() {
         fetcher.userAgent = ws.userAgentString
         player.userAgent = ws.userAgentString
 
+        // The page keeps running when Harbor is in the background (season downloads and
+        // subtitle searches happen there), so its renderer keeps the app's priority.
+        if (Build.VERSION.SDK_INT >= 26) webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+
         webView.addJavascriptInterface(JsApi(), "HarborAndroid")
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 assets.intercept(request)
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                pageLoaded = true
+                if (pendingOpenDownloads) openDownloadsPage()
+            }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
@@ -154,6 +172,52 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /** Tapped the downloads notification: show the Downloads page (unless a video is playing). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_OPEN_DOWNLOADS, false)) {
+            pendingOpenDownloads = true
+            if (pageLoaded) openDownloadsPage()
+        }
+    }
+
+    private fun openDownloadsPage() {
+        pendingOpenDownloads = false
+        if (player.isShowing) return
+        // The app sets window.harbor once it has mounted; wait for it on a cold start.
+        webView.evaluateJavascript(
+            "(function t(n){if(window.harbor&&window.harbor.navigate){window.harbor.navigate('downloads')}else if(n>0){setTimeout(function(){t(n-1)},250)}})(60)",
+            null,
+        )
+    }
+
+    /** Asked once, on the first download: lets the progress notification show (Android 13+). */
+    private fun askNotificationsOnce() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences("harbor.app", MODE_PRIVATE)
+        if (prefs.getBoolean("askedNotifications", false)) return
+        prefs.edit().putBoolean("askedNotifications", true).apply()
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 41)
+    }
+
+    private fun ignoringBatteryOptimizations(): Boolean =
+        (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+
+    /** System dialog: "Let Harbor always run in the background?" (falls back to the settings list). */
+    @SuppressLint("BatteryLife")
+    private fun requestBackgroundRun() {
+        try {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
             }
         }
     }
@@ -214,6 +278,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (!player.isShowing) RefreshRate.apply(this)
+        // e.g. back from the battery dialog: let the page re-check what it shows.
+        if (pageLoaded) webView.evaluateJavascript("window.dispatchEvent(new Event('harbor:resume'))", null)
     }
 
     override fun onPause() {
@@ -222,6 +288,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // The page (and any season queue / subtitle search in it) goes away with the activity;
+        // system downloads carry on and DownloadService stays up while they run.
+        DownloadService.keepAlive(this, false)
         player.stop(notify = false)
         fetcher.shutdown()
         (webView.parent as? ViewGroup)?.removeView(webView)
@@ -250,7 +319,20 @@ class MainActivity : ComponentActivity() {
 
         // ---- downloads (see Downloads.kt) ----
         @JavascriptInterface
-        fun dlStart(json: String): String = downloads.start(json)
+        fun dlStart(json: String): String {
+            runOnUiThread { askNotificationsOnce() }
+            return downloads.start(json)
+        }
+
+        /** The page has background work (season queue, subtitle searches) — keep Harbor running. */
+        @JavascriptInterface
+        fun dlKeepAlive(on: Boolean) = DownloadService.keepAlive(this@MainActivity, on)
+
+        @JavascriptInterface
+        fun bgAllowed(): Boolean = ignoringBatteryOptimizations()
+
+        @JavascriptInterface
+        fun bgRequest() = runOnUiThread { requestBackgroundRun() }
 
         @JavascriptInterface
         fun dlStatus(): String = downloads.status()
@@ -270,6 +352,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
+        const val EXTRA_OPEN_DOWNLOADS = "app.harbor.android.OPEN_DOWNLOADS"
     }
 }
 

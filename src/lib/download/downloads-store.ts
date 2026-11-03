@@ -11,6 +11,7 @@ import {
   gatherDownloadSubtitles,
   nativeAddSubs,
   nativeDelete,
+  nativeKeepAlive,
   nativeStart,
   nativeStatus,
 } from "./android-downloads";
@@ -64,6 +65,39 @@ let snapshot: DownloadItem[] = [];
 
 const PERSIST_KEY = "harbor.downloads.v1";
 
+// Android: work that runs in the page after you leave the app (season queues, subtitle
+// searches). While there is any, the app keeps a background service up (DownloadService).
+const backgroundJobs = new Set<string>();
+let keepAliveOn = false;
+let keepAliveTimer: number | null = null;
+
+function syncKeepAlive() {
+  if (!ANDROID) return;
+  const busy = backgroundJobs.size > 0 || [...items.values()].some((d) => d.subsState === "searching");
+  if (busy && !keepAliveOn) {
+    keepAliveOn = true;
+    nativeKeepAlive(true);
+    // The app lets it lapse after a while unless it's renewed (a page that died mid-job
+    // mustn't keep it up forever).
+    keepAliveTimer = window.setInterval(() => nativeKeepAlive(true), 60_000);
+  } else if (!busy && keepAliveOn) {
+    keepAliveOn = false;
+    if (keepAliveTimer != null) window.clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+    nativeKeepAlive(false);
+  }
+}
+
+export function beginBackgroundJob(key: string): void {
+  backgroundJobs.add(key);
+  syncKeepAlive();
+}
+
+export function endBackgroundJob(key: string): void {
+  backgroundJobs.delete(key);
+  syncKeepAlive();
+}
+
 function persist() {
   try {
     const durable = [...items.values()].map((d) => ({ ...d, bytesPerSec: 0 }));
@@ -76,8 +110,12 @@ function persist() {
 function rebuild() {
   snapshot = [...items.values()].sort((a, b) => b.startedAt - a.startedAt);
   persist();
+  syncKeepAlive();
   listeners.forEach((l) => l());
 }
+
+// Subtitle searches cut short by the app closing; they run again once the store is ready.
+const interruptedSubSearches: string[] = [];
 
 function hydrate() {
   try {
@@ -89,7 +127,10 @@ function hydrate() {
       if (!d || typeof d.id !== "string" || typeof d.path !== "string") continue;
       // Desktop downloads die with the app; Android's system downloader keeps going.
       const status = d.status === "downloading" && !ANDROID ? "interrupted" : d.status;
-      // A subtitle search interrupted by closing the app is just "not searched yet".
+      // A subtitle search interrupted by closing the app is "not searched yet": run it again.
+      if (ANDROID && d.subsState === "searching" && d.status !== "error" && d.status !== "canceled") {
+        interruptedSubSearches.push(d.id);
+      }
       items.set(d.id, { ...d, status, bytesPerSec: 0, subsState: d.subsState === "searching" ? null : d.subsState });
     }
     snapshot = [...items.values()].sort((a, b) => b.startedAt - a.startedAt);
@@ -190,6 +231,12 @@ function ensureAndroidPolling() {
 }
 
 if (ANDROID && [...items.values()].some((d) => d.status === "downloading")) ensureAndroidPolling();
+if (ANDROID) for (const id of interruptedSubSearches) fetchDownloadSubtitles(id);
+
+/** Downloads page: re-read the system downloader once (e.g. subtitles saved from the player). */
+export function refreshDownloads(): void {
+  if (ANDROID) pollAndroid();
+}
 
 function patch(id: string, next: Partial<DownloadItem>) {
   const cur = items.get(id);
@@ -256,6 +303,22 @@ export function activeDownloadFor(
       continue;
     }
     return d;
+  }
+  return null;
+}
+
+/** Android: the saved (or still downloading) copy of this title/episode, if there is one. */
+export function androidDownloadIdFor(
+  metaId: string,
+  season?: number | null,
+  episode?: number | null,
+): string | null {
+  if (!ANDROID) return null;
+  for (const d of items.values()) {
+    if (d.metaId !== metaId || !d.path.startsWith("android:")) continue;
+    if (d.status !== "done" && d.status !== "downloading") continue;
+    if ((season ?? null) !== d.season || (episode ?? null) !== d.episode) continue;
+    return d.id;
   }
   return null;
 }

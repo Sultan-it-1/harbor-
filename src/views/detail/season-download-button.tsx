@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Loader2, X } from "lucide-react";
 import type { Meta } from "@/lib/cinemeta";
 import { useAuth } from "@/lib/auth";
 import { useDebridClients } from "@/lib/debrid/registry";
-import { downloadSeason, type SeasonDownloadProgress } from "@/lib/download/season-download";
+import {
+  seasonJobKey,
+  startSeasonDownload,
+  stopSeasonDownload,
+  useSeasonDownload,
+} from "@/lib/download/season-download";
 import { useSettings } from "@/lib/settings";
 import { useView, type PlayEpisode } from "@/lib/view";
 
 /**
  * "Download season": picks the best saveable source for every episode of the season
- * and queues them all (they show up in Downloads with progress).
+ * and queues them all (they show up in Downloads with progress). The queue keeps going
+ * when you leave the page; coming back shows where it is.
  */
 export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes: PlayEpisode[] }) {
   const { authKey } = useAuth();
@@ -17,30 +23,21 @@ export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes:
   const debrids = useDebridClients();
   const { setView } = useView();
   const [confirm, setConfirm] = useState(false);
-  const [progress, setProgress] = useState<SeasonDownloadProgress | null>(null);
-  const acRef = useRef<AbortController | null>(null);
+  const key = seasonJobKey(meta.id, episodes);
+  const progress = useSeasonDownload(key);
 
-  useEffect(() => () => acRef.current?.abort(), []);
   useEffect(() => {
     if (!confirm) return;
     const t = window.setTimeout(() => setConfirm(false), 4000);
     return () => window.clearTimeout(t);
   }, [confirm]);
-  // Clear the summary a while after it finishes.
-  useEffect(() => {
-    if (!progress?.finished) return;
-    const t = window.setTimeout(() => setProgress(null), 8000);
-    return () => window.clearTimeout(t);
-  }, [progress?.finished]);
 
   if (episodes.length === 0) return null;
   const running = !!progress && !progress.finished;
 
   const start = () => {
     setConfirm(false);
-    const ac = new AbortController();
-    acRef.current = ac;
-    void downloadSeason({ meta, episodes, authKey, settings, debrids, signal: ac.signal, onProgress: setProgress });
+    startSeasonDownload(key, { meta, episodes, authKey, settings, debrids });
   };
 
   const base = "flex h-10 items-center gap-2 rounded-full px-4 text-[13.5px] font-semibold transition-colors";
@@ -56,7 +53,7 @@ export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes:
         </span>
         <button
           type="button"
-          onClick={() => acRef.current?.abort()}
+          onClick={() => stopSeasonDownload(key)}
           aria-label="Stop"
           className="flex h-10 w-10 items-center justify-center rounded-full border border-edge-soft text-ink-subtle"
         >

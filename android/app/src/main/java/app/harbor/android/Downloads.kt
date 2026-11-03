@@ -9,19 +9,21 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * In-app downloads for offline watching, on Android's DownloadManager:
  *  - saved in the app's own storage (Android/data/app.harbor.android/files/Movies/Harbor/<id>/),
  *    no folder picker and no storage permission; removed with the app
- *  - keeps going in the background with the system progress notification
+ *  - keeps going in the background with the system progress notification; DownloadService
+ *    keeps Harbor itself running meanwhile so Android doesn't hold the downloads back
  *  - addon subtitles are saved next to the video (normalised to UTF-8) and deleted with it
  *  - delete removes the video, its subtitles and the folder for good
  */
 class Downloads(private val ctx: Context, private val userAgent: () -> String) {
     private val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     private val prefs = ctx.getSharedPreferences("harbor.downloads", Context.MODE_PRIVATE)
-    private val pool = Executors.newFixedThreadPool(2)
+    private val pool by lazy { Executors.newFixedThreadPool(2) }
 
     private fun root(): File? = ctx.getExternalFilesDir(Environment.DIRECTORY_MOVIES)?.let { File(it, "Harbor") }
 
@@ -56,8 +58,9 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
             req.addRequestHeader("User-Agent", ua)
             val dmId = dm.enqueue(req)
             prefs.edit().putString(id, JSONObject().put("dmId", dmId).put("file", fileName).toString()).apply()
-            j.optJSONArray("subtitles")?.let { subs -> if (subs.length() > 0) pool.execute { saveSubtitles(dir, subs, ua) } }
+            j.optJSONArray("subtitles")?.let { subs -> if (subs.length() > 0) background { saveSubtitles(dir, subs, ua) } }
             prefs.edit().putString("ua:$id", ua).apply()
+            DownloadService.ensureRunning(ctx)
             out.put("ok", true)
         } catch (e: Exception) {
             out.put("ok", false).put("error", e.message ?: e.javaClass.simpleName)
@@ -71,16 +74,61 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
         if (!dir.exists()) return false
         val subs = try { JSONArray(json) } catch (_: Exception) { return false }
         val ua = prefs.getString("ua:$id", null) ?: userAgent()
-        pool.execute { saveSubtitles(dir, subs, ua) }
+        background { saveSubtitles(dir, subs, ua) }
         return true
+    }
+
+    /** Runs subtitle saving off the JS thread; DownloadService stays up until it's done. */
+    private fun background(work: () -> Unit) {
+        pendingWork.incrementAndGet()
+        DownloadService.ensureRunning(ctx)
+        pool.execute {
+            try {
+                work()
+            } finally {
+                pendingWork.decrementAndGet()
+            }
+        }
+    }
+
+    /** A subtitle saved next to a download: the local file and the URL it came from. */
+    data class SavedSub(val file: File, val src: String, val lang: String?, val label: String?)
+
+    fun savedSubtitles(id: String): List<SavedSub> {
+        val dir = dirFor(id) ?: return emptyList()
+        val arr = readSubs(dir)
+        return (0 until arr.length()).mapNotNull { i ->
+            val s = arr.optJSONObject(i) ?: return@mapNotNull null
+            val f = File(s.optString("file"))
+            if (!f.exists()) return@mapNotNull null
+            SavedSub(f, s.optString("url"), s.optString("lang").takeIf { it.isNotBlank() && it != "null" }, s.optString("label").takeIf { it.isNotBlank() && it != "null" })
+        }
+    }
+
+    /** The player's "save" button on a subtitle: adds it to the download; done(true) once it's there. */
+    fun saveSubtitle(id: String, url: String, lang: String?, label: String?, done: (Boolean) -> Unit) {
+        val dir = dirFor(id)?.takeIf { it.exists() } ?: return done(false)
+        val ua = prefs.getString("ua:$id", null) ?: userAgent()
+        val one = JSONArray().put(JSONObject().put("url", url).apply {
+            if (lang != null) put("lang", lang)
+            if (label != null) put("label", label)
+        })
+        background {
+            saveSubtitles(dir, one, ua)
+            done(savedSubtitles(id).any { it.src == url })
+        }
     }
 
     private fun readSubs(dir: File): JSONArray =
         File(dir, "subs.json").takeIf { it.exists() }?.let { try { JSONArray(it.readText()) } catch (_: Exception) { null } } ?: JSONArray()
 
-    /** Downloads + normalises each subtitle into <dir>/subs and appends it to subs.json. */
-    @Synchronized
+    /** Downloads + normalises each subtitle into <dir>/subs and appends it to subs.json.
+     *  One writer at a time across every instance (the player and the downloads share one). */
     private fun saveSubtitles(dir: File, subs: JSONArray, ua: String) {
+        synchronized(Downloads::class.java) { saveSubtitlesLocked(dir, subs, ua) }
+    }
+
+    private fun saveSubtitlesLocked(dir: File, subs: JSONArray, ua: String) {
         val store = SubtitleStore(File(dir, "subs"))
         val list = readSubs(dir)
         val have = (0 until list.length()).mapNotNull { list.optJSONObject(it)?.optString("url") }.toMutableSet()
@@ -88,9 +136,9 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
             val s = subs.optJSONObject(i) ?: continue
             val url = s.optString("url").takeIf { it.isNotBlank() } ?: continue
             if (!have.add(url)) continue
-            val lang = s.optString("lang").takeIf { it.isNotBlank() }
-            val label = s.optString("label").takeIf { it.isNotBlank() }
-            val local = store.fetch("sub${list.length()}", url, lang, label, ua) ?: continue
+            val lang = s.optString("lang").takeIf { it.isNotBlank() && it != "null" }
+            val label = s.optString("label").takeIf { it.isNotBlank() && it != "null" }
+            val local = store.fetch("sub${System.currentTimeMillis().toString(36)}${list.length()}", url, lang, label, ua) ?: continue
             list.put(JSONObject().put("file", local.file.absolutePath).put("url", url).put("lang", lang).put("label", label))
             if (!dir.exists()) return // deleted meanwhile
             File(dir, "subs.json").writeText(list.toString())
@@ -135,6 +183,44 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
         return out.toString()
     }
 
+    /** Overall state for the background-service notification. */
+    data class Summary(val active: Int, val running: Int, val received: Long, val total: Long, val note: String?) {
+        fun percent(): Int? = if (total > 0) ((received * 100) / total).toInt().coerceIn(0, 100) else null
+    }
+
+    fun summary(): Summary {
+        val ids = prefs.all.keys.filter { !it.startsWith("ua:") }
+        val dmIds = ids.mapNotNull { record(it)?.optLong("dmId", -1)?.takeIf { v -> v >= 0 } }
+        if (dmIds.isEmpty()) return Summary(0, 0, 0, 0, null)
+        var active = 0
+        var running = 0
+        var got = 0L
+        var total = 0L
+        var unknownTotal = false
+        var waiting: String? = null
+        try {
+            dm.query(DownloadManager.Query().setFilterById(*dmIds.toLongArray()))?.use { c ->
+                val iStatus = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                val iGot = c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                val iTotal = c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                val iReason = c.getColumnIndex(DownloadManager.COLUMN_REASON)
+                while (c.moveToNext()) {
+                    val st = c.getInt(iStatus)
+                    if (st != DownloadManager.STATUS_RUNNING && st != DownloadManager.STATUS_PENDING && st != DownloadManager.STATUS_PAUSED) continue
+                    active++
+                    if (st == DownloadManager.STATUS_RUNNING) running++
+                    if (st == DownloadManager.STATUS_PAUSED && waiting == null) waiting = reasonText(st, c.getInt(iReason))
+                    got += c.getLong(iGot).coerceAtLeast(0)
+                    val t = c.getLong(iTotal)
+                    if (t > 0) total += t else unknownTotal = true
+                }
+            }
+        } catch (_: Exception) {
+            return Summary(0, 0, 0, 0, null)
+        }
+        return Summary(active, running, got, if (unknownTotal) 0 else total, if (running == 0) waiting else null)
+    }
+
     private fun reasonText(status: Int, reason: Int): String = when (status) {
         DownloadManager.STATUS_PAUSED -> when (reason) {
             DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "بانتظار الإنترنت"
@@ -174,7 +260,7 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
                 val s = arr.optJSONObject(i) ?: continue
                 val sf = File(s.optString("file"))
                 if (!sf.exists()) continue
-                subs.put(JSONObject().put("url", Uri.fromFile(sf).toString()).put("lang", s.opt("lang")).put("label", s.opt("label")))
+                subs.put(JSONObject().put("url", Uri.fromFile(sf).toString()).put("src", s.opt("url")).put("lang", s.opt("lang")).put("label", s.opt("label")))
             }
         }
         out.put("subtitles", subs)
@@ -188,5 +274,10 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
         val free = try { StatFs(r.absolutePath).availableBytes } catch (_: Exception) { -1L }
         val used = r.walkTopDown().filter { it.isFile }.sumOf { it.length() }
         return JSONObject().put("free", free).put("used", used).toString()
+    }
+
+    companion object {
+        /** Subtitle saves still running (DownloadService waits for them). */
+        val pendingWork = AtomicInteger(0)
     }
 }
