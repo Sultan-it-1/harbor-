@@ -27,6 +27,8 @@ class ImageStoreTest {
     @Volatile private var poster = Random(1).nextBytes(150_000)
     @Volatile private var posterTag = "\"v1\""
     @Volatile private var posterGone = false
+    /** Simulates no connection: hang up without answering. */
+    @Volatile private var offline = false
     private val hits = Collections.synchronizedList(ArrayList<String>())
     private val conditional = Collections.synchronizedList(ArrayList<String?>())
 
@@ -35,6 +37,7 @@ class ImageStoreTest {
         store = ImageStore(dir, maxBytes = 1_000_000, targetBytes = 600_000, background = direct)
         server = MiniHttpServer { _, path, headers, out ->
             hits.add(path)
+            if (offline) return@MiniHttpServer
             when {
                 path == "/poster" -> {
                     conditional.add(headers["if-none-match"])
@@ -148,7 +151,7 @@ class ImageStoreTest {
     @Test fun offlineKeepsShowingTheSavedOne() {
         store.download(url("/poster"), headers).use { it.readBytes() }
         val meta = store.cached(url("/poster"))!!.meta
-        server.close()
+        offline = true
         assertEquals("kept", store.recheckNow(url("/poster"), meta, headers))
         assertNotNull(store.cached(url("/poster")))
     }
