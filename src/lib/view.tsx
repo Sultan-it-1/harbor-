@@ -369,6 +369,34 @@ export function ViewProvider({ children }: { children: ReactNode }) {
     setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
   }, []);
 
+  // Android app: the hardware/gesture back button closes an open dialog first, then pops
+  // the view stack; returning false lets the shell send the app to the background.
+  const stackDepthRef = useRef(stack.length);
+  stackDepthRef.current = stack.length;
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.HarborAndroid) return;
+    let lastModal: Element | null = null;
+    window.__harborAndroidBack = () => {
+      const modal = document.querySelector('[role="dialog"], [aria-modal="true"]');
+      if (modal && modal !== lastModal) {
+        lastModal = modal;
+        (document.activeElement ?? document.body).dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }),
+        );
+        return true;
+      }
+      lastModal = null;
+      if (stackDepthRef.current > 1) {
+        pop();
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      window.__harborAndroidBack = undefined;
+    };
+  }, [pop]);
+
   const exitPlayback = useCallback(() => {
     setStack((s) => {
       let i = s.length - 1;

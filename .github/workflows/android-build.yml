@@ -1,0 +1,70 @@
+name: android-build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "android/**"
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/android-build.yml"
+
+jobs:
+  apk:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web UI
+        run: pnpm run build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK
+        working-directory: android
+        env:
+          # Optional: add these repo secrets to sign with your own key (keeps updates
+          # installable over each other). Without them the debug key is used.
+          HARBOR_KEYSTORE_BASE64: ${{ secrets.HARBOR_KEYSTORE_BASE64 }}
+          HARBOR_KEYSTORE_PASSWORD: ${{ secrets.HARBOR_KEYSTORE_PASSWORD }}
+          HARBOR_KEY_ALIAS: ${{ secrets.HARBOR_KEY_ALIAS }}
+          HARBOR_KEY_PASSWORD: ${{ secrets.HARBOR_KEY_PASSWORD }}
+        run: |
+          if [ -n "$HARBOR_KEYSTORE_BASE64" ]; then
+            echo "$HARBOR_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/harbor.jks"
+            export HARBOR_KEYSTORE_PATH="$RUNNER_TEMP/harbor.jks"
+          fi
+          VERSION=$(node -p "require('../package.json').version")
+          ./gradlew assembleRelease --no-daemon \
+            -PharborVersionName="$VERSION" \
+            -PharborVersionCode="${{ github.run_number }}"
+          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/harbor-$VERSION-android.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harbor-android-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

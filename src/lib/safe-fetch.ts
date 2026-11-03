@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { fetch as tauriFetchImpl } from "@tauri-apps/plugin-http";
 import { TrackerBlockedError, isBlockedUrl, noteBlocked } from "./privacy/blocklist";
+import { androidFetch, canNativeFetch, isAndroidApp } from "./android";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -43,6 +44,11 @@ const PROXY_SUFFIXES = [
   ".deno.dev",
 ];
 
+function needsProxy(parsed: URL): boolean {
+  if (DIRECT_HOSTS.has(parsed.hostname)) return false;
+  return PROXY_HOSTS.has(parsed.hostname) || PROXY_SUFFIXES.some((s) => parsed.hostname.endsWith(s));
+}
+
 function rewriteForWeb(url: string, init?: RequestInit): { url: string; init?: RequestInit } {
   if (isTauri) return { url, init };
   let parsed: URL;
@@ -51,10 +57,7 @@ function rewriteForWeb(url: string, init?: RequestInit): { url: string; init?: R
   } catch {
     return { url, init };
   }
-  if (DIRECT_HOSTS.has(parsed.hostname)) return { url, init };
-  const proxiable =
-    PROXY_HOSTS.has(parsed.hostname) || PROXY_SUFFIXES.some((s) => parsed.hostname.endsWith(s));
-  if (!proxiable) return { url, init };
+  if (!needsProxy(parsed)) return { url, init };
 
   const proxyHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
   const isDev = typeof window !== 'undefined' && window.location.port === '1420';
@@ -136,6 +139,14 @@ export const safeFetch: typeof fetch = (input, init) => {
     return tauriFetchImpl(input as unknown as string, init as RequestInit) as Promise<Response>;
   }
   if (typeof input === "string") {
+    // Android app: no /api-proxy server behind us; the native shell does CORS-free HTTP.
+    if (isAndroidApp() && canNativeFetch(init)) {
+      try {
+        if (needsProxy(new URL(input))) return androidFetch(input, init);
+      } catch {
+        /* not an absolute URL — fall through */
+      }
+    }
     const r = rewriteForWeb(input, init);
     return fetch(r.url, r.init);
   }

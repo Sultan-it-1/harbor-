@@ -4,6 +4,7 @@ import { type PlayerBridge } from "@/lib/player/bridge";
 import { useDebridClients } from "@/lib/debrid/registry";
 import { useSettings } from "@/lib/settings";
 import { isWeb } from "@/lib/platform";
+import { NATIVE_PLAYER_CLOSED_EVENT, isAndroidApp } from "@/lib/android";
 import { writePlayerVolume } from "@/lib/player-volume";
 import { nameColor } from "@/lib/together/colors";
 import { useTogether } from "@/lib/together/provider";
@@ -340,6 +341,13 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     exitPlayback,
     openPicker,
   });
+  // Android app: the native player's back button closes playback and leaves the player view.
+  useEffect(() => {
+    if (!isAndroidApp()) return;
+    const onClosed = () => closePlayer();
+    window.addEventListener(NATIVE_PLAYER_CLOSED_EVENT, onClosed);
+    return () => window.removeEventListener(NATIVE_PLAYER_CLOSED_EVENT, onClosed);
+  }, [closePlayer]);
 
   const [dvrOpen, setDvrOpen] = useState(false);
   const pickAnotherOrGuide = useCallback(() => {

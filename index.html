@@ -25,7 +25,7 @@
     <link rel="apple-touch-icon" href="/favicon.png" />
     <meta name="theme-color" content="#0d0d0d" />
     <script>
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && !window.HarborAndroid) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW setup failed', err));
         });
