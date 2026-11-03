@@ -55,10 +55,16 @@ jobs:
       - name: Build APK
         working-directory: android
         env:
-          # Repo secret holding the password of android/keystore/harbor-release.p12.
+          # Password of the release key (android/keystore/harbor-release.p12 or the secret below).
           # Without it the APK falls back to the debug key (updates then need a reinstall).
           HARBOR_KEYSTORE_PASSWORD: ${{ secrets.HARBOR_KEYSTORE_PASSWORD }}
+          # Alternative to committing the key file: the .p12 itself, base64-encoded.
+          HARBOR_KEYSTORE_BASE64: ${{ secrets.HARBOR_KEYSTORE_BASE64 }}
         run: |
+          if [ -n "$HARBOR_KEYSTORE_BASE64" ]; then
+            echo "$HARBOR_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/harbor-release.p12"
+            export HARBOR_KEYSTORE_PATH="$RUNNER_TEMP/harbor-release.p12"
+          fi
           if [ -z "$HARBOR_KEYSTORE_PASSWORD" ]; then
             echo "::warning::HARBOR_KEYSTORE_PASSWORD secret is not set; signing with the debug key (updates need a reinstall)."
           fi
