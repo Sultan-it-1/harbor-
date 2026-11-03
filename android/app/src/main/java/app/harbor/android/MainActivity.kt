@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
         RefreshRate.apply(this)
 
         fetcher = NativeFetch { id, result -> sendToJs("__harborNativeFetchDone", id, result) }
-        downloads = Downloads(this) { fetcher.userAgent }
+        downloads = Downloads.get(this)
         player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
         DownloadService.createChannel(this)
         pendingOpenDownloads = intent?.getBooleanExtra(EXTRA_OPEN_DOWNLOADS, false) == true
@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
         ws.userAgentString = ws.userAgentString + " HarborAndroid/" + BuildConfigInfo.versionName(this)
         fetcher.userAgent = ws.userAgentString
         player.userAgent = ws.userAgentString
+        downloads.userAgent = ws.userAgentString
 
         // The page keeps running when Harbor is in the background (season downloads and
         // subtitle searches happen there), so its renderer keeps the app's priority.
@@ -278,6 +279,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (!player.isShowing) RefreshRate.apply(this)
+        downloads.kick()
         // e.g. back from the battery dialog: let the page re-check what it shows.
         if (pageLoaded) webView.evaluateJavascript("window.dispatchEvent(new Event('harbor:resume'))", null)
     }
@@ -339,6 +341,13 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun dlDelete(id: String): Boolean = downloads.delete(id)
+
+        @JavascriptInterface
+        fun dlPause(id: String): Boolean = downloads.pause(id)
+
+        /** Resume a paused download, or retry a failed one from where it got to. */
+        @JavascriptInterface
+        fun dlResume(id: String): Boolean = downloads.resume(id)
 
         @JavascriptInterface
         fun dlAddSubs(id: String, json: String): Boolean = downloads.addSubtitles(id, json)

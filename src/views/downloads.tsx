@@ -7,15 +7,28 @@ import {
   nativeStorage,
 } from "@/lib/download/android-downloads";
 import { stopSeasonDownload, useRunningSeasonJobs } from "@/lib/download/season-download";
-import { BatteryCharging, Check, Download as DownloadIcon, FolderOpen, Loader2, Play, Trash2, X } from "lucide-react";
+import {
+  BatteryCharging,
+  Check,
+  Download as DownloadIcon,
+  FolderOpen,
+  Loader2,
+  Pause,
+  Play,
+  RotateCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Poster } from "@/components/poster";
 import { useView } from "@/lib/view";
 import { DownloadDirBar } from "./downloads/download-dir-bar";
 import {
   cancelDownload,
   fetchDownloadSubtitles,
+  pauseDownload,
   refreshDownloads,
   removeDownload,
+  resumeDownload,
   revealDownload,
   useDownloads,
   type DownloadItem,
@@ -94,7 +107,9 @@ function StorageLine({ items }: { items: DownloadItem[] }) {
   if (info.free == null || info.free < 0) return null;
   return (
     <p className="mb-5 text-[12.5px] text-ink-subtle">
-      {`Stored in the app · ${fmtBytes(info.used ?? 0)} used · ${fmtBytes(info.free)} free on this phone`}
+      {["Stored in the app", (info.used ?? 0) > 0 ? `${fmtBytes(info.used ?? 0)} used` : null, `${fmtBytes(info.free)} free on this phone`]
+        .filter(Boolean)
+        .join(" · ")}
     </p>
   );
 }
@@ -310,7 +325,7 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
           <>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
               <div
-                className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
+                className={`h-full rounded-full transition-[width] duration-500 ease-out ${d.paused ? "bg-ink/35" : "bg-accent"}`}
                 style={{ width: `${Math.max(2, pct)}%` }}
               />
             </div>
@@ -349,11 +364,28 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {downloading ? (
-          <RowBtn label="Cancel download" onClick={() => cancelDownload(d.id)}>
-            <X size={16} strokeWidth={2.2} />
-          </RowBtn>
+          <>
+            {ANDROID &&
+              (d.paused ? (
+                <RowBtn label="Resume download" onClick={() => resumeDownload(d.id)}>
+                  <Play size={16} strokeWidth={2.2} fill="currentColor" />
+                </RowBtn>
+              ) : (
+                <RowBtn label="Pause download" onClick={() => pauseDownload(d.id)}>
+                  <Pause size={16} strokeWidth={2.2} fill="currentColor" />
+                </RowBtn>
+              ))}
+            <RowBtn label="Cancel download" onClick={() => cancelDownload(d.id)}>
+              <X size={16} strokeWidth={2.2} />
+            </RowBtn>
+          </>
         ) : (
           <>
+            {ANDROID && d.status === "error" && d.retryable !== false && (
+              <RowBtn label="Retry download" onClick={() => resumeDownload(d.id)}>
+                <RotateCw size={16} strokeWidth={2.2} />
+              </RowBtn>
+            )}
             {d.status === "done" && (
               <>
                 <RowBtn label="Play" onClick={playLocal}>

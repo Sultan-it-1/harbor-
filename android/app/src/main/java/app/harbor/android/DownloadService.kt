@@ -20,13 +20,13 @@ import java.util.Locale
 /**
  * Keeps Harbor running while something is downloading, so leaving the app doesn't stop it.
  *
- *  - The system downloader runs its jobs on Harbor's behalf, and Android holds back the jobs
- *    and network of apps that sit in the background (standby buckets, Doze, OEM battery
- *    savers). An app with a foreground service counts as in use, so the downloads keep going.
+ *  - Downloads run in Harbor itself (Downloads + HttpTransfer); a foreground service is what
+ *    lets an app keep working, with network and CPU, after you leave it.
  *  - Season downloads and subtitle searches run in the web UI, which only keeps running while
  *    the app's process isn't frozen or killed; the web UI asks for that with keepAlive().
  *
- * Shows one quiet notification with the overall progress and stops itself once idle.
+ * Shows one quiet notification with the overall progress and stops itself once idle; a
+ * separate notification says when a download finished or failed.
  */
 class DownloadService : Service() {
     private val handler = Handler(Looper.getMainLooper())
@@ -40,7 +40,7 @@ class DownloadService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        downloads = Downloads(applicationContext) { "" }
+        downloads = Downloads.get(applicationContext)
         createChannel(this)
     }
 
@@ -109,7 +109,7 @@ class DownloadService : Service() {
         setShowWhen(false)
         setPriority(NotificationCompat.PRIORITY_LOW)
         setCategory(NotificationCompat.CATEGORY_PROGRESS)
-        setContentIntent(openApp())
+        setContentIntent(openDownloads(this@DownloadService))
         if (s.active == 0) {
             setContentTitle("Harbor")
             setContentText("يجهّز التحميلات…")
@@ -122,13 +122,6 @@ class DownloadService : Service() {
             setProgress(100, pct ?: 0, pct == null)
         }
     }.build()
-
-    private fun openApp(): PendingIntent {
-        val i = Intent(this, MainActivity::class.java)
-            .putExtra(MainActivity.EXTRA_OPEN_DOWNLOADS, true)
-            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        return PendingIntent.getActivity(this, 1, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    }
 
     private fun countText(n: Int) = when {
         n == 1 -> "ملف واحد"
@@ -171,6 +164,31 @@ class DownloadService : Service() {
         /** The running service; only touched on the main thread. */
         private var instance: DownloadService? = null
         private val main = Handler(Looper.getMainLooper())
+
+        private fun openDownloads(ctx: Context): PendingIntent {
+            val i = Intent(ctx, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN_DOWNLOADS, true)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            return PendingIntent.getActivity(ctx, 1, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+
+        /** "Download finished" / "Download failed" for one title (tapping opens Downloads). */
+        fun notifyFinished(ctx: Context, id: String, title: String, ok: Boolean) {
+            createChannel(ctx)
+            val n = NotificationCompat.Builder(ctx, CHANNEL)
+                .setSmallIcon(R.drawable.ic_download)
+                .setColor(HarborColors.ACCENT)
+                .setContentTitle(if (ok) "اكتمل التحميل" else "تعذّر التحميل")
+                .setContentText(if (ok) title else "$title · افتح التحميلات واضغط إعادة المحاولة")
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setContentIntent(openDownloads(ctx))
+                .build()
+            try {
+                NotificationManagerCompat.from(ctx).notify(id.hashCode(), n)
+            } catch (_: SecurityException) {
+            }
+        }
 
         fun createChannel(ctx: Context) {
             if (Build.VERSION.SDK_INT < 26) return

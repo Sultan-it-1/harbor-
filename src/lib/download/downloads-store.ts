@@ -12,11 +12,13 @@ import {
   nativeAddSubs,
   nativeDelete,
   nativeKeepAlive,
+  nativePause,
+  nativeResume,
   nativeStart,
   nativeStatus,
 } from "./android-downloads";
 
-// Android app: downloads run in the system DownloadManager (see android-downloads.ts).
+// Android app: the app downloads the files itself, in the background (see android-downloads.ts).
 const ANDROID = androidDownloadsAvailable();
 
 export type DownloadItem = {
@@ -37,8 +39,12 @@ export type DownloadItem = {
   bytesPerSec: number;
   error: string | null;
   startedAt: number;
-  /** Android: "waiting for Wi-Fi" etc. while the system download is paused. */
+  /** Android: "Queued", "Waiting for internet", "Retrying in 10s", "Paused"… */
   note?: string | null;
+  /** Android: paused by the user (still counts as an unfinished download). */
+  paused?: boolean;
+  /** Android: false when retrying can't help (the app lost the download or its link). */
+  retryable?: boolean;
   /** Android: subtitles saved with the video, and whether a search is still running. */
   subsCount?: number;
   subsState?: "searching" | "done" | null;
@@ -141,7 +147,7 @@ function hydrate() {
 
 hydrate();
 
-// ---- Android: poll the system downloader ------------------------------------------------
+// ---- Android: poll the app's downloader -------------------------------------------------
 
 let pollTimer: number | null = null;
 
@@ -149,41 +155,64 @@ function pollAndroid() {
   const st = nativeStatus();
   const now = Date.now();
   let active = 0;
+  let changed = false;
+  const set = (d: DownloadItem, next: Partial<DownloadItem>) => {
+    const keys = Object.keys(next) as (keyof DownloadItem)[];
+    if (keys.every((k) => d[k] === next[k])) return;
+    items.set(d.id, { ...d, ...next });
+    changed = true;
+  };
   for (const d of [...items.values()]) {
-    const n0 = st[d.id];
-    if (n0 && typeof n0.subs === "number" && n0.subs !== d.subsCount) patch(d.id, { subsCount: n0.subs });
-    if (d.status !== "downloading") continue;
+    if (!d.path.startsWith("android:")) continue;
     const n = st[d.id];
-    if (!n) continue; // not enqueued yet (gathering subtitles)
-    if (n.status === "missing") {
-      patch(d.id, { status: "canceled", bytesPerSec: 0, note: null });
+    if (n && typeof n.subs === "number") set(d, { subsCount: n.subs });
+    const cur = items.get(d.id) ?? d;
+    if (!n) {
+      // The app doesn't know it (any more): don't leave it spinning forever.
+      if (cur.status === "downloading" && now - cur.startedAt > 60_000) {
+        set(cur, { status: "error", error: "This download was lost. Delete it and download it again.", bytesPerSec: 0, note: null, paused: false, retryable: false });
+      }
       continue;
     }
-    const received = n.received ?? d.receivedBytes;
-    const total = n.total ?? d.totalBytes;
+    if (n.status === "missing") {
+      if (cur.status === "downloading") set(cur, { status: "canceled", bytesPerSec: 0, note: null, paused: false });
+      continue;
+    }
+    const received = n.received ?? cur.receivedBytes;
+    const total = n.total ?? cur.totalBytes;
     if (n.status === "done") {
-      patch(d.id, { status: "done", receivedBytes: total ?? received, totalBytes: total ?? received, ratio: 1, bytesPerSec: 0, note: null });
+      if (cur.status !== "done") {
+        set(cur, { status: "done", receivedBytes: total ?? received, totalBytes: total ?? received, ratio: 1, bytesPerSec: 0, note: null, paused: false, error: null });
+      }
       continue;
     }
     if (n.status === "error") {
-      patch(d.id, { status: "error", error: n.reason || "Download failed", bytesPerSec: 0, note: null });
+      if (cur.status === "downloading" || cur.status === "error") {
+        set(cur, { status: "error", error: n.reason || "Download failed", bytesPerSec: 0, note: null, paused: false, receivedBytes: received, totalBytes: total ?? null, ratio: total ? Math.min(1, received / total) : 0 });
+      }
       continue;
     }
+    // queued / waiting / paused / downloading
+    if (cur.status !== "downloading" && cur.status !== "error") continue;
     active++;
     const s = speed.get(d.id);
-    let bps = d.bytesPerSec;
+    let bps = cur.bytesPerSec;
     if (s && now - s.at >= 900) {
       bps = Math.max(0, ((received - s.bytes) / (now - s.at)) * 1000);
       speed.set(d.id, { bytes: received, at: now });
     } else if (!s) speed.set(d.id, { bytes: received, at: now });
-    patch(d.id, {
+    set(cur, {
+      status: "downloading",
+      error: null,
       receivedBytes: received,
       totalBytes: total ?? null,
       ratio: total ? Math.min(1, received / total) : 0,
       bytesPerSec: n.status === "downloading" ? bps : 0,
-      note: n.status === "waiting" || n.status === "pending" ? n.reason || "Waiting…" : null,
+      note: n.status === "downloading" ? null : n.reason || "Waiting…",
+      paused: n.status === "paused",
     });
   }
+  if (changed) rebuild();
   const pending = [...items.values()].some(
     (d) => d.status === "downloading" || d.subsState === "searching" || now - (subsSavingUntil.get(d.id) ?? 0) < 0,
   );
@@ -233,9 +262,30 @@ function ensureAndroidPolling() {
 if (ANDROID && [...items.values()].some((d) => d.status === "downloading")) ensureAndroidPolling();
 if (ANDROID) for (const id of interruptedSubSearches) fetchDownloadSubtitles(id);
 
-/** Downloads page: re-read the system downloader once (e.g. subtitles saved from the player). */
+/** Downloads page: re-read the app's downloader once (e.g. subtitles saved from the player). */
 export function refreshDownloads(): void {
-  if (ANDROID) pollAndroid();
+  if (!ANDROID) return;
+  pollAndroid();
+  if ([...items.values()].some((d) => d.status === "downloading")) ensureAndroidPolling();
+}
+
+/** Android: pause a running download (it keeps what it has). */
+export function pauseDownload(id: string): void {
+  if (!ANDROID || !nativePause(id)) return;
+  patch(id, { paused: true, note: "Paused", bytesPerSec: 0 });
+}
+
+/** Android: carry on with a paused download, or retry a failed one from where it stopped. */
+export function resumeDownload(id: string): void {
+  if (!ANDROID) return;
+  if (!nativeResume(id)) {
+    // Nothing to resume from (lost, or no link any more): the error text says what to do.
+    patch(id, { retryable: false });
+    refreshDownloads();
+    return;
+  }
+  patch(id, { status: "downloading", paused: false, error: null, note: "Queued", retryable: true });
+  ensureAndroidPolling();
 }
 
 function patch(id: string, next: Partial<DownloadItem>) {
@@ -414,7 +464,7 @@ export async function enqueueDownload(args: EnqueueArgs): Promise<string> {
 
 export function cancelDownload(id: string): void {
   if (ANDROID) {
-    // The system downloader can't pause; cancelling frees the space right away.
+    // Cancelling frees the space right away (pause keeps what's downloaded).
     removeDownload(id);
     return;
   }

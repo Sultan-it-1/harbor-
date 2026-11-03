@@ -12,6 +12,9 @@ type HarborAndroidApi = {
   dlStart?(json: string): string;
   dlStatus?(): string;
   dlDelete?(id: string): boolean;
+  dlPause?(id: string): boolean;
+  /** Resume a paused download, or retry a failed one from where it got to. */
+  dlResume?(id: string): boolean;
   dlAddSubs?(id: string, json: string): boolean;
   dlFiles?(id: string): string;
   dlStorage?(): string;

@@ -1,6 +1,7 @@
-// Android app downloads: thin wrapper over the native DownloadManager bridge
-// (android/app/src/main/java/app/harbor/android/Downloads.kt) plus the subtitle
-// gathering that saves addon subtitles next to each video for offline viewing.
+// Android app downloads: thin wrapper over the app's own downloader
+// (android/app/src/main/java/app/harbor/android/Downloads.kt, which keeps running in the
+// background) plus the subtitle gathering that saves addon subtitles next to each video
+// for offline viewing.
 import { androidApi } from "@/lib/android";
 import type { Meta } from "@/lib/cinemeta";
 import type { PlayEpisode } from "@/lib/view";
@@ -10,7 +11,7 @@ import { gatherSubtitleAddons } from "@/lib/subtitles/addon-source";
 import { tmdbImdbId } from "@/lib/providers/tmdb";
 
 export type NativeStatus = {
-  status: "pending" | "downloading" | "waiting" | "done" | "error" | "missing";
+  status: "pending" | "downloading" | "waiting" | "paused" | "done" | "error" | "missing";
   received?: number;
   total?: number | null;
   reason?: string;
@@ -51,6 +52,15 @@ export function nativeStatus(): Record<string, NativeStatus> {
 
 export function nativeDelete(id: string): void {
   androidApi()?.dlDelete?.(id);
+}
+
+export function nativePause(id: string): boolean {
+  return androidApi()?.dlPause?.(id) === true;
+}
+
+/** Resume a paused download, or retry a failed one. */
+export function nativeResume(id: string): boolean {
+  return androidApi()?.dlResume?.(id) === true;
 }
 
 /** Adds subtitles to a download that already started (saved next to the video). */
