@@ -29,6 +29,8 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Full-screen ExoPlayer overlay on top of the WebView. Audio formats the phone can't
@@ -57,16 +59,100 @@ class NativePlayer(
         }
     }
 
+    // Side-loaded subtitles (addon results), downloaded to local files first.
+    private val subStore = SubtitleStore(activity)
+    private val subPool = Executors.newFixedThreadPool(4)
+    private val subs = ArrayList<SubtitleStore.LocalSub>()
+    private val knownSubUrls = HashSet<String>()
+    private var prefSubLangs: List<String> = emptyList()
+    private var generation = 0
+    private var subSeq = 0
+
     val isShowing: Boolean get() = view?.visibility == View.VISIBLE
 
     fun play(sourceJson: String) {
         val src = try { JSONObject(sourceJson) } catch (_: Exception) { return }
+        generation++
         source = src
         droppedSubs = false
-        start(src, src.optLong("startMs", 0), withSubs = true)
+        subs.clear()
+        knownSubUrls.clear()
+        subStore.clear()
+        prefSubLangs = jsonStrings(src.optJSONArray("prefSubLangs"))
+        start(src, src.optLong("startMs", 0))
+        // Subtitles that came with the stream itself: fetch them and attach once ready.
+        addSubs(src.optJSONArray("subtitles"))
     }
 
-    private fun start(src: JSONObject, startMs: Long, withSubs: Boolean) {
+    /** {cmd:"addSubs", subs:[{url,lang,label}], prefLangs:[...]} — batched by the JS bridge. */
+    private fun addSubs(arr: JSONArray?) {
+        val src = source ?: return
+        if (arr == null || arr.length() == 0 || src.optBoolean("isLive")) return
+        val gen = generation
+        val jobs = ArrayList<java.util.concurrent.Future<SubtitleStore.LocalSub?>>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val url = o.optString("url").takeIf { it.isNotBlank() } ?: continue
+            if (!knownSubUrls.add(url)) continue
+            val id = "s${++subSeq}"
+            val lang = o.optString("lang").takeIf { it.isNotBlank() }
+            val label = o.optString("label").takeIf { it.isNotBlank() }
+            val ua = userAgent
+            jobs.add(subPool.submit<SubtitleStore.LocalSub?> { subStore.fetch(id, url, lang, label, ua) })
+        }
+        if (jobs.isEmpty()) return
+        subPool.execute {
+            val got = jobs.mapNotNull { f -> try { f.get(20, TimeUnit.SECONDS) } catch (_: Exception) { null } }
+            handler.post {
+                if (gen != generation || got.isEmpty()) return@post
+                subs.addAll(got)
+                reloadWithSubs()
+            }
+        }
+    }
+
+    /** Re-prepares the current item with the side-loaded subtitles, keeping position and play state. */
+    private fun reloadWithSubs() {
+        val p = player ?: return
+        val src = source ?: return
+        if (droppedSubs) return
+        val pos = p.currentPosition
+        val playing = p.playWhenReady
+        p.setMediaItem(buildItem(src, withSubs = true), pos)
+        p.prepare()
+        p.playWhenReady = playing
+        applySubPrefs(p)
+    }
+
+    private fun applySubPrefs(p: ExoPlayer) {
+        if (prefSubLangs.isEmpty()) return
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setPreferredTextLanguages(*prefSubLangs.toTypedArray())
+            .build()
+    }
+
+    private fun buildItem(src: JSONObject, withSubs: Boolean): MediaItem {
+        val url = src.getString("url")
+        val item = MediaItem.Builder().setUri(url)
+        val lower = url.lowercase()
+        if (lower.contains(".m3u8") || lower.contains("/hlsv2/")) item.setMimeType(MimeTypes.APPLICATION_M3U8)
+        else if (lower.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD)
+        if (withSubs && subs.isNotEmpty()) {
+            item.setSubtitleConfigurations(
+                subs.map { s ->
+                    MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(s.file))
+                        .setMimeType(s.mime)
+                        .setLanguage(s.lang)
+                        .setLabel(s.label ?: s.lang)
+                        .setId(s.id)
+                        .build()
+                },
+            )
+        }
+        return item.build()
+    }
+
+    private fun start(src: JSONObject, startMs: Long) {
         releasePlayer()
         val ctx = activity
         val headers = HashMap<String, String>()
@@ -91,13 +177,6 @@ class NativePlayer(
             .setHandleAudioBecomingNoisy(true)
             .build()
 
-        val url = src.getString("url")
-        val item = MediaItem.Builder().setUri(url)
-        val lower = url.lowercase()
-        if (lower.contains(".m3u8") || lower.contains("/hlsv2/")) item.setMimeType(MimeTypes.APPLICATION_M3U8)
-        else if (lower.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD)
-        if (withSubs) item.setSubtitleConfigurations(subtitleConfigs(src.optJSONArray("subtitles")))
-
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) emit(JSONObject().put("type", "ended").toString())
@@ -108,12 +187,18 @@ class NativePlayer(
             override fun onVideoSizeChanged(videoSize: VideoSize) = sendState()
 
             override fun onPlayerError(error: PlaybackException) {
-                // A broken side-loaded subtitle fails the whole playback; retry once without them.
+                // A subtitle ExoPlayer can't parse would fail the whole playback; retry once without them.
                 val cur = source
-                if (cur != null && !droppedSubs && (cur.optJSONArray("subtitles")?.length() ?: 0) > 0) {
+                if (cur != null && !droppedSubs && subs.isNotEmpty()) {
                     droppedSubs = true
                     val pos = player?.currentPosition ?: 0
-                    handler.post { start(cur, pos, withSubs = false) }
+                    handler.post {
+                        player?.let { pl ->
+                            pl.setMediaItem(buildItem(cur, withSubs = false), pos)
+                            pl.prepare()
+                            pl.playWhenReady = true
+                        }
+                    }
                     return
                 }
                 emit(
@@ -125,7 +210,8 @@ class NativePlayer(
                 )
             }
         })
-        p.setMediaItem(item.build(), startMs.coerceAtLeast(0))
+        p.setMediaItem(buildItem(src, withSubs = true), startMs.coerceAtLeast(0))
+        applySubPrefs(p)
         p.prepare()
         p.playWhenReady = true
         player = p
@@ -134,30 +220,9 @@ class NativePlayer(
         handler.post(ticker)
     }
 
-    private fun subtitleConfigs(arr: JSONArray?): List<MediaItem.SubtitleConfiguration> {
-        if (arr == null) return emptyList()
-        val out = ArrayList<MediaItem.SubtitleConfiguration>()
-        for (i in 0 until arr.length()) {
-            val s = arr.optJSONObject(i) ?: continue
-            val u = s.optString("url").takeIf { it.isNotBlank() } ?: continue
-            val l = u.lowercase().substringBefore('?')
-            val mime = when {
-                l.endsWith(".vtt") -> MimeTypes.TEXT_VTT
-                l.endsWith(".ass") || l.endsWith(".ssa") -> MimeTypes.TEXT_SSA
-                l.endsWith(".ttml") || l.endsWith(".dfxp") -> MimeTypes.APPLICATION_TTML
-                else -> MimeTypes.APPLICATION_SUBRIP
-            }
-            val lang = s.optString("lang").takeIf { it.isNotBlank() }
-            out.add(
-                MediaItem.SubtitleConfiguration.Builder(Uri.parse(u))
-                    .setMimeType(mime)
-                    .setLanguage(lang)
-                    .setLabel(s.optString("label").takeIf { it.isNotBlank() } ?: lang)
-                    .setId("ext-$i")
-                    .build(),
-            )
-        }
-        return out
+    private fun jsonStrings(a: JSONArray?): List<String> {
+        if (a == null) return emptyList()
+        return (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } }
     }
 
     private fun show(p: ExoPlayer) {
@@ -225,6 +290,11 @@ class NativePlayer(
             "seek" -> p.seekTo(c.optLong("ms", 0).coerceAtLeast(0))
             "rate" -> p.setPlaybackSpeed(c.optDouble("rate", 1.0).toFloat().coerceIn(0.25f, 4f))
             "volume" -> p.volume = c.optDouble("volume", 1.0).toFloat().coerceIn(0f, 1f)
+            "addSubs" -> {
+                val langs = jsonStrings(c.optJSONArray("prefLangs"))
+                if (langs.isNotEmpty()) prefSubLangs = langs
+                addSubs(c.optJSONArray("subs"))
+            }
         }
         sendState()
     }
@@ -246,6 +316,7 @@ class NativePlayer(
         }
         releasePlayer()
         source = null
+        generation++
         view?.let {
             it.player = null
             it.visibility = View.GONE

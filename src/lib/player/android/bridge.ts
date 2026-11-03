@@ -1,32 +1,68 @@
 import { androidApi, onNativePlayerEvent } from "@/lib/android";
-import { emptySnapshot, type PlayerBridge, type PlayerSnapshot, type PlayerSource } from "../bridge";
+import { emptySnapshot, type PlayerBridge, type PlayerSnapshot } from "../bridge";
 
-const MAX_SUBS = 8;
+const MAX_INITIAL_SUBS = 20;
+const SUB_BATCH_MS = 700;
 
 // One native player is shared by every bridge instance; only the bridge that loaded
 // last may stop it, so a stale bridge being torn down can't kill the new playback.
 let owner: object | null = null;
 
-/** Narrow the addon's subtitle list to the user's preferred languages so ExoPlayer
- *  doesn't download dozens of side-loaded files before playback starts. */
-function pickSubtitles(subs: PlayerSource["subtitles"]): { url: string; lang?: string }[] {
-  if (!subs || subs.length === 0) return [];
-  let prefs: string[] = [];
+const LANG_CODES = [
+  "ar", "en", "fr", "es", "de", "it", "pt", "ru", "tr", "fa", "ur", "hi", "bn", "id", "ms", "ja", "ko", "zh",
+  "nl", "sv", "no", "nb", "da", "fi", "pl", "cs", "sk", "hu", "ro", "bg", "el", "he", "uk", "sr", "hr", "sl",
+  "lt", "lv", "et", "th", "vi", "tl", "sq", "mk", "bs", "ca", "eu", "gl", "is", "ka", "hy", "az", "kk", "uz",
+  "sw", "am", "ta", "te", "ml", "kn", "mr", "pa", "gu", "si", "km", "lo", "my", "ne", "ps", "ku",
+];
+
+let nameToCode: Map<string, string> | null = null;
+/** "Arabic" / "ara" / "ar" -> "ar" (ExoPlayer wants language codes). */
+function toLangCode(lang: string): string {
+  const l = lang.trim().toLowerCase();
+  if (/^[a-z]{2,3}([-_][a-z0-9]+)?$/.test(l)) return l;
+  if (!nameToCode) {
+    nameToCode = new Map();
+    try {
+      const dn = new Intl.DisplayNames(["en"], { type: "language" });
+      for (const c of LANG_CODES) {
+        const n = dn.of(c);
+        if (n) nameToCode.set(n.toLowerCase(), c);
+      }
+    } catch {
+      /* no Intl.DisplayNames */
+    }
+  }
+  return nameToCode.get(l) ?? l;
+}
+
+function langDisplayName(lang: string | undefined): string | null {
+  if (!lang) return null;
+  try {
+    const dn = new Intl.DisplayNames([navigator.language || "en"], { type: "language" });
+    return dn.of(toLangCode(lang)) ?? lang;
+  } catch {
+    return lang;
+  }
+}
+
+function preferredSubLangs(): string[] {
   try {
     const raw = localStorage.getItem("harbor.settings");
-    const p = raw ? (JSON.parse(raw) as { preferredSubLangs?: unknown }).preferredSubLangs : null;
-    if (Array.isArray(p)) prefs = p.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase());
+    const st = raw ? (JSON.parse(raw) as { preferredSubLangs?: unknown; preferredLanguages?: unknown }) : {};
+    const pick = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x) : []);
+    const langs = pick(st.preferredSubLangs).length > 0 ? pick(st.preferredSubLangs) : pick(st.preferredLanguages);
+    return langs.map(toLangCode);
   } catch {
-    /* ignore */
+    return [];
   }
-  const matches = (lang?: string) => {
-    if (!lang) return false;
-    const l = lang.toLowerCase();
-    return prefs.some((p) => l === p || l.startsWith(p) || p.startsWith(l.slice(0, 2)));
-  };
-  const preferred = prefs.length > 0 ? subs.filter((s) => matches(s.lang)) : [];
-  const list = preferred.length > 0 ? preferred : subs;
-  return list.slice(0, MAX_SUBS).map((s) => ({ url: s.url, lang: s.lang }));
+}
+
+type NativeSub = { url: string; lang?: string; label?: string };
+
+function nativeSub(url: string, lang?: string, title?: string): NativeSub {
+  const name = langDisplayName(lang);
+  const label = name && title ? `${name} · ${title}` : name ?? title;
+  return { url, lang: lang ? toLangCode(lang) : undefined, label: label ?? undefined };
 }
 
 /** Plays through the Android shell's native ExoPlayer (FFmpeg audio decoders included). */
@@ -37,6 +73,16 @@ export function createAndroidBridge(): PlayerBridge {
   let title = "";
   let active = false;
   const token = {};
+  let pendingSubs: NativeSub[] = [];
+  let subTimer: number | null = null;
+  const sentSubUrls = new Set<string>();
+  const flushSubs = () => {
+    subTimer = null;
+    if (!active || owner !== token || pendingSubs.length === 0) return;
+    const batch = pendingSubs;
+    pendingSubs = [];
+    api?.command(JSON.stringify({ cmd: "addSubs", subs: batch, prefLangs: preferredSubLangs() }));
+  };
 
   const emit = () => {
     const next = { ...snap };
@@ -84,13 +130,22 @@ export function createAndroidBridge(): PlayerBridge {
       snap = { ...emptySnapshot, status: "loading", volume: snap.volume, rate: snap.rate };
       active = true;
       owner = token;
+      pendingSubs = [];
+      if (subTimer != null) window.clearTimeout(subTimer);
+      subTimer = null;
+      sentSubUrls.clear();
+      const initialSubs = (src.subtitles ?? []).slice(0, MAX_INITIAL_SUBS).map((x) => {
+        sentSubUrls.add(x.url);
+        return nativeSub(x.url, x.lang);
+      });
       emit();
       api?.play(
         JSON.stringify({
           url: src.url,
           headers: src.headers ?? {},
           startMs: Math.max(0, Math.round((src.startAtSec ?? 0) * 1000)),
-          subtitles: pickSubtitles(src.subtitles),
+          subtitles: initialSubs,
+          prefSubLangs: preferredSubLangs(),
           title,
           isLive: src.isLive === true,
         }),
@@ -125,8 +180,16 @@ export function createAndroidBridge(): PlayerBridge {
     setVideoZoom() {},
     setAspectOverride() {},
     setAnime4kShaders() {},
-    async addSubtitle() {
-      return false;
+    // Addon / OpenSubtitles results arrive one by one after playback starts; batch them
+    // so the native player re-prepares once instead of once per subtitle.
+    async addSubtitle(url, lang, title) {
+      if (!active || owner !== token || !url) return false;
+      if (sentSubUrls.has(url)) return true;
+      sentSubUrls.add(url);
+      pendingSubs.push(nativeSub(url, lang, title));
+      if (subTimer != null) window.clearTimeout(subTimer);
+      subTimer = window.setTimeout(flushSubs, SUB_BATCH_MS);
+      return true;
     },
     getSelectedTrackCues: () => null,
     getSelectedTrackUrl: () => null,
@@ -156,6 +219,7 @@ export function createAndroidBridge(): PlayerBridge {
       return () => listeners.delete(listener);
     },
     destroy() {
+      if (subTimer != null) window.clearTimeout(subTimer);
       off();
       listeners.clear();
       if (owner === token) {
