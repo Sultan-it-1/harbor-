@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BackToTop } from "@/components/back-to-top";
 import { HeroCarousel, type Slide } from "@/components/hero-carousel";
@@ -608,6 +609,7 @@ export function Home({ active = true }: { active?: boolean }) {
     [settings.tmdbKey, settings.streaming],
   );
 
+  const phoneLayout = isPhoneLayout();
   return (
     <main
       ref={scrollCb}
@@ -636,7 +638,13 @@ export function Home({ active = true }: { active?: boolean }) {
           {settings.homeMode !== "classic" && !homeRowsCustom.hidden.includes("hero") && (
             <div
               data-scroll-anchor="hero"
-              className={`relative ${settings.heroFull ? "-mt-24 lg:-mt-28 -mb-12 harbor-hero-full" : ""}`}
+              className={`relative ${
+                phoneLayout
+                  ? "-mx-5 -mt-24 harbor-hero-full"
+                  : settings.heroFull
+                    ? "-mt-24 lg:-mt-28 -mb-12 harbor-hero-full"
+                    : ""
+              }`}
             >
               {editMode && (
                 <PinnedRowControls
@@ -647,11 +655,11 @@ export function Home({ active = true }: { active?: boolean }) {
               )}
               <HeroCarousel
                 slides={heroSlides}
-                full={settings.heroFull}
+                full={settings.heroFull || phoneLayout}
                 fullQuality={settings.heroFullQuality}
               />
               {!editMode && (
-                <div className="pointer-events-none absolute -bottom-3 end-5 z-20 flex justify-end [&>*]:pointer-events-auto">
+                <div className={`pointer-events-none absolute z-20 flex justify-end [&>*]:pointer-events-auto ${phoneLayout ? "-bottom-9 end-4" : "-bottom-3 end-5"}`}>
                   <CustomizeBar
                     editMode={editMode}
                     customization={homeRowsCustom}

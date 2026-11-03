@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { memo, useEffect, useRef, useState } from "react";
 import { Check, Play, Plus, TrendingUp } from "lucide-react";
 import { ImdbIcon } from "@/components/icons/imdb-icon";
@@ -175,7 +176,7 @@ export const Hero = memo(function Hero({
   return (
     <section
       onClick={() => openMeta({ ...meta, logo: logo ?? meta.logo })}
-      className={`group relative cursor-pointer overflow-hidden bg-canvas ${full ? "h-[clamp(560px,82vh,920px)] rounded-none" : "h-[560px] rounded-[28px]"}`}
+      className={`group relative cursor-pointer overflow-hidden bg-canvas ${full ? `${PHONE ? "h-[min(76vh,640px)]" : "h-[clamp(560px,82vh,920px)]"} rounded-none` : "h-[560px] rounded-[28px]"}`}
       style={{ isolation: "isolate" }}
     >
       {bg && loadBackdrop && (
@@ -205,17 +206,35 @@ export const Hero = memo(function Hero({
           />
         </div>
       )}
-      <div
-        className="absolute inset-0 bg-gradient-to-r from-canvas via-canvas/85 via-50% to-transparent rtl:bg-gradient-to-l"
-        style={{ opacity: settings.heroShadow / 100 }}
-      />
-      <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-canvas via-canvas/70 via-50% to-transparent" />
+      {PHONE ? (
+        <>
+          <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-canvas/80 to-transparent" />
+          <div
+            className="absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-canvas via-canvas/80 via-45% to-transparent"
+            style={{ opacity: Math.max(0.75, settings.heroShadow / 100) }}
+          />
+        </>
+      ) : (
+        <>
+          <div
+            className="absolute inset-0 bg-gradient-to-r from-canvas via-canvas/85 via-50% to-transparent rtl:bg-gradient-to-l"
+            style={{ opacity: settings.heroShadow / 100 }}
+          />
+          <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-canvas via-canvas/70 via-50% to-transparent" />
+        </>
+      )}
       <MetaAwardsCorner meta={meta} imdbId={resolvedImdb} />
 
-      <div className={`relative flex h-full flex-col justify-center p-14 ${full ? "pt-28 lg:pt-32" : ""}`}>
+      <div
+        className={
+          PHONE
+            ? "relative flex h-full flex-col justify-end px-5 pb-12"
+            : `relative flex h-full flex-col justify-center p-14 ${full ? "pt-28 lg:pt-32" : ""}`
+        }
+      >
         <div className="max-w-2xl">
           {rank && (
-            <div className="mb-5 inline-flex items-center gap-1.5 self-start rounded-md bg-canvas/85 px-2.5 py-1 text-[12px] font-semibold text-ink">
+            <div className="mb-3 inline-flex items-center gap-1.5 self-start rounded-md bg-canvas/85 px-2.5 py-1 text-[12px] font-semibold text-ink">
               <TrendingUp size={12} className="text-accent" />
               <span>
                 {t("#{position} in {label} Today", { position: rank.position, label: t(rank.label) })}
@@ -224,11 +243,11 @@ export const Hero = memo(function Hero({
           )}
           <HeroTitlePlate name={meta.name} logo={logo} loaded={logoLoaded} resolved={logoResolved} onLoad={() => setLogoLoaded(true)} onError={() => { setLogo(undefined); setLogoResolved(true); }} />
           {meta.description && (
-            <p className="mt-6 line-clamp-3 max-w-xl text-[16px] leading-relaxed text-ink-muted">
+            <p className={PHONE ? "mt-3 line-clamp-2 text-[14px] leading-snug text-ink-muted" : "mt-6 line-clamp-3 max-w-xl text-[16px] leading-relaxed text-ink-muted"}>
               {meta.description}
             </p>
           )}
-          <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 text-[14px]">
+          <div className={`flex flex-wrap items-center gap-y-2 ${PHONE ? "mt-3 gap-x-5 text-[13px]" : "mt-6 gap-x-8 text-[14px]"}`}>
             {meta.releaseInfo && <Stat label={t("Year")} value={meta.releaseInfo} />}
             {settings.showImdbBadge && imdbRating && (
               <span className="flex items-center gap-2">
@@ -245,7 +264,7 @@ export const Hero = memo(function Hero({
             {meta.runtime && <Stat label={t("Runtime")} value={meta.runtime} />}
           </div>
           <div
-            className="mt-9 flex gap-3"
+            className={PHONE ? "mt-5 flex gap-2.5 [&>button]:h-11 [&>button]:flex-1 [&>button]:justify-center [&>button]:px-4 [&>button]:text-[14px]" : "mt-9 flex gap-3"}
             onMouseEnter={() => setOverControls(true)}
             onMouseLeave={() => setOverControls(false)}
           >
@@ -282,6 +301,8 @@ export const Hero = memo(function Hero({
   );
 });
 
+const PHONE = isPhoneLayout();
+
 function HeroTitlePlate({
   name,
   logo,
@@ -298,7 +319,7 @@ function HeroTitlePlate({
   onError: () => void;
 }) {
   return (
-    <div className="relative flex min-h-[112px] items-end">
+    <div className={`relative flex items-end ${PHONE ? "min-h-[72px]" : "min-h-[112px]"}`}>
       {logo ? (
         <img
           src={logo}
@@ -306,7 +327,7 @@ function HeroTitlePlate({
           decoding="async"
           onLoad={onLoad}
           onError={onError}
-          className="max-h-[120px] w-auto max-w-[460px] object-contain object-left rtl:object-right drop-shadow-[0_6px_22px_rgba(0,0,0,0.45)]"
+          className={`${PHONE ? "max-h-[84px] max-w-[78%]" : "max-h-[120px] max-w-[460px]"} w-auto object-contain object-left rtl:object-right drop-shadow-[0_6px_22px_rgba(0,0,0,0.45)]`}
           style={{
             opacity: loaded ? 1 : 0,
             transition: "opacity 360ms cubic-bezier(0.32, 0.72, 0.24, 1)",
@@ -314,7 +335,7 @@ function HeroTitlePlate({
         />
       ) : resolved ? (
         <h2
-          className="font-display text-[68px] font-medium leading-[0.98] tracking-tight text-ink"
+          className={`font-display font-medium leading-[0.98] tracking-tight text-ink ${PHONE ? "text-[40px]" : "text-[68px]"}`}
           style={{ animation: "harbor-fade-in 420ms cubic-bezier(0.32, 0.72, 0.24, 1) both" }}
         >
           {name}

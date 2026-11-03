@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useEffect, useRef, useState } from "react";
 import { observe, usePageVisible } from "@/lib/visibility";
 import { isRtl, useT, useUiLanguage } from "@/lib/i18n";
@@ -11,6 +12,8 @@ const DRAG_BUDGE = 6;
 const SNAP_RATIO = 0.18;
 const FLICK_VELOCITY = 0.45;
 const SLIDE_GAP_PX = 22;
+
+const PHONE = isPhoneLayout();
 
 export function HeroCarousel({ slides, full = false, fullQuality = false }: { slides: Slide[]; full?: boolean; fullQuality?: boolean }) {
   const [active, setActive] = useState(0);
@@ -48,7 +51,7 @@ export function HeroCarousel({ slides, full = false, fullQuality = false }: { sl
 
   if (slides.length === 0) {
     return (
-      <div className={`animate-pulse border border-edge-soft bg-elevated/30 ${full ? "min-h-[clamp(560px,82vh,920px)] rounded-none" : "min-h-[560px] rounded-[28px]"}`} />
+      <div className={`animate-pulse border border-edge-soft bg-elevated/30 ${full ? `${PHONE ? "min-h-[min(76vh,640px)]" : "min-h-[clamp(560px,82vh,920px)]"} rounded-none` : "min-h-[560px] rounded-[28px]"}`} />
     );
   }
 
@@ -175,7 +178,7 @@ export function HeroCarousel({ slides, full = false, fullQuality = false }: { sl
                     fullQuality={fullQuality}
                   />
                 ) : (
-                  <div className={`w-full bg-elevated/30 ${full ? "h-[clamp(560px,82vh,920px)] rounded-none" : "h-[560px] rounded-[28px]"}`} />
+                  <div className={`w-full bg-elevated/30 ${full ? `${PHONE ? "h-[min(76vh,640px)]" : "h-[clamp(560px,82vh,920px)]"} rounded-none` : "h-[560px] rounded-[28px]"}`} />
                 )}
               </div>
             );
