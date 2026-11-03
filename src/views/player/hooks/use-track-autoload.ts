@@ -9,6 +9,8 @@ import type { Addon } from "@/lib/addons";
 import { gatherSubtitleAddons } from "@/lib/subtitles/addon-source";
 import type { PlayerSrc } from "@/lib/view";
 import type { Settings } from "@/lib/settings";
+import { isAndroidApp } from "@/lib/android";
+import { notifyAndroidSubSearch } from "@/lib/player/android/bridge";
 
 export function useTrackAutoload(params: {
   bridgeRef: RefObject<PlayerBridge | null>;
@@ -131,10 +133,15 @@ export function useTrackAutoload(params: {
         console.warn("[subs/autoload] no bridge ready, skipping");
         return;
       }
-      const matches = results.filter((r) => langScore(r.lang ?? "", langs) >= 0);
+      // Android's native player has no in-UI subtitle search, so offer every language the
+      // addons returned (preferred ones first — results are already ranked).
+      const android = isAndroidApp();
+      if (android) notifyAndroidSubSearch(results.length);
+      const matches = android ? results : results.filter((r) => langScore(r.lang ?? "", langs) >= 0);
       console.info(`[subs/autoload] ${matches.length} match preferred langs`);
       const perLang = new Map<string, number>();
-      const maxForLang = (lang: string) => (langScore(lang, langs) > 0 ? 25 : 6);
+      const maxForLang = (lang: string) =>
+        langScore(lang, langs) > 0 ? (android ? 15 : 25) : android ? 3 : 6;
       let attempted = 0;
       let added = 0;
       for (const r of matches) {

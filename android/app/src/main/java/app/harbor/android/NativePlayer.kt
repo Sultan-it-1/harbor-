@@ -17,6 +17,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
@@ -67,6 +69,7 @@ class NativePlayer(
     private var prefSubLangs: List<String> = emptyList()
     private var generation = 0
     private var subSeq = 0
+    private var autoSelectPending = false
 
     val isShowing: Boolean get() = view?.visibility == View.VISIBLE
 
@@ -101,14 +104,20 @@ class NativePlayer(
             jobs.add(subPool.submit<SubtitleStore.LocalSub?> { subStore.fetch(id, url, lang, label, ua) })
         }
         if (jobs.isEmpty()) return
-        subPool.execute {
+        // Wait on a separate thread: blocking inside subPool could starve the downloads.
+        Thread {
             val got = jobs.mapNotNull { f -> try { f.get(20, TimeUnit.SECONDS) } catch (_: Exception) { null } }
             handler.post {
-                if (gen != generation || got.isEmpty()) return@post
+                if (gen != generation) return@post
+                if (got.isEmpty()) {
+                    toast("تعذّر تحميل الترجمات (${jobs.size})")
+                    return@post
+                }
                 subs.addAll(got)
+                toast("تمت إضافة ${got.size} ترجمة — اضغط CC للاختيار")
                 reloadWithSubs()
             }
-        }
+        }.start()
     }
 
     /** Re-prepares the current item with the side-loaded subtitles, keeping position and play state. */
@@ -122,7 +131,38 @@ class NativePlayer(
         p.prepare()
         p.playWhenReady = playing
         applySubPrefs(p)
+        autoSelectPending = true
     }
+
+    /** After addon subs are attached: if nothing is showing yet, pick the best one in the
+     *  user's preferred language (embedded tracks in that language win via applySubPrefs). */
+    private fun maybeAutoSelectSub(tracks: Tracks) {
+        if (!autoSelectPending) return
+        val p = player ?: return
+        val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+        if (textGroups.isEmpty()) return
+        autoSelectPending = false
+        if (textGroups.any { it.isSelected }) return
+        val best = prefSubLangs.firstNotNullOfOrNull { pref ->
+            subs.firstOrNull { s -> s.lang != null && baseLang(s.lang) == baseLang(pref) }
+        } ?: return
+        for (g in textGroups) {
+            for (i in 0 until g.length) {
+                val id = g.getTrackFormat(i).id ?: continue
+                if (id == best.id || id.endsWith(":${best.id}")) {
+                    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, i))
+                        .build()
+                    return
+                }
+            }
+        }
+    }
+
+    private fun baseLang(l: String) = l.lowercase().substringBefore('-').substringBefore('_')
+
+    private fun toast(msg: String) = Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 
     private fun applySubPrefs(p: ExoPlayer) {
         if (prefSubLangs.isEmpty()) return
@@ -142,8 +182,9 @@ class NativePlayer(
                 subs.map { s ->
                     MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(s.file))
                         .setMimeType(s.mime)
-                        .setLanguage(s.lang)
-                        .setLabel(s.label ?: s.lang)
+                        // No language on purpose: the player menu shows the language *instead of*
+                        // the label when both are set, and every addon sub would read just "English".
+                        .setLabel(s.label ?: s.lang ?: "Subtitle")
                         .setId(s.id)
                         .build()
                 },
@@ -185,6 +226,7 @@ class NativePlayer(
 
             override fun onIsPlayingChanged(isPlaying: Boolean) = sendState()
             override fun onVideoSizeChanged(videoSize: VideoSize) = sendState()
+            override fun onTracksChanged(tracks: Tracks) = maybeAutoSelectSub(tracks)
 
             override fun onPlayerError(error: PlaybackException) {
                 // A subtitle ExoPlayer can't parse would fail the whole playback; retry once without them.
@@ -290,6 +332,7 @@ class NativePlayer(
             "seek" -> p.seekTo(c.optLong("ms", 0).coerceAtLeast(0))
             "rate" -> p.setPlaybackSpeed(c.optDouble("rate", 1.0).toFloat().coerceIn(0.25f, 4f))
             "volume" -> p.volume = c.optDouble("volume", 1.0).toFloat().coerceIn(0f, 1f)
+            "subSearch" -> if (c.optInt("count", 0) == 0) toast("ما لقيت ترجمات من الإضافات لهذا الفيديو")
             "addSubs" -> {
                 val langs = jsonStrings(c.optJSONArray("prefLangs"))
                 if (langs.isNotEmpty()) prefSubLangs = langs

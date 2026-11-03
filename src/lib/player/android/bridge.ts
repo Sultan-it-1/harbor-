@@ -15,11 +15,25 @@ const LANG_CODES = [
   "sw", "am", "ta", "te", "ml", "kn", "mr", "pa", "gu", "si", "km", "lo", "my", "ne", "ps", "ku",
 ];
 
+// ISO 639-2 (what most subtitle addons send) -> ISO 639-1.
+const ISO3: Record<string, string> = {
+  ara: "ar", eng: "en", fre: "fr", fra: "fr", spa: "es", ger: "de", deu: "de", ita: "it", por: "pt", pob: "pt-br",
+  rus: "ru", tur: "tr", per: "fa", fas: "fa", urd: "ur", hin: "hi", ben: "bn", ind: "id", may: "ms", msa: "ms",
+  jpn: "ja", kor: "ko", chi: "zh", zho: "zh", dut: "nl", nld: "nl", swe: "sv", nor: "no", nob: "nb", dan: "da",
+  fin: "fi", pol: "pl", cze: "cs", ces: "cs", slo: "sk", slk: "sk", hun: "hu", rum: "ro", ron: "ro", bul: "bg",
+  gre: "el", ell: "el", heb: "he", ukr: "uk", srp: "sr", scc: "sr", hrv: "hr", slv: "sl", lit: "lt", lav: "lv",
+  est: "et", tha: "th", vie: "vi", tgl: "tl", fil: "tl", alb: "sq", sqi: "sq", mac: "mk", mkd: "mk", bos: "bs",
+  cat: "ca", baq: "eu", eus: "eu", glg: "gl", ice: "is", isl: "is", geo: "ka", kat: "ka", arm: "hy", hye: "hy",
+  aze: "az", kaz: "kk", uzb: "uz", swa: "sw", amh: "am", tam: "ta", tel: "te", mal: "ml", kan: "kn", mar: "mr",
+  pan: "pa", guj: "gu", sin: "si", khm: "km", lao: "lo", bur: "my", mya: "my", nep: "ne", pus: "ps", kur: "ku",
+};
+
 let nameToCode: Map<string, string> | null = null;
 /** "Arabic" / "ara" / "ar" -> "ar" (ExoPlayer wants language codes). */
 function toLangCode(lang: string): string {
-  const l = lang.trim().toLowerCase();
-  if (/^[a-z]{2,3}([-_][a-z0-9]+)?$/.test(l)) return l;
+  const l = lang.trim().toLowerCase().replace("_", "-");
+  if (ISO3[l]) return ISO3[l];
+  if (/^[a-z]{2,3}(-[a-z0-9]+)?$/.test(l)) return l;
   if (!nameToCode) {
     nameToCode = new Map();
     try {
@@ -66,6 +80,11 @@ function nativeSub(url: string, lang?: string, title?: string): NativeSub {
 }
 
 /** Plays through the Android shell's native ExoPlayer (FFmpeg audio decoders included). */
+/** Lets the native player say "no subtitles found" instead of staying silent. */
+export function notifyAndroidSubSearch(found: number) {
+  androidApi()?.command(JSON.stringify({ cmd: "subSearch", count: found }));
+}
+
 export function createAndroidBridge(): PlayerBridge {
   const api = androidApi();
   let snap: PlayerSnapshot = { ...emptySnapshot };
