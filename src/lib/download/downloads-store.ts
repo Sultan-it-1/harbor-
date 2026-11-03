@@ -6,6 +6,16 @@ import type { Meta } from "@/lib/cinemeta";
 import type { PlayEpisode } from "@/lib/view";
 import { buildDefaultFilename } from "./filename";
 import { startDownload, type DownloadHandle } from "./video-download";
+import {
+  androidDownloadsAvailable,
+  gatherDownloadSubtitles,
+  nativeDelete,
+  nativeStart,
+  nativeStatus,
+} from "./android-downloads";
+
+// Android app: downloads run in the system DownloadManager (see android-downloads.ts).
+const ANDROID = androidDownloadsAvailable();
 
 export type DownloadItem = {
   id: string;
@@ -25,6 +35,8 @@ export type DownloadItem = {
   bytesPerSec: number;
   error: string | null;
   startedAt: number;
+  /** Android: "waiting for Wi-Fi" etc. while the system download is paused. */
+  note?: string | null;
 };
 
 type EnqueueArgs = {
@@ -32,6 +44,11 @@ type EnqueueArgs = {
   episode?: PlayEpisode;
   streamLabel?: string | null;
   url: string;
+  /** Android: the un-proxied URL + headers for the system downloader. */
+  rawUrl?: string;
+  headers?: Record<string, string>;
+  /** Subtitles that came with the stream itself. */
+  subtitles?: { url: string; lang?: string }[];
 };
 
 const items = new Map<string, DownloadItem>();
@@ -66,7 +83,8 @@ function hydrate() {
     if (!Array.isArray(arr)) return;
     for (const d of arr) {
       if (!d || typeof d.id !== "string" || typeof d.path !== "string") continue;
-      const status = d.status === "downloading" ? "interrupted" : d.status;
+      // Desktop downloads die with the app; Android's system downloader keeps going.
+      const status = d.status === "downloading" && !ANDROID ? "interrupted" : d.status;
       items.set(d.id, { ...d, status, bytesPerSec: 0 });
     }
     snapshot = [...items.values()].sort((a, b) => b.startedAt - a.startedAt);
@@ -76,6 +94,61 @@ function hydrate() {
 }
 
 hydrate();
+
+// ---- Android: poll the system downloader ------------------------------------------------
+
+let pollTimer: number | null = null;
+
+function pollAndroid() {
+  const st = nativeStatus();
+  const now = Date.now();
+  let active = 0;
+  for (const d of [...items.values()]) {
+    if (d.status !== "downloading") continue;
+    const n = st[d.id];
+    if (!n) continue; // not enqueued yet (gathering subtitles)
+    if (n.status === "missing") {
+      patch(d.id, { status: "canceled", bytesPerSec: 0, note: null });
+      continue;
+    }
+    const received = n.received ?? d.receivedBytes;
+    const total = n.total ?? d.totalBytes;
+    if (n.status === "done") {
+      patch(d.id, { status: "done", receivedBytes: total ?? received, totalBytes: total ?? received, ratio: 1, bytesPerSec: 0, note: null });
+      continue;
+    }
+    if (n.status === "error") {
+      patch(d.id, { status: "error", error: n.reason || "Download failed", bytesPerSec: 0, note: null });
+      continue;
+    }
+    active++;
+    const s = speed.get(d.id);
+    let bps = d.bytesPerSec;
+    if (s && now - s.at >= 900) {
+      bps = Math.max(0, ((received - s.bytes) / (now - s.at)) * 1000);
+      speed.set(d.id, { bytes: received, at: now });
+    } else if (!s) speed.set(d.id, { bytes: received, at: now });
+    patch(d.id, {
+      receivedBytes: received,
+      totalBytes: total ?? null,
+      ratio: total ? Math.min(1, received / total) : 0,
+      bytesPerSec: n.status === "downloading" ? bps : 0,
+      note: n.status === "waiting" || n.status === "pending" ? n.reason || "Waiting…" : null,
+    });
+  }
+  const pending = [...items.values()].some((d) => d.status === "downloading");
+  if (!pending && active === 0 && pollTimer != null) {
+    window.clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function ensureAndroidPolling() {
+  if (!ANDROID || pollTimer != null) return;
+  pollTimer = window.setInterval(pollAndroid, 1000);
+}
+
+if (ANDROID && [...items.values()].some((d) => d.status === "downloading")) ensureAndroidPolling();
 
 function patch(id: string, next: Partial<DownloadItem>) {
   const cur = items.get(id);
@@ -179,6 +252,33 @@ export async function enqueueDownload(args: EnqueueArgs): Promise<string> {
   speed.set(id, { bytes: 0, at: Date.now() });
   rebuild();
 
+  if (ANDROID) {
+    item.path = `android:${id}`;
+    items.set(id, { ...item });
+    rebuild();
+    void (async () => {
+      // Save subtitles in the user's languages with the video (give the search 8 s).
+      const found = await Promise.race([
+        gatherDownloadSubtitles(meta, episode),
+        new Promise<{ url: string; lang?: string; label?: string }[]>((r) => window.setTimeout(() => r([]), 8000)),
+      ]).catch(() => []);
+      const withStream = [...(args.subtitles ?? []).slice(0, 4).map((s) => ({ url: s.url, lang: s.lang })), ...found];
+      if (!items.has(id)) return; // removed while preparing
+      const r = nativeStart({
+        id,
+        url: args.rawUrl ?? url,
+        headers: args.headers,
+        fileName: filename,
+        title: item.title,
+        description: item.subtitle,
+        subtitles: withStream,
+      });
+      if (!r.ok) patch(id, { status: "error", error: r.error ?? "Download failed" });
+      else ensureAndroidPolling();
+    })();
+    return id;
+  }
+
   const handle = startDownload(id, url, path, (p) => {
     const now = Date.now();
     const s = speed.get(id);
@@ -212,6 +312,11 @@ export async function enqueueDownload(args: EnqueueArgs): Promise<string> {
 }
 
 export function cancelDownload(id: string): void {
+  if (ANDROID) {
+    // The system downloader can't pause; cancelling frees the space right away.
+    removeDownload(id);
+    return;
+  }
   handles.get(id)?.abort();
 }
 
@@ -221,6 +326,10 @@ export function removeDownload(id: string): void {
   handles.delete(id);
   speed.delete(id);
   if (items.delete(id)) rebuild();
+  if (ANDROID) {
+    nativeDelete(id); // video + subtitles + folder, for good
+    return;
+  }
   if (item) {
     void remove(item.path).catch(() => {});
     void remove(`${item.path}.part`).catch(() => {});

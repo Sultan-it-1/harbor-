@@ -1,3 +1,4 @@
+import { SeasonDownloadButton } from "./season-download-button";
 import { Check, ChevronDown, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { EpisodeJumper } from "@/components/episode-jumper";
@@ -184,6 +185,20 @@ export function AnimeEpisodes({
           )}
         </div>
       </div>
+      {!isOneOff && (
+        <SeasonDownloadButton
+          meta={meta}
+          episodes={episodes.map((ep) => ({
+            season: ep.seasonNumber || 1,
+            episode: ep.number,
+            name: ep.title,
+            kitsuStreamId: ep.streamId,
+            imdbId: ep.imdbId,
+            imdbSeason: ep.imdbSeason,
+            imdbEpisode: ep.imdbEpisode,
+          }))}
+        />
+      )}
       {isOneOff ? (
         <MovieEntryCard meta={meta} ep={episodes[0]} watched={anilistCompleted} />
       ) : (

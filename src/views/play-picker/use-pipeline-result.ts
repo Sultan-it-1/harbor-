@@ -5,7 +5,7 @@ import { useDebridClients } from "@/lib/debrid/registry";
 import { buildPickerConfigHash, clearOnePickerCache, getPickerCache, setPickerCache } from "@/lib/picker-cache";
 import { useSettings } from "@/lib/settings";
 import { readPlayback } from "@/lib/playback-history";
-import { runPipeline, type PipelineResult } from "@/lib/streams/pipeline";
+import { runPipeline, type PipelineInput, type PipelineResult } from "@/lib/streams/pipeline";
 import type { Stream } from "@/lib/streams/types";
 import type { PlayEpisode } from "@/lib/view";
 import { parseRuntimeMinutes, stampAddonOrder } from "./picker-utils";
@@ -95,70 +95,8 @@ export function usePipelineResult({
     setPipelineDone(false);
     setFirstResultAt(null);
     setAutoSettleReady(false);
-    const addonNative = isAddonNativeMeta(meta);
-    const requestType = addonNative
-      ? meta.type
-      : episode
-        ? "series"
-        : meta.type === "series"
-          ? "series"
-          : "movie";
-    const animeReq = streamIds.some((id) => id.startsWith("kitsu:") || id.startsWith("mal:"));
-    const effSeason = episode?.imdbSeason ?? episode?.season;
-    const effEpisode = episode?.imdbEpisode ?? episode?.episode;
-    const prevGroup =
-      episode && typeof effSeason === "number" && typeof effEpisode === "number" && effEpisode > 1
-        ? readPlayback(meta.id, effSeason, effEpisode - 1)?.releaseGroup ?? undefined
-        : undefined;
     runPipeline(
-      {
-        request: {
-          type: requestType,
-          ids: streamIds,
-        },
-        query: {
-          type: episode ? "series" : meta.type === "series" ? "series" : "movie",
-          imdbId: imdbId ?? "",
-          title: meta.name,
-          year: parseInt(meta.releaseInfo ?? "", 10) || undefined,
-          season: animeReq && episode?.imdbSeason == null ? undefined : effSeason,
-          episode: animeReq && episode?.imdbEpisode == null ? episode?.episode : effEpisode,
-        },
-        addons,
-        debrids,
-        isAnime: animeReq,
-        presetStreams: embedded.length > 0 ? embedded : undefined,
-        trust: {
-          kind: episode ? "series" : meta.type === "series" ? "series" : "movie",
-          expectedTitle: meta.name,
-          releaseDate: meta.releaseDate ?? null,
-          expectedYear: parseInt(meta.releaseInfo ?? "", 10) || null,
-          expectedSeason: effSeason ?? null,
-          expectedEpisode: effEpisode ?? null,
-          strict: strictMode,
-          disabled: filterDisabled || addonNative || embedded.length > 0,
-          preferredLanguages: settings.preferredLanguages,
-          preferredAudioLangs: settings.preferredAudioLangs,
-          requirePreferredLanguage: strictMode && settings.requirePreferredLanguage,
-          allowSeasonPacks: !strictMode,
-          allowSizeOutliers: !strictMode,
-          isAnime: animeReq,
-        },
-        score: {
-          activeDebrids: debrids.map((d) => d.slug),
-          preferredLanguages: settings.preferredLanguages,
-          releaseDate: meta.releaseDate ?? null,
-          mediaKind: meta.type === "series" || episode ? "series" : "movie",
-          runtimeMinutes: parseRuntimeMinutes(meta.runtime),
-          inTheaters: meta.inTheaters === true,
-          bandwidthMbps: settings.bandwidthMbps > 0 ? settings.bandwidthMbps : undefined,
-          preferSingleAudioTrack:
-            !("__TAURI_INTERNALS__" in window) || settings.playerEngine === "html5",
-          preferAddonId: meta.addonOrigin?.id,
-          preferredReleaseGroup: prevGroup,
-          respectAddonOrder: settings.streamSort === "addon",
-        },
-      },
+      buildPipelineInput({ meta, episode, imdbId, streamIds, addons, debrids, settings, strictMode, filterDisabled, embedded }),
       ac.signal,
       (partial) => {
         if (ac.signal.aborted) return;
@@ -225,5 +163,97 @@ export function usePipelineResult({
     setFirstResultAt,
     setAutoSettleReady,
     setResolveError,
+  };
+}
+
+/**
+ * The picker's stream query for one title / episode: request ids, library query, trust
+ * filter and scoring options. Shared by the picker and the "download season" flow.
+ */
+export function buildPipelineInput({
+  meta,
+  episode,
+  imdbId,
+  streamIds,
+  addons,
+  debrids,
+  settings,
+  strictMode,
+  filterDisabled,
+  embedded = [],
+}: {
+  meta: Meta;
+  episode: PlayEpisode | undefined;
+  imdbId: string | null;
+  streamIds: string[];
+  addons: Addon[];
+  debrids: ReturnType<typeof useDebridClients>;
+  settings: Settings;
+  strictMode: boolean;
+  filterDisabled: boolean;
+  embedded?: Stream[];
+}): PipelineInput {
+  const addonNative = isAddonNativeMeta(meta);
+  const requestType = addonNative
+    ? meta.type
+    : episode
+      ? "series"
+      : meta.type === "series"
+        ? "series"
+        : "movie";
+  const animeReq = streamIds.some((id) => id.startsWith("kitsu:") || id.startsWith("mal:"));
+  const effSeason = episode?.imdbSeason ?? episode?.season;
+  const effEpisode = episode?.imdbEpisode ?? episode?.episode;
+  const prevGroup =
+    episode && typeof effSeason === "number" && typeof effEpisode === "number" && effEpisode > 1
+      ? readPlayback(meta.id, effSeason, effEpisode - 1)?.releaseGroup ?? undefined
+      : undefined;
+  return {
+    request: {
+      type: requestType,
+      ids: streamIds,
+    },
+    query: {
+      type: episode ? "series" : meta.type === "series" ? "series" : "movie",
+      imdbId: imdbId ?? "",
+      title: meta.name,
+      year: parseInt(meta.releaseInfo ?? "", 10) || undefined,
+      season: animeReq && episode?.imdbSeason == null ? undefined : effSeason,
+      episode: animeReq && episode?.imdbEpisode == null ? episode?.episode : effEpisode,
+    },
+    addons,
+    debrids,
+    isAnime: animeReq,
+    presetStreams: embedded.length > 0 ? embedded : undefined,
+    trust: {
+      kind: episode ? "series" : meta.type === "series" ? "series" : "movie",
+      expectedTitle: meta.name,
+      releaseDate: meta.releaseDate ?? null,
+      expectedYear: parseInt(meta.releaseInfo ?? "", 10) || null,
+      expectedSeason: effSeason ?? null,
+      expectedEpisode: effEpisode ?? null,
+      strict: strictMode,
+      disabled: filterDisabled || addonNative || embedded.length > 0,
+      preferredLanguages: settings.preferredLanguages,
+      preferredAudioLangs: settings.preferredAudioLangs,
+      requirePreferredLanguage: strictMode && settings.requirePreferredLanguage,
+      allowSeasonPacks: !strictMode,
+      allowSizeOutliers: !strictMode,
+      isAnime: animeReq,
+    },
+    score: {
+      activeDebrids: debrids.map((d) => d.slug),
+      preferredLanguages: settings.preferredLanguages,
+      releaseDate: meta.releaseDate ?? null,
+      mediaKind: meta.type === "series" || episode ? "series" : "movie",
+      runtimeMinutes: parseRuntimeMinutes(meta.runtime),
+      inTheaters: meta.inTheaters === true,
+      bandwidthMbps: settings.bandwidthMbps > 0 ? settings.bandwidthMbps : undefined,
+      preferSingleAudioTrack:
+        !("__TAURI_INTERNALS__" in window) || settings.playerEngine === "html5",
+      preferAddonId: meta.addonOrigin?.id,
+      preferredReleaseGroup: prevGroup,
+      respectAddonOrder: settings.streamSort === "addon",
+    },
   };
 }

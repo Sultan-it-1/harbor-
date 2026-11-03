@@ -166,7 +166,15 @@ export function usePickHandler({
           stream.name ||
           stream.addonName ||
           null;
-        void enqueueDownload({ meta, episode, streamLabel: label, url: playUrl });
+        void enqueueDownload({
+          meta,
+          episode,
+          streamLabel: label,
+          url: playUrl,
+          rawUrl: r.data.url,
+          headers: r.data.headers,
+          subtitles: r.data.subtitles,
+        });
         opened = true;
         setResolving(null);
         onDownloadStarted?.(label);

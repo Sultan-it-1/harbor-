@@ -53,6 +53,8 @@ class SubtitleStore(private val dir: File) {
     }
 
     private fun download(url: String, userAgent: String): ByteArray {
+        // Offline: subtitles saved next to a downloaded video.
+        if (url.startsWith("file:")) return File(java.net.URI(url)).readBytes()
         var u = URL(url)
         repeat(6) {
             val c = u.openConnection() as HttpURLConnection

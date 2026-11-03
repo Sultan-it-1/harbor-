@@ -8,6 +8,12 @@ type HarborAndroidApi = {
   command(json: string): void;
   stop(): void;
   openExternal(url: string): void;
+  // Downloads (android/…/Downloads.kt). Absent on shells older than the downloads release.
+  dlStart?(json: string): string;
+  dlStatus?(): string;
+  dlDelete?(id: string): boolean;
+  dlFiles?(id: string): string;
+  dlStorage?(): string;
 };
 
 export type NativePlayerEvent =

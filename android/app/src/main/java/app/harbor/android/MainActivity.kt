@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var player: NativePlayer
     private lateinit var fetcher: NativeFetch
+    private lateinit var downloads: Downloads
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fullscreen = false
@@ -77,6 +78,7 @@ class MainActivity : ComponentActivity() {
 
         player = NativePlayer(this, root) { event -> sendToJs("__harborNativeEvent", event) }
         fetcher = NativeFetch { id, result -> sendToJs("__harborNativeFetchDone", id, result) }
+        downloads = Downloads(this) { fetcher.userAgent }
 
         val assets = WebAssets(this)
         val ws = webView.settings
@@ -245,6 +247,22 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun openExternal(url: String) = runOnUiThread { openExternally(Uri.parse(url)) }
+
+        // ---- downloads (see Downloads.kt) ----
+        @JavascriptInterface
+        fun dlStart(json: String): String = downloads.start(json)
+
+        @JavascriptInterface
+        fun dlStatus(): String = downloads.status()
+
+        @JavascriptInterface
+        fun dlDelete(id: String): Boolean = downloads.delete(id)
+
+        @JavascriptInterface
+        fun dlFiles(id: String): String = downloads.files(id)
+
+        @JavascriptInterface
+        fun dlStorage(): String = downloads.storage()
     }
 
     companion object {

@@ -1,4 +1,5 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { androidDownloadsAvailable, nativeFiles, nativeStorage } from "@/lib/download/android-downloads";
 import { Check, Download as DownloadIcon, FolderOpen, Play, Trash2, X } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { useView } from "@/lib/view";
@@ -72,6 +73,23 @@ function buildGroups(items: DownloadItem[]): DownloadGroup[] {
   });
 }
 
+// Android app: files live in the app's own storage (no folder to pick or reveal).
+const ANDROID = androidDownloadsAvailable();
+
+function StorageLine({ items }: { items: DownloadItem[] }) {
+  const [info, setInfo] = useState<{ free?: number; used?: number }>({});
+  const doneCount = items.filter((d) => d.status === "done").length;
+  useEffect(() => {
+    setInfo(nativeStorage());
+  }, [items.length, doneCount]);
+  if (info.free == null || info.free < 0) return null;
+  return (
+    <p className="mb-5 text-[12.5px] text-ink-subtle">
+      {`Stored in the app · ${fmtBytes(info.used ?? 0)} used · ${fmtBytes(info.free)} free on this phone`}
+    </p>
+  );
+}
+
 export function DownloadsView() {
   const items = useDownloads();
   const active = items.filter((d) => d.status === "downloading").length;
@@ -99,7 +117,7 @@ export function DownloadsView() {
           </p>
         </header>
 
-        <DownloadDirBar />
+        {ANDROID ? <StorageLine items={items} /> : <DownloadDirBar />}
 
         {items.length === 0 ? (
           <EmptyState />
@@ -130,7 +148,9 @@ function EmptyState() {
       <div className="flex flex-col gap-1.5">
         <p className="text-[15px] font-semibold text-ink">No downloads yet</p>
         <p className="max-w-[340px] text-[13.5px] leading-relaxed text-ink-muted">
-          Open any movie or show, hover an episode, and click the download icon. Pick the exact source you want and it saves here for offline watching.
+          {ANDROID
+            ? "Open any movie or show and tap the download button (or Download season on a show). It saves in the app with its subtitles for offline watching."
+            : "Open any movie or show, hover an episode, and click the download icon. Pick the exact source you want and it saves here for offline watching."}
         </p>
       </div>
     </div>
@@ -176,7 +196,15 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
   const { openPlayer } = useView();
   const pct = Math.round(d.ratio * 100);
   const downloading = d.status === "downloading";
-  const playLocal = () =>
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = window.setTimeout(() => setConfirmDelete(false), 3500);
+    return () => window.clearTimeout(t);
+  }, [confirmDelete]);
+  const playLocal = () => {
+    // Android: the saved file + the subtitles saved next to it.
+    const local = ANDROID ? nativeFiles(d.id) : null;
     openPlayer({
       meta: {
         id: d.metaId,
@@ -184,11 +212,14 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
         name: d.title,
         poster: d.poster ?? undefined,
       },
-      url: d.path,
+      episode: d.season != null && d.episode != null ? { season: d.season, episode: d.episode } : undefined,
+      url: local?.video ?? d.path,
       title: d.title,
       subtitle: d.subtitle ?? undefined,
+      subtitles: local?.subtitles.map((x) => ({ url: x.url, lang: x.lang })),
       notWebReady: true,
     });
+  };
   return (
     <li className="group flex items-center gap-4 rounded-2xl border border-edge-soft bg-elevated/40 p-3 transition-colors hover:bg-elevated/70">
       <div
@@ -220,6 +251,7 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
                   {fmtBytes(d.receivedBytes)} / {fmtBytes(d.totalBytes)}
                 </span>
               )}
+              {d.note && <span className="text-amber-300/85">· {d.note}</span>}
               {fmtSpeed(d.bytesPerSec) && <span>· {fmtSpeed(d.bytesPerSec)}</span>}
               {fmtEta(d) && <span className="text-ink-subtle">· {fmtEta(d)}</span>}
             </div>
@@ -255,14 +287,26 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
                 <RowBtn label="Play" onClick={playLocal}>
                   <Play size={16} strokeWidth={2.2} fill="currentColor" />
                 </RowBtn>
-                <RowBtn label="Show in folder" onClick={() => void revealDownload(d.id)}>
-                  <FolderOpen size={16} strokeWidth={2} />
-                </RowBtn>
+                {!ANDROID && (
+                  <RowBtn label="Show in folder" onClick={() => void revealDownload(d.id)}>
+                    <FolderOpen size={16} strokeWidth={2} />
+                  </RowBtn>
+                )}
               </>
             )}
-            <RowBtn label="Delete download and file" onClick={() => removeDownload(d.id)}>
-              <Trash2 size={16} strokeWidth={2} />
-            </RowBtn>
+            {confirmDelete ? (
+              <button
+                type="button"
+                onClick={() => removeDownload(d.id)}
+                className="h-9 rounded-lg bg-danger/90 px-3 text-[12.5px] font-semibold text-white"
+              >
+                Delete
+              </button>
+            ) : (
+              <RowBtn label="Delete download and file" onClick={() => setConfirmDelete(true)}>
+                <Trash2 size={16} strokeWidth={2} />
+              </RowBtn>
+            )}
           </>
         )}
       </div>

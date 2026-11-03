@@ -1,3 +1,4 @@
+import { SeasonDownloadButton } from "./season-download-button";
 import { isPhoneLayout } from "@/lib/platform";
 import { Check, ChevronDown, Play } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -116,6 +117,15 @@ export function CinemetaEpisodes({
           ? t("{n} episode", { n: activeEps.length })
           : t("{n} episodes", { n: activeEps.length })}
       </p>
+      <SeasonDownloadButton
+        meta={meta}
+        episodes={activeEps.map((ep, i) => ({
+          season: ep.season ?? 0,
+          episode: ep.episode ?? ep.number ?? (ep.season == null ? i + 1 : 1),
+          name: ep.name || ep.title || undefined,
+          videoId: ep.id || undefined,
+        }))}
+      />
       <div className="flex flex-col gap-1">
         {activeEps.map((ep, i) => {
           const season = ep.season ?? 0;

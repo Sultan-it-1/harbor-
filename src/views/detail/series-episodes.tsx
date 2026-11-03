@@ -1,3 +1,4 @@
+import { SeasonDownloadButton } from "./season-download-button";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { EpisodeJumper } from "@/components/episode-jumper";
 import { EpisodeWatchedMenu, type WatchedMenuTarget } from "@/components/episode-watched-menu";
@@ -321,6 +322,18 @@ export function SeriesEpisodes({
             : t("{n} episodes", { n: activeSeason.episodeCount })}
           {activeSeason.airDate && ` · ${activeSeason.airDate.slice(0, 4)}`}
         </p>
+      )}
+
+      {!loading && enrichedEpisodes.length > 0 && (
+        <SeasonDownloadButton
+          meta={meta}
+          episodes={enrichedEpisodes.map((ep) => ({
+            season: ep.seasonNumber,
+            episode: ep.episodeNumber,
+            name: ep.name || undefined,
+            overview: ep.overview || undefined,
+          }))}
+        />
       )}
 
       {loading && <EpisodeGridSkeleton />}
