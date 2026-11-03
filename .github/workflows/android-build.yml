@@ -12,6 +12,9 @@ on:
       - "pnpm-lock.yaml"
       - ".github/workflows/android-build.yml"
 
+permissions:
+  contents: write
+
 jobs:
   apk:
     name: Android APK
@@ -61,7 +64,23 @@ jobs:
           ./gradlew assembleRelease --no-daemon \
             -PharborVersionName="$VERSION" \
             -PharborVersionCode="${{ github.run_number }}"
-          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/harbor-$VERSION-android.apk"
+          # Fixed file name so .../releases/latest/download/harbor-android.apk always works.
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/harbor-android.apk
+          echo "HARBOR_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ env.HARBOR_VERSION }}-${{ github.run_number }}
+          name: Harbor Android ${{ env.HARBOR_VERSION }} (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          make_latest: "true"
+          body: |
+            Android APK built from `${{ github.ref_name }}` @ ${{ github.sha }}.
+
+            Download **harbor-android.apk** below, open it on your phone and allow
+            "install from unknown sources" when Android asks.
+          files: android/app/build/outputs/apk/release/harbor-android.apk
 
       - uses: actions/upload-artifact@v4
         with:

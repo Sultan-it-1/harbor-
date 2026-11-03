@@ -23,6 +23,12 @@ Offering things like a native player, a stream ranking engine, Wikidata, watch p
 
 <br/>
 
+<a href="https://github.com/Sultan-it-1/harbor-/releases/latest/download/harbor-android.apk"><img alt="Download for Android" src="https://img.shields.io/badge/Download-Android%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
+
+<sub>Latest APK · <a href="https://github.com/Sultan-it-1/harbor-/releases">all releases</a></sub>
+
+<br/><br/>
+
 [Why Harbor](#why-harbor) &middot; [Features](#feature-tour) &middot; [Install](#install) &middot; [Configuration](#configuration) &middot; [Architecture](#architecture) &middot; [FAQ](#faq) &middot; [Contributing](#contributing)
 
 </div>
