@@ -373,6 +373,8 @@ export function ViewProvider({ children }: { children: ReactNode }) {
   // the view stack; returning false lets the shell send the app to the background.
   const stackDepthRef = useRef(stack.length);
   stackDepthRef.current = stack.length;
+  const rootKindRef = useRef(stack[0].kind);
+  rootKindRef.current = stack[0].kind;
   useEffect(() => {
     if (typeof window === "undefined" || !window.HarborAndroid) return;
     let lastModal: Element | null = null;
@@ -388,6 +390,12 @@ export function ViewProvider({ children }: { children: ReactNode }) {
       lastModal = null;
       if (stackDepthRef.current > 1) {
         pop();
+        return true;
+      }
+      // Top-level tabs (Anime, Discover, Movies…) replace the stack, so back from one
+      // goes Home instead of leaving the app.
+      if (rootKindRef.current !== "home") {
+        setStack([{ kind: "home" }]);
         return true;
       }
       return false;

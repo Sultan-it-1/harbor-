@@ -14,6 +14,8 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Toast
+import androidx.core.view.ViewCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
@@ -39,13 +41,31 @@ class MainActivity : ComponentActivity() {
     private lateinit var fetcher: NativeFetch
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+    private var fullscreen = false
+    private var lastBackAt = 0L
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        // Draw edge-to-edge on every Android version (15+ forces it anyway) and pad the
+        // content ourselves, so the UI never slides under the status bar / notch / nav bar.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
 
         root = FrameLayout(this).apply { setBackgroundColor(0xFF000000.toInt()) }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            if (fullscreen) {
+                v.setPadding(0, 0, 0, 0)
+            } else {
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+                v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            }
+            WindowInsetsCompat.CONSUMED
+        }
         webView = WebView(this).apply { setBackgroundColor(0xFF000000.toInt()) }
         root.addView(webView, FrameLayout.LayoutParams(MATCH, MATCH))
         setContentView(root)
@@ -108,7 +128,18 @@ class MainActivity : ComponentActivity() {
                 "(function(){try{return !!(window.__harborAndroidBack&&window.__harborAndroidBack())}catch(e){return false}})()",
             ) { handled ->
                 if (handled != "true") {
-                    if (webView.canGoBack()) webView.goBack() else moveTaskToBack(true)
+                    if (webView.canGoBack()) {
+                        webView.goBack()
+                    } else {
+                        // On Home: a single back swipe shouldn't drop you out of the app.
+                        val now = System.currentTimeMillis()
+                        if (now - lastBackAt < 2000) {
+                            moveTaskToBack(true)
+                        } else {
+                            lastBackAt = now
+                            Toast.makeText(this, "اسحب رجوع مرة ثانية للخروج", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         }
@@ -125,13 +156,14 @@ class MainActivity : ComponentActivity() {
 
     fun setFullscreenMode(on: Boolean) {
         val ctl = WindowInsetsControllerCompat(window, window.decorView)
-        WindowCompat.setDecorFitsSystemWindows(window, !on)
+        fullscreen = on
         if (on) {
             ctl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             ctl.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             ctl.show(WindowInsetsCompat.Type.systemBars())
         }
+        ViewCompat.requestApplyInsets(root)
     }
 
     private fun openExternally(uri: Uri) {

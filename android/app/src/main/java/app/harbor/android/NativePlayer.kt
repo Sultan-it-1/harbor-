@@ -5,7 +5,11 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.annotation.SuppressLint
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
+import android.widget.Toast
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -21,6 +25,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -42,6 +47,9 @@ class NativePlayer(
     private var source: JSONObject? = null
     private var droppedSubs = false
     private val handler = Handler(Looper.getMainLooper())
+    // Pinch out = fill the screen (crop), pinch in = fit the whole picture. Kept across videos.
+    private var resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+    private var pinched = false
     private val ticker = object : Runnable {
         override fun run() {
             sendState()
@@ -159,6 +167,8 @@ class NativePlayer(
             pv.setShowNextButton(false)
             pv.setShowPreviousButton(false)
             pv.keepScreenOn = true
+            pv.resizeMode = resizeMode
+            attachPinch(pv)
             root.addView(pv, FrameLayout.LayoutParams(MainActivity.MATCH, MainActivity.MATCH))
             view = pv
         }
@@ -167,6 +177,43 @@ class NativePlayer(
         v.bringToFront()
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         activity.setFullscreenMode(true)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun attachPinch(pv: PlayerView) {
+        var gestureScale = 1f
+        val detector = ScaleGestureDetector(activity, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
+                gestureScale = 1f
+                pinched = true
+                return true
+            }
+
+            override fun onScale(d: ScaleGestureDetector): Boolean {
+                gestureScale *= d.scaleFactor
+                val want = when {
+                    gestureScale > 1.08f -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    gestureScale < 0.92f -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    else -> return true
+                }
+                if (want != resizeMode) {
+                    resizeMode = want
+                    pv.resizeMode = want
+                    Toast.makeText(
+                        activity,
+                        if (want == AspectRatioFrameLayout.RESIZE_MODE_ZOOM) "ملء الشاشة" else "الحجم الأصلي",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                return true
+            }
+        })
+        pv.setOnTouchListener { _, ev ->
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN) pinched = false
+            detector.onTouchEvent(ev)
+            // Swallow the two-finger gesture (and its final lift) so it doesn't toggle the controls.
+            pinched || ev.pointerCount > 1
+        }
     }
 
     fun command(json: String) {
