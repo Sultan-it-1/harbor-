@@ -6,6 +6,7 @@ import { clearOnePickerCache } from "@/lib/picker-cache";
 import { resolveViaDebrids } from "@/lib/streams/resolve";
 import { registerStreamProxy } from "@/lib/stream-proxy";
 import { buildTranscodedUrl, probeStremioServer } from "@/lib/stremio-server";
+import { isWeb } from "@/lib/platform";
 import type { DebridStore } from "@/lib/debrid/types";
 import type { Meta } from "@/lib/cinemeta";
 import type { PlayerSrc, PlayEpisode } from "@/lib/view";
@@ -68,9 +69,14 @@ export function useAutoRetry(params: {
   const debridFailoverTriedRef = useRef(false);
   const liveRetryCountRef = useRef(0);
   const [transcodedUrl, setTranscodedUrl] = useState<string | null>(null);
+  // "trying": the HTML5 engine played video with no decodable audio (AC3/EAC3/DTS/TrueHD)
+  // and we're re-routing it through the streaming server's HLS transcoder (audio -> AAC).
+  // "failed": no transcoder reachable or the transcoded stream is still silent.
+  const [audioFix, setAudioFix] = useState<"idle" | "trying" | "failed">("idle");
   useEffect(() => {
     autoRetriedRef.current = false;
     transcodedTriedRef.current = false;
+    setAudioFix("idle");
     sameUrlRetriedRef.current = false;
     debridFailoverTriedRef.current = false;
     liveRetryCountRef.current = 0;
@@ -223,6 +229,43 @@ export function useAutoRetry(params: {
     engineFailure,
   ]);
 
+  // Silent playback: the browser decoded the video but none of the audio (it can't
+  // decode Dolby/DTS tracks). There is no mpv in a browser, so on web we always try the
+  // streaming server's transcoder; on desktop only when the user enabled it (auto mode
+  // there falls back to mpv instead).
+  useEffect(() => {
+    if (!snap.noAudio) return;
+    if (isLive || isLocal) return;
+    if (transcodedUrl != null || transcodedTriedRef.current) {
+      if (transcodedUrl != null) setAudioFix((s) => (s === "trying" ? s : "failed"));
+      return;
+    }
+    if (!isWeb() && !stremioServerTranscode) return;
+    if (src.url.includes("/hlsv2/")) {
+      setAudioFix("failed");
+      return;
+    }
+    transcodedTriedRef.current = true;
+    setAudioFix("trying");
+    const url = src.url;
+    void probeStremioServer().then((ok) => {
+      if (urlSeenRef.current !== url) return;
+      if (ok) {
+        console.warn("[player] no decodable audio — retrying via streaming-server transcoding (AAC)");
+        setTranscodedUrl(buildTranscodedUrl(url));
+      } else {
+        console.warn("[player] no decodable audio and no streaming server reachable for transcoding");
+        setAudioFix("failed");
+      }
+    });
+  }, [snap.noAudio, isLive, isLocal, transcodedUrl, stremioServerTranscode, src.url]);
+
+  // The transcoded load resets snap.noAudio; once that happens the attempt is in flight
+  // and the warning may show again only if the new stream is silent too.
+  useEffect(() => {
+    if (audioFix === "trying" && transcodedUrl != null && !snap.noAudio) setAudioFix("idle");
+  }, [audioFix, transcodedUrl, snap.noAudio]);
+
   const lastPosRef = useRef({ pos: 0, at: 0, started: false, urlAt: 0 });
   useEffect(() => {
     lastPosRef.current = { pos: 0, at: 0, started: false, urlAt: Date.now() };
@@ -349,5 +392,5 @@ export function useAutoRetry(params: {
     return () => window.clearInterval(id);
   }, [isP2pEngine, snap.status, engineFailure, triggerAutoRetry]);
 
-  return { slowLoad, transcodedUrl };
+  return { slowLoad, transcodedUrl, audioFixPending: audioFix === "trying" };
 }

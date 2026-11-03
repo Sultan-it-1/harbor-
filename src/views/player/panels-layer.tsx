@@ -29,6 +29,7 @@ export function PanelsLayer({
   showHeaderWarning,
   showNoAudioWarning,
   onUseMpv,
+  noAudioVlcUrl,
   onDismissNoAudio,
   onPickAnother,
 }: {
@@ -54,6 +55,7 @@ export function PanelsLayer({
   showHeaderWarning: boolean;
   showNoAudioWarning: boolean;
   onUseMpv: () => void;
+  noAudioVlcUrl: string | null;
   onDismissNoAudio: () => void;
   onPickAnother: () => void;
 }) {
@@ -115,7 +117,12 @@ export function PanelsLayer({
 
       {showHeaderWarning && <HeaderWarning onPickAnother={onPickAnother} />}
       {showNoAudioWarning && (
-        <NoAudioWarning onUseMpv={onUseMpv} onDismiss={onDismissNoAudio} />
+        <NoAudioWarning
+          onUseMpv={onUseMpv}
+          vlcUrl={noAudioVlcUrl}
+          onPickAnother={onPickAnother}
+          onDismiss={onDismissNoAudio}
+        />
       )}
     </>
   );

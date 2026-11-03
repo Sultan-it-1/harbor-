@@ -3,6 +3,7 @@ import { resolveChromeTheme } from "@/lib/theme";
 import { type PlayerBridge } from "@/lib/player/bridge";
 import { useDebridClients } from "@/lib/debrid/registry";
 import { useSettings } from "@/lib/settings";
+import { isWeb } from "@/lib/platform";
 import { writePlayerVolume } from "@/lib/player-volume";
 import { nameColor } from "@/lib/together/colors";
 import { useTogether } from "@/lib/together/provider";
@@ -131,7 +132,7 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
   const cast = usePlayerCast({ src, debrids, snapRef, bridgeRef, settings });
   const [now, setNow] = useState(() => Date.now());
   const { pipMode, togglePipMode, exitPip } = usePipMode({ bridgeRef, setChromeHidden });
-  const { slowLoad, transcodedUrl } = useAutoRetry({
+  const { slowLoad, transcodedUrl, audioFixPending } = useAutoRetry({
     bridgeRef,
     src,
     snap,
@@ -373,7 +374,9 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     snap.noAudio === true &&
     !noAudioDismissed &&
     !liveOverlay.isLive &&
-    settings.playerEngine !== "auto";
+    !audioFixPending &&
+    // On desktop "auto" silently falls back to mpv; a browser has no mpv, so always warn there.
+    (isWeb() || settings.playerEngine !== "auto");
 
   const { inRoomRef, isHostRef, initialSyncDoneRef } = useRoomSync({
     inRoom,
@@ -770,6 +773,7 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     showHeaderWarning: showHeaderWarning && !streamPillVariant,
     showNoAudioWarning,
     onUseMpv: () => update({ playerEngine: "mpv" }),
+    noAudioVlcUrl: isWeb() ? src.url : null,
     onDismissNoAudio: () => setNoAudioDismissed(true),
     // Text-sync props (preserved from fork)
     onEnterSync: handleEnterSync,

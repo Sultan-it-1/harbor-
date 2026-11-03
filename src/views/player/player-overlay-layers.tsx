@@ -161,6 +161,7 @@ export type PlayerOverlayLayersProps = {
   showHeaderWarning: boolean;
   showNoAudioWarning: boolean;
   onUseMpv: () => void;
+  noAudioVlcUrl: string | null;
   onDismissNoAudio: () => void;
   // Text-sync feature
   onEnterSync?: () => void;
@@ -434,6 +435,7 @@ export function PlayerOverlayLayers(p: PlayerOverlayLayersProps) {
         showHeaderWarning={p.showHeaderWarning}
         showNoAudioWarning={p.showNoAudioWarning}
         onUseMpv={p.onUseMpv}
+        noAudioVlcUrl={p.noAudioVlcUrl}
         onDismissNoAudio={p.onDismissNoAudio}
         onPickAnother={p.pickAnotherOrGuide}
       />
