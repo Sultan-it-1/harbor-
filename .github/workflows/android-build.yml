@@ -32,7 +32,11 @@ jobs:
           cache: pnpm
 
       - name: Install JS deps
-        run: pnpm install --frozen-lockfile
+        run: |
+          # mpegts.js pulls a dependency straight from GitHub; never try SSH for it.
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          pnpm install --frozen-lockfile
 
       - name: Build web UI
         run: pnpm run build
