@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { AwardLogo, laurelColorFor } from "@/components/icons/award-logo";
 import { Laurel } from "@/components/icons/laurel";
 import { useT } from "@/lib/i18n";
@@ -16,6 +17,8 @@ const AWARDS: Array<{ type: AwardType; name: string; sub: string }> = [
   { type: "venice", name: "Venice", sub: "Golden Lion" },
   { type: "berlin", name: "Berlinale", sub: "Golden Bear" },
 ];
+
+const PHONE = isPhoneLayout();
 
 export function AwardTiles() {
   const t = useT();
@@ -58,9 +61,9 @@ function AwardTile({ type, name, sub }: { type: AwardType; name: string; sub: st
           </Laurel>
         </span>
       </div>
-      <div className="absolute inset-x-5 bottom-4 flex items-end justify-between gap-2">
+      <div className={`absolute flex items-end justify-between gap-2 ${PHONE ? "inset-x-3.5 bottom-3" : "inset-x-5 bottom-4"}`}>
         <div className="flex min-w-0 flex-col">
-          <h3 className="truncate font-display text-[21px] font-medium leading-tight tracking-tight text-white drop-shadow-[0_2px_14px_rgba(0,0,0,0.5)]">
+          <h3 className={`font-display font-medium leading-tight tracking-tight text-white drop-shadow-[0_2px_14px_rgba(0,0,0,0.5)] ${PHONE ? "line-clamp-2 text-[15px]" : "truncate text-[21px]"}`}>
             {t(name)}
           </h3>
           <span className="truncate text-[11.5px] font-medium text-white/65">{t(sub)}</span>

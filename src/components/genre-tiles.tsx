@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useEffect, useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import { fetchGenreSample } from "@/lib/feed";
@@ -50,6 +51,8 @@ const TILES: string[] = [
   "Documentary",
   "Music",
 ];
+
+const PHONE = isPhoneLayout();
 
 export function GenreTiles() {
   const t = useT();
@@ -113,9 +116,9 @@ function GenreTile({ genre }: { genre: string }) {
           background: `linear-gradient(to bottom, transparent, ${palette.to})`,
         }}
       />
-      <div className="absolute inset-x-5 bottom-5 flex items-end justify-between">
+      <div className={`absolute flex items-end justify-between ${PHONE ? "inset-x-3.5 bottom-3" : "inset-x-5 bottom-5"}`}>
         <h3
-          className="font-display text-[26px] font-medium leading-tight tracking-tight drop-shadow-[0_2px_18px_rgba(0,0,0,0.4)]"
+          className={`font-display font-medium leading-tight tracking-tight drop-shadow-[0_2px_18px_rgba(0,0,0,0.4)] ${PHONE ? "text-[18px]" : "text-[26px]"}`}
           style={{ color: palette.ink }}
         >
           {t(genre)}

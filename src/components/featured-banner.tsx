@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useEffect, useRef, useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import { observe, usePageVisible } from "@/lib/visibility";
@@ -8,6 +9,8 @@ import { Dots } from "./featured-banner/stepper";
 import type { LightboxState } from "./featured-banner/types";
 
 const ROTATE_MS = 14000;
+
+const PHONE = isPhoneLayout();
 
 export function FeaturedBanner({ items }: { items: Meta[] }) {
   const [active, setActive] = useState(0);
@@ -44,23 +47,27 @@ export function FeaturedBanner({ items }: { items: Meta[] }) {
   return (
     <section
       ref={ref}
-      className="flex flex-col gap-5"
+      className={`flex flex-col ${PHONE ? "gap-3" : "gap-5"}`}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <h2 className="font-display text-[28px] font-medium leading-tight tracking-tight text-ink">
+      <h2 className={`font-display font-medium leading-tight tracking-tight text-ink ${PHONE ? "text-[22px]" : "text-[28px]"}`}>
         Featured & Recommended
       </h2>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-4">
+      {PHONE ? (
         <BigCardStack items={items} active={safeActive} onPrev={goPrev} onNext={goNext} />
-        <SidePanel
-          meta={current}
-          activeIndex={safeActive}
-          total={items.length}
-          onOpenLightbox={setLightbox}
-        />
-      </div>
+      ) : (
+        <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-4">
+          <BigCardStack items={items} active={safeActive} onPrev={goPrev} onNext={goNext} />
+          <SidePanel
+            meta={current}
+            activeIndex={safeActive}
+            total={items.length}
+            onOpenLightbox={setLightbox}
+          />
+        </div>
+      )}
 
       <Dots count={items.length} active={safeActive} onJump={setActive} />
 
@@ -77,6 +84,7 @@ export function FeaturedBanner({ items }: { items: Meta[] }) {
 }
 
 function BannerSkeleton() {
+  if (PHONE) return <div className="h-[min(58vh,480px)] animate-pulse rounded-2xl bg-elevated/30" />;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-4">
       <div className="aspect-[16/9] animate-pulse rounded-2xl bg-elevated/30" />

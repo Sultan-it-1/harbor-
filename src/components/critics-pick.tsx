@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { ChevronLeft, ChevronRight, ExternalLink, Play, Quote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { narrowMediaType, type Meta } from "@/lib/cinemeta";
@@ -21,6 +22,8 @@ import { ImdbIcon } from "./icons/imdb-icon";
 import { MetaAwardsCorner } from "./meta-awards-corner";
 import { Poster } from "./poster";
 import { RtBadge } from "./rt-badge";
+
+const PHONE = isPhoneLayout();
 
 export function CriticsPick({ meta }: { meta: Meta }) {
   const { settings } = useSettings();
@@ -187,18 +190,18 @@ export function CriticsPick({ meta }: { meta: Meta }) {
   return (
     <section className="flex flex-col gap-5">
       <div className="flex items-baseline justify-between">
-        <h2 className="font-display text-[28px] font-medium leading-tight tracking-tight text-ink">
+        <h2 className={`font-display font-medium leading-tight tracking-tight text-ink ${PHONE ? "text-[20px]" : "text-[28px]"}`}>
           Critics' Pick
         </h2>
-        <span className="text-[12px] uppercase tracking-[0.22em] text-ink-subtle">
+        <span className={`uppercase text-ink-subtle ${PHONE ? "text-[10.5px] tracking-[0.16em]" : "text-[12px] tracking-[0.22em]"}`}>
           Loved by reviewers today
         </span>
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] items-stretch gap-4">
+      <div className={PHONE ? "flex flex-col gap-3" : "grid grid-cols-[minmax(0,1fr)_360px] items-stretch gap-4"}>
         <button
           type="button"
           onClick={() => openMeta({ ...meta, logo: logo ?? meta.logo })}
-          className="group relative min-h-[520px] overflow-hidden rounded-2xl border border-edge-soft bg-canvas text-start transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0.24,1)] hover:-translate-y-1"
+          className={`group relative overflow-hidden rounded-2xl ${PHONE ? "min-h-[300px]" : "min-h-[520px]"} border border-edge-soft bg-canvas text-start transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0.24,1)] hover:-translate-y-1`}
           style={{ isolation: "isolate" }}
         >
           {(() => {
@@ -231,7 +234,7 @@ export function CriticsPick({ meta }: { meta: Meta }) {
             <Play size={18} fill="currentColor" />
           </div>
           <MetaAwardsCorner meta={meta} imdbId={resolvedImdb} />
-          <div className="absolute inset-x-7 bottom-7 flex flex-col gap-2.5">
+          <div className={`absolute flex flex-col gap-2.5 ${PHONE ? "inset-x-5 bottom-5" : "inset-x-7 bottom-7"}`}>
             <div className="relative flex min-h-[56px] flex-col justify-end">
               {logo ? (
                 <img
@@ -247,7 +250,7 @@ export function CriticsPick({ meta }: { meta: Meta }) {
                   }}
                 />
               ) : (
-                <h3 className="font-display text-[36px] font-medium leading-[1.0] tracking-tight text-ink drop-shadow-[0_2px_22px_rgba(0,0,0,0.55)]">
+                <h3 className={`font-display font-medium leading-[1.0] tracking-tight text-ink drop-shadow-[0_2px_22px_rgba(0,0,0,0.55)] ${PHONE ? "text-[28px]" : "text-[36px]"}`}>
                   {meta.name}
                 </h3>
               )}

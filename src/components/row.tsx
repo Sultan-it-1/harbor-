@@ -79,7 +79,10 @@ function LazyChild({
       style={{
         ...(span ? { gridColumn: span } : undefined),
         contentVisibility: visible ? "visible" : "auto",
-        containIntrinsicSize: visible ? undefined : "auto 200px",
+        // Off-screen cells must not set the row height: a 200px placeholder made rows of
+        // shorter cards (genre/award tiles, landscape cards) leave a big empty band below.
+        // The eager, on-screen cells define the height; the rest match it once rendered.
+        containIntrinsicSize: visible ? undefined : "auto 1px",
       }}
     >
       {visible ? children : <Skeleton shape={shape} />}

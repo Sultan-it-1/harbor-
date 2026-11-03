@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useEffect, useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import { useT } from "@/lib/i18n";
@@ -30,6 +31,8 @@ const LANGS: Lang[] = [
   { iso: "nl", name: "Dutch", endonym: "Nederlands", hue: 80 },
   { iso: "ar", name: "Arabic", endonym: "العربية", hue: 165 },
 ];
+
+const PHONE = isPhoneLayout();
 
 export function LanguageTiles() {
   const t = useT();
@@ -92,15 +95,15 @@ function LanguageTile({ lang }: { lang: Lang }) {
         style={{ background: `linear-gradient(to bottom, transparent, ${to})` }}
       />
       <span
-        className="pointer-events-none absolute end-4 top-3 select-none font-display text-[34px] font-medium leading-none opacity-25"
+        className={`pointer-events-none absolute end-4 top-3 select-none font-display font-medium leading-none opacity-25 ${PHONE ? "text-[24px]" : "text-[34px]"}`}
         style={{ color: ink }}
         aria-hidden
       >
         {lang.endonym}
       </span>
-      <div className="absolute inset-x-5 bottom-5 flex items-end justify-between">
+      <div className={`absolute flex items-end justify-between ${PHONE ? "inset-x-3.5 bottom-3" : "inset-x-5 bottom-5"}`}>
         <h3
-          className="font-display text-[26px] font-medium leading-tight tracking-tight drop-shadow-[0_2px_18px_rgba(0,0,0,0.4)]"
+          className={`font-display font-medium leading-tight tracking-tight drop-shadow-[0_2px_18px_rgba(0,0,0,0.4)] ${PHONE ? "text-[18px]" : "text-[26px]"}`}
           style={{ color: ink }}
         >
           {t(lang.name)}

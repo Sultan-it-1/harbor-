@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
@@ -22,6 +23,8 @@ function seedLogos(tmdbKey: string, items: Meta[]): LogoMap {
   }
   return seed;
 }
+
+const PHONE = isPhoneLayout();
 
 export function BigCardStack({
   items,
@@ -137,7 +140,7 @@ export function BigCardStack({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
-      className={`group relative block h-full min-h-[420px] w-full min-w-0 overflow-hidden rounded-2xl border border-edge-soft bg-canvas text-start transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0.24,1)] hover:-translate-y-1 ${
+      className={`group relative block w-full min-w-0 overflow-hidden rounded-2xl ${PHONE ? "h-[min(58vh,480px)]" : "h-full min-h-[420px]"} border border-edge-soft bg-canvas text-start transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0.24,1)] hover:-translate-y-1 ${
         dragging ? "cursor-grabbing select-none" : "cursor-pointer"
       }`}
       style={{ isolation: "isolate", touchAction: "pan-y" }}
@@ -179,11 +182,11 @@ export function BigCardStack({
             "linear-gradient(to top, oklch(0.10 0.02 260 / 0.92) 0%, oklch(0.10 0.02 260 / 0.20) 38%, transparent 60%)",
         }}
       />
-      <div className="absolute start-7 top-6 flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-accent">
+      <div className={`absolute flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-accent ${PHONE ? "start-4 top-4" : "start-7 top-6"}`}>
         <span className="rounded-full bg-canvas/55 px-2.5 py-1">{t("Featured")}</span>
       </div>
       <div
-        className="absolute inset-x-7 bottom-7 flex flex-col gap-3"
+        className={`absolute flex flex-col ${PHONE ? "inset-x-4 bottom-4 gap-2 pe-24" : "inset-x-7 bottom-7 gap-3"}`}
         style={{ transition: `opacity ${FADE_MS}ms ease-out` }}
       >
         <TitlePlate title={current.name} logo={logo} />
@@ -199,11 +202,14 @@ export function BigCardStack({
             </>
           )}
         </div>
+        {PHONE && current.description && (
+          <p className="line-clamp-2 text-[13px] leading-snug text-ink/75">{current.description}</p>
+        )}
       </div>
-      <div className="pointer-events-none absolute end-7 top-6 z-10">
+      <div className={`pointer-events-none absolute z-10 ${PHONE ? "end-4 top-4" : "end-7 top-6"}`}>
         <MetaAwardsCorner meta={current} imdbId={resolvedImdb} />
       </div>
-      {onPrev && items.length > 1 && (
+      {!PHONE && onPrev && items.length > 1 && (
         <button
           type="button"
           data-no-drag
@@ -219,7 +225,7 @@ export function BigCardStack({
           <ChevronLeft size={22} strokeWidth={2.2} className="dir-icon" />
         </button>
       )}
-      {onNext && items.length > 1 && (
+      {!PHONE && onNext && items.length > 1 && (
         <button
           type="button"
           data-no-drag
@@ -249,7 +255,7 @@ function TitlePlate({ title, logo }: { title: string; logo?: string }) {
   }, [logo]);
   const showLogo = !!logo && !logoFailed;
   return (
-    <div className="relative flex min-h-[64px] flex-col justify-end">
+    <div className={`relative flex flex-col justify-end ${PHONE ? "min-h-[44px]" : "min-h-[64px]"}`}>
       {showLogo ? (
         <img
           src={logo}
@@ -257,14 +263,14 @@ function TitlePlate({ title, logo }: { title: string; logo?: string }) {
           decoding="async"
           onLoad={() => setLogoLoaded(true)}
           onError={() => setLogoFailed(true)}
-          className="max-h-[88px] w-auto max-w-[58%] object-contain object-left rtl:object-right drop-shadow-[0_4px_20px_rgba(0,0,0,0.55)]"
+          className={`w-auto object-contain ${PHONE ? "max-h-[60px] max-w-[70%]" : "max-h-[88px] max-w-[58%]"} object-left rtl:object-right drop-shadow-[0_4px_20px_rgba(0,0,0,0.55)]`}
           style={{
             opacity: logoLoaded ? 1 : 0,
             transition: "opacity 420ms cubic-bezier(0.32, 0.72, 0.24, 1)",
           }}
         />
       ) : (
-        <h3 className="font-display text-[42px] font-medium leading-[1.0] tracking-tight text-ink drop-shadow-[0_2px_22px_rgba(0,0,0,0.6)]">
+        <h3 className={`font-display font-medium leading-[1.0] tracking-tight text-ink drop-shadow-[0_2px_22px_rgba(0,0,0,0.6)] ${PHONE ? "text-[28px]" : "text-[42px]"}`}>
           {title}
         </h3>
       )}

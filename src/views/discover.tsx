@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/back-to-top";
 import { CollectionsRow } from "@/components/collections-row";
@@ -37,6 +38,8 @@ const MAX_RAIL_PAGES = 10;
 const MIN_PAGE_YIELD = 4;
 const ROW_COUNT = 14;
 const DEDUP_PRIORITY = [ANCHOR_TOP_RATED, ANCHOR_AWARDS];
+
+const PHONE = isPhoneLayout();
 
 export function Discover({ active = true }: { active?: boolean }) {
   const scrollRef = useRef<HTMLElement>(null);
@@ -266,12 +269,12 @@ export function Discover({ active = true }: { active?: boolean }) {
   );
 
   return (
-    <main ref={scrollCb} className="flex-1 overflow-y-auto px-12 pb-20 pt-28">
+    <main ref={scrollCb} className={`flex-1 overflow-y-auto ${PHONE ? "px-4 pb-10 pt-20" : "px-12 pb-20 pt-28"}`}>
       <ScrollRootContext.Provider value={scrollEl}>
-        <div data-tauri-drag-region className="flex flex-col gap-14">
+        <div data-tauri-drag-region className={`flex flex-col ${PHONE ? "gap-8" : "gap-14"}`}>
           <div className="relative">
             <FeaturedBanner items={featured} />
-            <div className="absolute end-0 bottom-4 z-10">
+            <div className={`absolute end-0 z-10 ${PHONE ? "-bottom-7" : "bottom-4"}`}>
               <CatalogCustomizeBar
                 editMode={pageRows.editMode}
                 hasChanges={hasPageRowChanges(pageRows.custom)}
@@ -314,7 +317,7 @@ export function Discover({ active = true }: { active?: boolean }) {
               })
             : visibleRails.map((item, i) => (
                 <Fragment key={item.key}>
-                  <LazyMount minHeight={340}>
+                  <LazyMount minHeight={PHONE ? 240 : 340}>
                     <Rail
                       railId={item.key}
                       allRails={dailyRows}
