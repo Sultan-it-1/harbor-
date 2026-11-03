@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -31,6 +32,8 @@ import {
   MONTH_NAMES,
   normalizeName,
 } from "./calendar/utils";
+
+const PHONE = isPhoneLayout();
 
 export function CalendarView() {
   const t = useT();
@@ -157,13 +160,13 @@ export function CalendarView() {
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-edge-soft px-12 pb-5 pt-24">
-        <div className="flex items-end justify-between gap-6">
+      <header className={`shrink-0 border-b border-edge-soft ${PHONE ? "px-4 pb-4 pt-20" : "px-12 pb-5 pt-24"}`}>
+        <div className={PHONE ? "flex flex-wrap items-end justify-between gap-x-4 gap-y-3" : "flex items-end justify-between gap-6"}>
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.32em] text-ink-subtle">
               {t("Releases")}
             </span>
-            <h1 className="font-display text-[44px] font-medium leading-none tracking-tight text-ink">
+            <h1 className={`font-display font-medium leading-none tracking-tight text-ink ${PHONE ? "text-[32px]" : "text-[44px]"}`}>
               {t("Calendar")}
             </h1>
           </div>
@@ -181,7 +184,7 @@ export function CalendarView() {
             >
               {t("Today")}
             </button>
-            <div className="flex h-10 min-w-[150px] items-center justify-center gap-2 rounded-full border border-edge-soft px-5 text-[14px] font-semibold text-ink">
+            <div className={`flex h-10 items-center justify-center gap-2 rounded-full border border-edge-soft text-[14px] font-semibold text-ink ${PHONE ? "px-3" : "min-w-[150px] px-5"}`}>
               <CalendarIcon size={14} strokeWidth={2} className="text-ink-subtle" />
               {t(MONTH_NAMES[month])} {year}
             </div>
@@ -194,13 +197,15 @@ export function CalendarView() {
             </button>
           </div>
         </div>
-        <nav className="mt-6 flex flex-wrap items-center gap-3">
+        <nav className={`flex flex-wrap items-center gap-3 ${PHONE ? "mt-4" : "mt-6"}`}>
+          <div className={PHONE ? "-mx-4 max-w-[100vw] overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "contents"}>
           <SourceSwitcher
             value={source}
             onChange={(s) => update({ calendarSource: s })}
             traktConnected={traktConnected}
             simklConnected={simklConnected}
           />
+          </div>
           <button
             onClick={() => update({ weekStartsMonday: !settings.weekStartsMonday })}
             className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors ${
@@ -273,7 +278,7 @@ export function CalendarView() {
         </nav>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-12 py-8">{body}</div>
+      <div ref={scrollRef} className={`flex-1 overflow-y-auto ${PHONE ? "px-3 py-5" : "px-12 py-8"}`}>{body}</div>
 
       {dayModal && dayModalItems.length > 0 && (
         <DayModal

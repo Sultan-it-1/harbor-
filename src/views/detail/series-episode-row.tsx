@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Check, Eye, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { EpisodeRatingBadge } from "./episode-rating-badge";
@@ -13,6 +14,8 @@ import { useT } from "@/lib/i18n";
 import { NewBadge, UpcomingBadge } from "./badges";
 import { EpisodeDownloadButton } from "./episode-download-button";
 import { isNewEpisode, isUpcomingEpisode } from "./helpers";
+
+const PHONE = isPhoneLayout();
 
 export function EpisodeRow({
   meta,
@@ -64,13 +67,13 @@ export function EpisodeRow({
       data-ep={ep.episodeNumber}
       data-no-card-ring
       onContextMenu={(e) => onContextMenu?.(e, ep.seasonNumber, ep.episodeNumber, progress.watched)}
-      className="group flex gap-6 rounded-2xl px-4 py-5 transition-colors hover:bg-elevated/30"
+      className={`group flex rounded-2xl transition-colors hover:bg-elevated/30 ${PHONE ? "items-center gap-1.5 px-1 py-3" : "gap-6 px-4 py-5"}`}
     >
       <button
         onClick={() => openPicker(meta, playEpisode, { autoPlay: settings.instantPlay })}
-        className="flex min-w-0 flex-1 gap-6 text-start"
+        className={`flex min-w-0 flex-1 text-start ${PHONE ? "gap-3" : "gap-6"}`}
       >
-        <div className="relative w-[200px] shrink-0 overflow-hidden rounded-lg">
+        <div className={`relative shrink-0 self-start overflow-hidden rounded-lg ${PHONE ? "w-[132px]" : "w-[200px]"}`}>
           <div className={spoiler?.thumb ? SPOILER_THUMB_CLASS : undefined}>
             <Poster
               src={still}
@@ -108,7 +111,7 @@ export function EpisodeRow({
           )}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <h4 className="flex items-center gap-2 truncate text-[16px] font-semibold text-ink">
+          <h4 className={`flex items-center gap-2 truncate font-semibold text-ink ${PHONE ? "text-[14px]" : "text-[16px]"}`}>
             <span className={`truncate ${spoiler?.title ? SPOILER_TEXT_CLASS : ""}`}>
               {ep.name || t("Episode {n}", { n: ep.episodeNumber })}
             </span>
@@ -149,7 +152,7 @@ export function EpisodeRow({
         onClick={() => openEpisodeDetail(meta.id, ep.seasonNumber, ep.episodeNumber, meta)}
         aria-label={t("Episode details")}
         title={t("Episode details")}
-        className="flex h-10 w-10 shrink-0 items-center justify-center self-center rounded-full text-ink-subtle transition-colors hover:bg-elevated hover:text-ink"
+        className={`flex shrink-0 items-center justify-center self-center rounded-full text-ink-subtle transition-colors hover:bg-elevated hover:text-ink ${PHONE ? "h-8 w-8" : "h-10 w-10"}`}
       >
         <Eye size={18} strokeWidth={2} />
       </button>

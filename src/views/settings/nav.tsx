@@ -566,6 +566,13 @@ const SETTINGS_OPTIONS: SettingsOption[] = [
   { label: "Report a bug", section: "bug", keywords: ["bug report", "report", "feedback", "issue", "crash", "screenshot", "diagnostics"] },
 ];
 
+// Android app: hide sections that only affect the desktop engine / keyboard / the web
+// player chrome (the phone uses the native player).
+const PHONE_HIDDEN_SECTIONS = new Set<string>(["mpv", "playerLayout", "hotkeys"]);
+const VISIBLE_NAV_GROUPS = isPhoneLayout()
+  ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => !PHONE_HIDDEN_SECTIONS.has(it.id)) })).filter((g) => g.items.length > 0)
+  : NAV_GROUPS;
+
 export function SettingsNav({
   active,
   onChange,
@@ -589,7 +596,7 @@ export function SettingsNav({
   const matches = useMemo<NavItem[] | null>(() => {
     if (!trimmed) return null;
     const out: NavItem[] = [];
-    for (const group of NAV_GROUPS) {
+    for (const group of VISIBLE_NAV_GROUPS) {
       const groupHit = group.heading?.toLowerCase().includes(trimmed) ?? false;
       for (const item of group.items) {
         const hit =
@@ -820,7 +827,7 @@ export function SettingsNav({
             )}
           </div>
         )}
-        {!matches && NAV_GROUPS.map((group, gi) => (
+        {!matches && VISIBLE_NAV_GROUPS.map((group, gi) => (
           <div key={gi} className="flex flex-col gap-1">
             {group.heading && (
               <div className="px-3.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-subtle/80">

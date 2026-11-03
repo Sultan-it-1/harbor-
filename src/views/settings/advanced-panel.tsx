@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Check, Download, FlaskConical, Github, Link2, Loader2, Lock, RotateCw, Wrench } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import cornerSvg from "@/assets/corner.svg";
@@ -41,7 +42,7 @@ export function AdvancedPanel() {
   const t = useT();
   return (
     <>
-      {!isTauri && <WebBuildBanner />}
+      {!isTauri && !isPhoneLayout() && <WebBuildBanner />}
 
       {isTauri && (
         <Section
@@ -175,7 +176,7 @@ function WebBuildBanner() {
   const t = useT();
   return (
     <section className="relative overflow-hidden rounded-2xl border border-edge bg-elevated/60 p-7">
-      <div className="group absolute -end-6 bottom-0 aspect-square h-[82%] cursor-default">
+      <div className={`group absolute -end-6 bottom-0 aspect-square h-[82%] cursor-default ${isPhoneLayout() ? "hidden" : ""}`}>
         <img
           src={cornerSvg}
           alt=""

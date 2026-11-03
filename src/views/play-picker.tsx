@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { resolveAddonLogo } from "@/components/addon-logo";
@@ -551,7 +552,7 @@ export function PlayPicker({
 
       <div aria-hidden data-tauri-drag-region={fs ? "false" : "true"} className="absolute inset-x-0 top-0 z-10 h-20" />
 
-      <div className="relative mx-auto flex min-h-full w-full max-w-5xl flex-col gap-12 px-12 pb-32 pt-32">
+      <div className={`relative mx-auto flex min-h-full w-full max-w-5xl flex-col ${isPhoneLayout() ? "gap-6 px-4 pb-16 pt-20" : "gap-12 px-12 pb-32 pt-32"}`}>
         <PickerHeader meta={meta} episode={episode} onBack={backToDetail} onRefresh={refresh} refreshing={loading} />
 
         {hostSourceForMedia && <HostSourceBanner source={hostSourceForMedia} />}

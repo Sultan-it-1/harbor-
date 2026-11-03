@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Check, Play } from "lucide-react";
 import { Poster } from "@/components/poster";
 import type { Meta } from "@/lib/cinemeta";
@@ -11,6 +12,8 @@ import { useT } from "@/lib/i18n";
 import { FillerBadge, UpcomingBadge } from "../badges";
 import { EpisodeDownloadButton } from "../episode-download-button";
 import { isUpcomingDate } from "../helpers";
+
+const PHONE = isPhoneLayout();
 
 export function AnimeEpisodeRow({
   meta,
@@ -45,13 +48,13 @@ export function AnimeEpisodeRow({
       data-ep={ep.number}
       data-no-card-ring
       onContextMenu={(e) => onContextMenu?.(e, ep.seasonNumber || 1, ep.number, progress.watched)}
-      className="group flex gap-6 rounded-2xl px-4 py-5 transition-colors hover:bg-elevated/30"
+      className={`group flex rounded-2xl transition-colors hover:bg-elevated/30 ${PHONE ? "items-center gap-1.5 px-1 py-3" : "gap-6 px-4 py-5"}`}
     >
       <button
         onClick={() => openPicker(meta, playEpisode, { autoPlay: settings.instantPlay })}
-        className="flex min-w-0 flex-1 gap-6 text-start"
+        className={`flex min-w-0 flex-1 text-start ${PHONE ? "gap-3" : "gap-6"}`}
       >
-        <div className="relative w-[200px] shrink-0">
+        <div className={`relative shrink-0 self-start ${PHONE ? "w-[132px]" : "w-[200px]"}`}>
           <div className={spoiler?.thumb ? `overflow-hidden rounded-lg ${SPOILER_THUMB_CLASS}` : undefined}>
             <Poster src={ep.thumbnail ?? undefined} seed={String(ep.id)} ratio="landscape" className="rounded-lg" lazy fallbacks={[ep.thumbnailFallback, meta.background]} />
           </div>

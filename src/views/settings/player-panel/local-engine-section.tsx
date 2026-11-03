@@ -148,7 +148,7 @@ export function LocalEngineSection() {
         onChange={(v) => update({ playerP2pChip: v })}
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 [&>button]:whitespace-nowrap">
         <button
           type="button"
           onClick={() => void runTest()}

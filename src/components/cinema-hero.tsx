@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { ChevronRight, Info, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ImdbIcon } from "@/components/icons/imdb-icon";
@@ -341,10 +342,12 @@ function CinemaSlide({
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/70 via-30% to-transparent" />
       <MetaAwardsCorner meta={meta} imdbId={resolvedImdb} />
-      <div className="absolute inset-y-0 start-0 w-3/5 bg-gradient-to-r from-canvas/95 via-canvas/55 to-transparent rtl:bg-gradient-to-l" />
+      {!PHONE && (
+        <div className="absolute inset-y-0 start-0 w-3/5 bg-gradient-to-r from-canvas/95 via-canvas/55 to-transparent rtl:bg-gradient-to-l" />
+      )}
 
-      <div className="relative flex h-full items-end pb-28 ps-20 pe-20">
-        <div className="flex max-w-[640px] flex-col gap-5">
+      <div className={`relative flex h-full items-end ${PHONE ? "px-5 pb-16" : "pb-28 ps-20 pe-20"}`}>
+        <div className={`flex min-w-0 flex-col ${PHONE ? "w-full gap-3" : "max-w-[640px] gap-5"}`}>
           <span className="text-[11px] font-bold uppercase tracking-[0.42em] text-ink-subtle">
             {t(eyebrow)}
           </span>
@@ -376,11 +379,11 @@ function CinemaSlide({
             )}
           </div>
           {meta.description && (
-            <p className="line-clamp-2 max-w-[560px] text-[15.5px] leading-relaxed text-ink-muted">
+            <p className={PHONE ? "line-clamp-2 text-[14px] leading-snug text-ink-muted" : "line-clamp-2 max-w-[560px] text-[15.5px] leading-relaxed text-ink-muted"}>
               {meta.description}
             </p>
           )}
-          <div className="mt-2 flex items-center gap-3">
+          <div className={PHONE ? "mt-1 flex items-center gap-2.5 [&>button]:h-11 [&>button]:flex-1 [&>button]:justify-center [&>button]:px-4" : "mt-2 flex items-center gap-3"}>
             <button
               onClick={() => openPicker(meta, smartPlayEpisode(meta), { autoPlay: settings.instantPlay })}
               className="flex h-12 items-center gap-2.5 rounded-md bg-ink px-7 text-[14.5px] font-semibold text-canvas shadow-[0_8px_24px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.5)] transition-transform duration-200 hover:scale-[1.03] active:scale-[0.97]"
@@ -403,6 +406,8 @@ function CinemaSlide({
   );
 }
 
+const PHONE = isPhoneLayout();
+
 function CinemaTitlePlate({
   name,
   logo,
@@ -419,7 +424,7 @@ function CinemaTitlePlate({
   onError: () => void;
 }) {
   return (
-    <div className="relative flex min-h-[120px] items-end">
+    <div className={`relative flex items-end ${PHONE ? "min-h-[72px]" : "min-h-[120px]"}`}>
       {logo ? (
         <img
           src={logo}
@@ -427,7 +432,7 @@ function CinemaTitlePlate({
           decoding="async"
           onLoad={onLoad}
           onError={onError}
-          className="max-h-[140px] w-auto max-w-[520px] object-contain object-left rtl:object-right drop-shadow-[0_8px_28px_rgba(0,0,0,0.55)]"
+          className={`${PHONE ? "max-h-[84px] max-w-[80%]" : "max-h-[140px] max-w-[520px]"} w-auto object-contain object-left rtl:object-right drop-shadow-[0_8px_28px_rgba(0,0,0,0.55)]`}
           style={{
             opacity: loaded ? 1 : 0,
             transition: "opacity 360ms cubic-bezier(0.32, 0.72, 0.24, 1)",
@@ -435,7 +440,7 @@ function CinemaTitlePlate({
         />
       ) : resolved ? (
         <h2
-          className="font-display text-[72px] font-medium leading-[0.95] tracking-tight text-ink"
+          className={`font-display font-medium leading-[0.95] tracking-tight text-ink ${PHONE ? "text-[40px]" : "text-[72px]"}`}
           style={{ animation: "harbor-fade-in 420ms cubic-bezier(0.32, 0.72, 0.24, 1) both" }}
         >
           {name}

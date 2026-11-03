@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useEffect, useMemo, useRef, useState } from "react";
 import stremioWordmark from "@/assets/stremio-wordmark.png";
 import { AuthModal } from "@/components/auth-modal";
@@ -77,7 +78,7 @@ export function AccountStub() {
         title={t("Harbor identity")}
         subtitle={t("Your face in Watch Together rooms, sessions, and chat. Sits on top of your Stremio account.")}
       >
-        <div className="flex items-center gap-5 rounded-2xl border border-edge-soft bg-canvas/40 p-5">
+        <div className={`flex rounded-2xl border border-edge-soft bg-canvas/40 ${isPhoneLayout() ? "flex-col items-center gap-4 p-4" : "items-center gap-5 p-5"}`}>
           <AvatarRing
             src={effectiveAvatar}
             size={88}

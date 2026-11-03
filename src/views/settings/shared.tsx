@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Check, ExternalLink, Key, Lock } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { openUrl } from "@/lib/window";
@@ -57,7 +58,7 @@ export function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section id={settingsAnchor(title)} className="scroll-mt-28 flex flex-col gap-4 rounded-2xl border border-edge-soft bg-elevated/40 p-7">
+    <section id={settingsAnchor(title)} className={`scroll-mt-28 flex flex-col gap-4 rounded-2xl border border-edge-soft bg-elevated/40 ${isPhoneLayout() ? "p-4" : "p-7"}`}>
       <div className="flex flex-col gap-1">
         <h2 className="text-[19px] font-medium tracking-tight text-ink">{title}</h2>
         {subtitle && <p className="text-[13.5px] leading-relaxed text-ink-muted">{subtitle}</p>}

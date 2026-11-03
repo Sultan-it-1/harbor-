@@ -86,7 +86,7 @@ export function SourceSwitcher({
       (o.id !== "simkl-anticipated" || simklConnected),
   );
   return (
-    <div className="flex items-center gap-1 rounded-full border border-edge-soft bg-elevated/30 p-1">
+    <div className="flex w-max items-center gap-1 rounded-full border border-edge-soft bg-elevated/30 p-1">
       {visible.map((opt) => {
         const active = value === opt.id;
         return (
@@ -94,7 +94,7 @@ export function SourceSwitcher({
             key={opt.id}
             onClick={() => onChange(opt.id)}
             title={t(opt.hint)}
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
               active
                 ? "bg-ink text-canvas"
                 : "text-ink-muted hover:bg-raised/60 hover:text-ink"

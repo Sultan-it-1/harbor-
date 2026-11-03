@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { CommunityAddonsRail } from "@/components/community-addons-rail";
 import type { ResolvedAddon } from "@/lib/addons-store/store";
 import { useT } from "@/lib/i18n";
@@ -41,7 +42,9 @@ export function DiscoverPane({
         <div className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] px-5 py-4 text-[13.5px] text-ink">
           <p className="font-semibold text-amber-200">{t("Sign in to sync your addons across devices")}</p>
           <p className="mt-1 text-ink-muted">
-            {t("Anything you install in Harbor pushes back to your Stremio account so it shows up on mobile too. Sign in via the avatar in the bottom-left of the sidebar.")}
+            {isPhoneLayout()
+              ? t("Anything you install in Harbor pushes back to your Stremio account so it shows up on your other devices too. Sign in from More → Settings → Account.")
+              : t("Anything you install in Harbor pushes back to your Stremio account so it shows up on mobile too. Sign in via the avatar in the bottom-left of the sidebar.")}
           </p>
         </div>
       )}

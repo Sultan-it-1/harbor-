@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Check, ChevronDown, Play } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Meta } from "@/lib/cinemeta";
@@ -24,6 +25,8 @@ function pickDefaultSeason(metaId: string, seasons: number[]): number {
   const real = seasons.filter((s) => s > 0);
   return real[real.length - 1] ?? seasons[seasons.length - 1] ?? 1;
 }
+
+const PHONE = isPhoneLayout();
 
 export function CinemetaEpisodes({
   meta,
@@ -172,13 +175,13 @@ export function CinemetaEpisodeRow({
     <div
       data-no-card-ring
       onContextMenu={onContextMenu ? (e) => onContextMenu(e, season, epNumber, watched) : undefined}
-      className="group flex items-center gap-4 rounded-2xl px-4 py-5 transition-colors hover:bg-elevated/30"
+      className={`group flex items-center rounded-2xl transition-colors hover:bg-elevated/30 ${PHONE ? "gap-1.5 px-1 py-3" : "gap-4 px-4 py-5"}`}
     >
       <button
         onClick={() => openPicker(meta, playEpisode, { autoPlay: settings.instantPlay })}
-        className="flex min-w-0 flex-1 gap-6 text-start"
+        className={`flex min-w-0 flex-1 text-start ${PHONE ? "gap-3" : "gap-6"}`}
       >
-        <div className="relative w-[200px] shrink-0 overflow-hidden rounded-lg">
+        <div className={`relative shrink-0 self-start overflow-hidden rounded-lg ${PHONE ? "w-[132px]" : "w-[200px]"}`}>
           <Poster
             src={ep.thumbnail}
             seed={ep.id ?? `${meta.id}-${ep.season}-${epNumber}`}
@@ -202,7 +205,7 @@ export function CinemetaEpisodeRow({
           )}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <h4 className="truncate text-[16px] font-semibold text-ink">
+          <h4 className={`font-semibold text-ink ${PHONE ? "line-clamp-2 text-[14px]" : "truncate text-[16px]"}`}>
             {ep.name || ep.title || formatAired(aired) || t("Episode {n}", { n: epNumber })}
           </h4>
           <p className="text-[12px] text-ink-subtle">

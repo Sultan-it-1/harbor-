@@ -1,7 +1,10 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { ChevronLeft, RefreshCw } from "lucide-react";
 import type { Meta } from "@/lib/cinemeta";
 import { useT } from "@/lib/i18n";
 import type { PlayEpisode } from "@/lib/view";
+
+const PHONE = isPhoneLayout();
 
 export function PickerHeader({
   meta,
@@ -49,7 +52,7 @@ export function PickerHeader({
           <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-subtle">
             {meta.name} · Season {episode.imdbSeason ?? episode.season} · Episode {String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}
           </p>
-          <h1 className="font-display text-[64px] font-medium leading-[0.96] tracking-tight text-ink">
+          <h1 className={`font-display font-medium leading-[0.96] tracking-tight text-ink ${PHONE ? "text-[34px]" : "text-[64px]"}`}>
             {episode.name || `Episode ${episode.episode}`}
           </h1>
           {episode.overview && (
@@ -66,7 +69,7 @@ export function PickerHeader({
               {meta.genres?.length ? ` · ${meta.genres.slice(0, 2).join(" · ")}` : ""}
             </p>
           )}
-          <h1 className="font-display text-[68px] font-medium leading-[0.96] tracking-tight text-ink">
+          <h1 className={`font-display font-medium leading-[0.96] tracking-tight text-ink ${PHONE ? "text-[34px]" : "text-[68px]"}`}>
             {meta.name}
           </h1>
         </>
