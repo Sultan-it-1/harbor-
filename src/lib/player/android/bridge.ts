@@ -183,7 +183,7 @@ export function createAndroidBridge(): PlayerBridge {
       sentSubUrls.clear();
       const initialSubs = (src.subtitles ?? []).slice(0, MAX_INITIAL_SUBS).map((x) => {
         sentSubUrls.add(x.url);
-        return nativeSub(x.url, x.lang);
+        return nativeSub(x.url, x.lang, x.label);
       });
       emit();
       api?.play(

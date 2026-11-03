@@ -52,7 +52,7 @@ export type PlayerSnapshot = {
 
 export type PlayerSource = {
   url: string;
-  subtitles?: { id?: string; url: string; lang?: string; m?: string }[];
+  subtitles?: { id?: string; url: string; lang?: string; m?: string; label?: string }[];
   notWebReady?: boolean;
   startAtSec?: number;
   isLive?: boolean;

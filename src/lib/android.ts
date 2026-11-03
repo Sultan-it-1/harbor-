@@ -12,6 +12,7 @@ type HarborAndroidApi = {
   dlStart?(json: string): string;
   dlStatus?(): string;
   dlDelete?(id: string): boolean;
+  dlAddSubs?(id: string, json: string): boolean;
   dlFiles?(id: string): string;
   dlStorage?(): string;
 };

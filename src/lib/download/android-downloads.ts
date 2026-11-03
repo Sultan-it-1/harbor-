@@ -14,6 +14,8 @@ export type NativeStatus = {
   received?: number;
   total?: number | null;
   reason?: string;
+  /** Subtitles saved next to the video so far. */
+  subs?: number;
 };
 
 export function androidDownloadsAvailable(): boolean {
@@ -49,6 +51,13 @@ export function nativeStatus(): Record<string, NativeStatus> {
 
 export function nativeDelete(id: string): void {
   androidApi()?.dlDelete?.(id);
+}
+
+/** Adds subtitles to a download that already started (saved next to the video). */
+export function nativeAddSubs(id: string, subs: { url: string; lang?: string; label?: string }[]): boolean {
+  const api = androidApi();
+  if (!api?.dlAddSubs || subs.length === 0) return false;
+  return api.dlAddSubs(id, JSON.stringify(subs)) === true;
 }
 
 export function nativeFiles(id: string): { video?: string; subtitles: { url: string; lang?: string; label?: string }[] } {
@@ -105,7 +114,8 @@ export async function gatherDownloadSubtitles(
       episode: episode?.imdbEpisode ?? episode?.episode,
       langs,
     },
-    { providers: { opensubtitles: true, addons: true, wyzie: false }, addons, preferredLangs: langs },
+    // Every provider: this is the only chance to get subtitles for offline viewing.
+    { providers: { opensubtitles: true, addons: true, wyzie: true }, addons, preferredLangs: langs },
   ).catch(() => []);
   const out: { url: string; lang?: string; label?: string }[] = [];
   for (const want of langs) {

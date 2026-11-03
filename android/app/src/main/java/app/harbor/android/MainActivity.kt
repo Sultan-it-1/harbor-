@@ -259,6 +259,9 @@ class MainActivity : ComponentActivity() {
         fun dlDelete(id: String): Boolean = downloads.delete(id)
 
         @JavascriptInterface
+        fun dlAddSubs(id: String, json: String): Boolean = downloads.addSubtitles(id, json)
+
+        @JavascriptInterface
         fun dlFiles(id: String): String = downloads.files(id)
 
         @JavascriptInterface

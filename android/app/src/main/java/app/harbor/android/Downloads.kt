@@ -57,6 +57,7 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
             val dmId = dm.enqueue(req)
             prefs.edit().putString(id, JSONObject().put("dmId", dmId).put("file", fileName).toString()).apply()
             j.optJSONArray("subtitles")?.let { subs -> if (subs.length() > 0) pool.execute { saveSubtitles(dir, subs, ua) } }
+            prefs.edit().putString("ua:$id", ua).apply()
             out.put("ok", true)
         } catch (e: Exception) {
             out.put("ok", false).put("error", e.message ?: e.javaClass.simpleName)
@@ -64,24 +65,42 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
         return out.toString()
     }
 
+    /** Adds addon subtitles to a download (found after it started). */
+    fun addSubtitles(id: String, json: String): Boolean {
+        val dir = dirFor(id) ?: return false
+        if (!dir.exists()) return false
+        val subs = try { JSONArray(json) } catch (_: Exception) { return false }
+        val ua = prefs.getString("ua:$id", null) ?: userAgent()
+        pool.execute { saveSubtitles(dir, subs, ua) }
+        return true
+    }
+
+    private fun readSubs(dir: File): JSONArray =
+        File(dir, "subs.json").takeIf { it.exists() }?.let { try { JSONArray(it.readText()) } catch (_: Exception) { null } } ?: JSONArray()
+
+    /** Downloads + normalises each subtitle into <dir>/subs and appends it to subs.json. */
+    @Synchronized
     private fun saveSubtitles(dir: File, subs: JSONArray, ua: String) {
         val store = SubtitleStore(File(dir, "subs"))
-        val list = JSONArray()
+        val list = readSubs(dir)
+        val have = (0 until list.length()).mapNotNull { list.optJSONObject(it)?.optString("url") }.toMutableSet()
         for (i in 0 until subs.length()) {
             val s = subs.optJSONObject(i) ?: continue
             val url = s.optString("url").takeIf { it.isNotBlank() } ?: continue
+            if (!have.add(url)) continue
             val lang = s.optString("lang").takeIf { it.isNotBlank() }
             val label = s.optString("label").takeIf { it.isNotBlank() }
-            val local = store.fetch("sub$i", url, lang, label, ua) ?: continue
-            list.put(JSONObject().put("file", local.file.absolutePath).put("lang", lang).put("label", label))
+            val local = store.fetch("sub${list.length()}", url, lang, label, ua) ?: continue
+            list.put(JSONObject().put("file", local.file.absolutePath).put("url", url).put("lang", lang).put("label", label))
+            if (!dir.exists()) return // deleted meanwhile
+            File(dir, "subs.json").writeText(list.toString())
         }
-        File(dir, "subs.json").writeText(list.toString())
     }
 
     /** {<id>: {status, received, total, reason}} for every tracked download. */
     fun status(): String {
         val out = JSONObject()
-        val ids = prefs.all.keys.toList()
+        val ids = prefs.all.keys.filter { !it.startsWith("ua:") }
         val byDm = HashMap<Long, String>()
         ids.forEach { id -> record(id)?.optLong("dmId", -1)?.takeIf { it >= 0 }?.let { byDm[it] = id } }
         if (byDm.isNotEmpty()) {
@@ -102,6 +121,7 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
                     }
                     val total = c.getLong(iTotal)
                     out.put(id, JSONObject()
+                        .put("subs", dirFor(id)?.let { readSubs(it).length() } ?: 0)
                         .put("status", st)
                         .put("received", c.getLong(iGot))
                         .put("total", if (total > 0) total else JSONObject.NULL)
@@ -136,7 +156,7 @@ class Downloads(private val ctx: Context, private val userAgent: () -> String) {
     fun delete(id: String): Boolean {
         record(id)?.optLong("dmId", -1)?.takeIf { it >= 0 }?.let { try { dm.remove(it) } catch (_: Exception) {} }
         dirFor(id)?.deleteRecursively()
-        prefs.edit().remove(id).apply()
+        prefs.edit().remove(id).remove("ua:$id").apply()
         return true
     }
 

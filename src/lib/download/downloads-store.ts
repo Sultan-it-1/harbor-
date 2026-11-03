@@ -9,6 +9,7 @@ import { startDownload, type DownloadHandle } from "./video-download";
 import {
   androidDownloadsAvailable,
   gatherDownloadSubtitles,
+  nativeAddSubs,
   nativeDelete,
   nativeStart,
   nativeStatus,
@@ -37,6 +38,9 @@ export type DownloadItem = {
   startedAt: number;
   /** Android: "waiting for Wi-Fi" etc. while the system download is paused. */
   note?: string | null;
+  /** Android: subtitles saved with the video, and whether a search is still running. */
+  subsCount?: number;
+  subsState?: "searching" | "done" | null;
 };
 
 type EnqueueArgs = {
@@ -85,7 +89,8 @@ function hydrate() {
       if (!d || typeof d.id !== "string" || typeof d.path !== "string") continue;
       // Desktop downloads die with the app; Android's system downloader keeps going.
       const status = d.status === "downloading" && !ANDROID ? "interrupted" : d.status;
-      items.set(d.id, { ...d, status, bytesPerSec: 0 });
+      // A subtitle search interrupted by closing the app is just "not searched yet".
+      items.set(d.id, { ...d, status, bytesPerSec: 0, subsState: d.subsState === "searching" ? null : d.subsState });
     }
     snapshot = [...items.values()].sort((a, b) => b.startedAt - a.startedAt);
   } catch {
@@ -104,6 +109,8 @@ function pollAndroid() {
   const now = Date.now();
   let active = 0;
   for (const d of [...items.values()]) {
+    const n0 = st[d.id];
+    if (n0 && typeof n0.subs === "number" && n0.subs !== d.subsCount) patch(d.id, { subsCount: n0.subs });
     if (d.status !== "downloading") continue;
     const n = st[d.id];
     if (!n) continue; // not enqueued yet (gathering subtitles)
@@ -136,11 +143,45 @@ function pollAndroid() {
       note: n.status === "waiting" || n.status === "pending" ? n.reason || "Waiting…" : null,
     });
   }
-  const pending = [...items.values()].some((d) => d.status === "downloading");
+  const pending = [...items.values()].some(
+    (d) => d.status === "downloading" || d.subsState === "searching" || now - (subsSavingUntil.get(d.id) ?? 0) < 0,
+  );
   if (!pending && active === 0 && pollTimer != null) {
     window.clearInterval(pollTimer);
     pollTimer = null;
   }
+}
+
+// Subtitles are saved by the native side after the search hands them over; keep
+// polling for a while so the count shows up.
+const subsSavingUntil = new Map<string, number>();
+
+// One subtitle search at a time (a season download queues many), no hard time limit.
+let subsQueue: Promise<void> = Promise.resolve();
+
+function queueSubtitleSearch(id: string, meta: Meta, episode: PlayEpisode | undefined) {
+  patch(id, { subsState: "searching" });
+  subsQueue = subsQueue.then(async () => {
+    if (!items.has(id)) return;
+    const found = await Promise.race([
+      gatherDownloadSubtitles(meta, episode),
+      new Promise<{ url: string; lang?: string; label?: string }[]>((r) => window.setTimeout(() => r([]), 90_000)),
+    ]).catch(() => []);
+    if (!items.has(id)) return;
+    if (found.length > 0 && nativeAddSubs(id, found)) subsSavingUntil.set(id, Date.now() + 60_000);
+    patch(id, { subsState: "done" });
+    ensureAndroidPolling();
+  });
+}
+
+/** Downloads page: search (again) for subtitles to save with a finished or running download. */
+export function fetchDownloadSubtitles(id: string): void {
+  const d = items.get(id);
+  if (!d || !ANDROID) return;
+  const meta = { id: d.metaId, type: d.season != null ? "series" : "movie", name: d.title } as Meta;
+  const episode = d.season != null && d.episode != null ? { season: d.season, episode: d.episode } : undefined;
+  queueSubtitleSearch(id, meta, episode);
+  ensureAndroidPolling();
 }
 
 function ensureAndroidPolling() {
@@ -256,26 +297,23 @@ export async function enqueueDownload(args: EnqueueArgs): Promise<string> {
     item.path = `android:${id}`;
     items.set(id, { ...item });
     rebuild();
-    void (async () => {
-      // Save subtitles in the user's languages with the video (give the search 8 s).
-      const found = await Promise.race([
-        gatherDownloadSubtitles(meta, episode),
-        new Promise<{ url: string; lang?: string; label?: string }[]>((r) => window.setTimeout(() => r([]), 8000)),
-      ]).catch(() => []);
-      const withStream = [...(args.subtitles ?? []).slice(0, 4).map((s) => ({ url: s.url, lang: s.lang })), ...found];
-      if (!items.has(id)) return; // removed while preparing
-      const r = nativeStart({
-        id,
-        url: args.rawUrl ?? url,
-        headers: args.headers,
-        fileName: filename,
-        title: item.title,
-        description: item.subtitle,
-        subtitles: withStream,
-      });
-      if (!r.ok) patch(id, { status: "error", error: r.error ?? "Download failed" });
-      else ensureAndroidPolling();
-    })();
+    // Start the video right away; the subtitle search (which can take a while on a phone,
+    // and runs one title at a time) adds its results to the download when it's done.
+    const r = nativeStart({
+      id,
+      url: args.rawUrl ?? url,
+      headers: args.headers,
+      fileName: filename,
+      title: item.title,
+      description: item.subtitle,
+      subtitles: (args.subtitles ?? []).slice(0, 4).map((s) => ({ url: s.url, lang: s.lang })),
+    });
+    if (!r.ok) {
+      patch(id, { status: "error", error: r.error ?? "Download failed" });
+      return id;
+    }
+    ensureAndroidPolling();
+    queueSubtitleSearch(id, meta, episode);
     return id;
   }
 

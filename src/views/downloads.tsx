@@ -6,6 +6,7 @@ import { useView } from "@/lib/view";
 import { DownloadDirBar } from "./downloads/download-dir-bar";
 import {
   cancelDownload,
+  fetchDownloadSubtitles,
   removeDownload,
   revealDownload,
   useDownloads,
@@ -216,7 +217,7 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
       url: local?.video ?? d.path,
       title: d.title,
       subtitle: d.subtitle ?? undefined,
-      subtitles: local?.subtitles.map((x) => ({ url: x.url, lang: x.lang })),
+      subtitles: local?.subtitles.map((x) => ({ url: x.url, lang: x.lang, label: x.label })),
       notWebReady: true,
     });
   };
@@ -254,10 +255,11 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
               {d.note && <span className="text-amber-300/85">· {d.note}</span>}
               {fmtSpeed(d.bytesPerSec) && <span>· {fmtSpeed(d.bytesPerSec)}</span>}
               {fmtEta(d) && <span className="text-ink-subtle">· {fmtEta(d)}</span>}
+              {ANDROID && <SubsInfo d={d} />}
             </div>
           </>
         ) : (
-          <span className="flex items-center gap-1.5 text-[12px]">
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px]">
             {d.status === "done" && (
               <>
                 <Check size={13} className="text-accent" strokeWidth={2.6} />
@@ -267,6 +269,7 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
                 </span>
               </>
             )}
+            {d.status === "done" && ANDROID && <SubsInfo d={d} />}
             {d.status === "error" && <span className="text-danger">Failed: {d.error ?? "download error"}</span>}
             {d.status === "canceled" && <span className="text-ink-subtle">Canceled</span>}
             {d.status === "interrupted" && (
@@ -311,6 +314,22 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
         )}
       </div>
     </li>
+  );
+}
+
+/** Android: how many subtitles are saved with the video, with a retry when there are none. */
+function SubsInfo({ d }: { d: DownloadItem }) {
+  if (d.subsState === "searching") return <span className="text-ink-subtle">· finding subtitles…</span>;
+  const n = d.subsCount ?? 0;
+  if (n > 0) return <span className="text-ink-subtle">· {n === 1 ? "1 subtitle" : `${n} subtitles`}</span>;
+  return (
+    <button
+      type="button"
+      onClick={() => fetchDownloadSubtitles(d.id)}
+      className="ms-1 rounded-md bg-accent/15 px-2 py-0.5 text-[11.5px] font-semibold text-accent"
+    >
+      Get subtitles
+    </button>
   );
 }
 

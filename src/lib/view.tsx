@@ -33,7 +33,7 @@ export type PlayerSrc = {
   title: string;
   subtitle?: string;
   notWebReady?: boolean;
-  subtitles?: Array<{ url: string; lang?: string; id?: string }>;
+  subtitles?: Array<{ url: string; lang?: string; id?: string; label?: string }>;
   attempt?: number;
   streamRef?: PlayerStreamRef;
   liveProgram?: string;
