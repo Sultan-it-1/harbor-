@@ -1,3 +1,5 @@
+import { isPhoneLayout } from "@/lib/platform";
+import { PHONE_TABBAR_H } from "@/chrome/phone-tabbar";
 import { Search, X, Loader2, CornerDownLeft, CalendarRange, Tag } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -18,6 +20,8 @@ import { MagnetCard } from "./magnet-card";
 import { UrlCard } from "./url-card";
 import { AiSearchSection } from "./ai-search-section";
 import { isMagnetInput, isDirectVideoUrl } from "@/lib/torrent/magnet";
+
+const PHONE = isPhoneLayout();
 
 export function SearchOverlay() {
   const { open, setOpen, query, setQuery, results, status, clear, recordRecent } = useSearch();
@@ -91,14 +95,20 @@ export function SearchOverlay() {
     results.addonGroups.length === 0;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex flex-col">
-      <button
-        aria-label={t("Close search")}
-        onClick={close}
-        className="harbor-search-backdrop absolute inset-0 cursor-default"
-      />
+    <div
+      className={`fixed inset-x-0 top-0 flex flex-col ${PHONE ? "z-[185] bg-canvas" : "bottom-0 z-[200]"}`}
+      // Phone: stop above the tab bar so one tap on a tab closes search and navigates.
+      style={PHONE ? { bottom: `calc(${PHONE_TABBAR_H}px + env(safe-area-inset-bottom))` } : undefined}
+    >
+      {!PHONE && (
+        <button
+          aria-label={t("Close search")}
+          onClick={close}
+          className="harbor-search-backdrop absolute inset-0 cursor-default"
+        />
+      )}
 
-      <div className="relative mx-auto flex h-full w-full max-w-[1080px] flex-col px-6 py-6 sm:px-10 sm:py-10">
+      <div className={`relative mx-auto flex h-full w-full max-w-[1080px] flex-col ${PHONE ? "px-4 pb-2 pt-4" : "px-6 py-6 sm:px-10 sm:py-10"}`}>
         <div className="modal-panel flex shrink-0 items-center gap-3 rounded-2xl border border-edge-soft/80 bg-elevated/70 px-5 shadow-[0_24px_80px_-30px_rgba(0,0,0,0.7)]">
           <Search size={22} className="shrink-0 text-ink-muted" strokeWidth={1.9} />
           <input

@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { startTransition, useEffect, useState, type ReactNode } from "react";
+import { pushAndroidBackHandler } from "@/lib/android";
 import { MoreHorizontal, Search, X } from "lucide-react";
 import { AddonsIcon } from "@/components/icons/addons-icon";
 import { AnimeIcon } from "@/components/icons/anime-icon";
@@ -51,6 +52,23 @@ export function PhoneTabBar() {
   const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const [pinFor, setPinFor] = useState<View | null>(null);
+  // Highlight the tapped tab immediately; the (heavy) view switch renders in a transition,
+  // so a tap never looks ignored and nobody needs to tap twice.
+  const [pending, setPending] = useState<View | null>(null);
+  useEffect(() => {
+    if (pending && pending === view) setPending(null);
+  }, [pending, view]);
+  const shown = pending ?? view;
+
+  // Back gesture closes the search / More sheet before leaving the screen.
+  useEffect(() => {
+    if (!searchOpen && !moreOpen) return;
+    return pushAndroidBackHandler(() => {
+      setMoreOpen(false);
+      setSearchOpen(false);
+      return true;
+    });
+  }, [searchOpen, moreOpen, setSearchOpen]);
 
   const allowed = (it: Item) => {
     if (it.view === "vod" && !settings.showPlaylistsTab) return false;
@@ -64,11 +82,12 @@ export function PhoneTabBar() {
       setPinFor(it.view);
       return;
     }
-    setView(it.view);
+    setPending(it.view);
+    startTransition(() => setView(it.view));
   };
 
   const moreItems = MORE.filter(allowed);
-  const moreActive = !searchOpen && moreItems.some((it) => it.view === view);
+  const moreActive = !searchOpen && moreItems.some((it) => it.view === shown);
 
   return (
     <>
@@ -92,7 +111,7 @@ export function PhoneTabBar() {
             </div>
             <div className="grid grid-cols-3 gap-2">
               {moreItems.map((it) => {
-                const active = view === it.view;
+                const active = shown === it.view;
                 return (
                   <button
                     key={it.view}
@@ -117,12 +136,12 @@ export function PhoneTabBar() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="mx-auto flex max-w-xl items-stretch justify-around" style={{ height: PHONE_TABBAR_H }}>
-          <Tab label={t("Home")} active={!searchOpen && !moreOpen && view === "home"} onClick={() => go({ view: "home", label: "Home", icon: () => null })}>
+          <Tab label={t("Home")} active={!searchOpen && !moreOpen && shown === "home"} onClick={() => go({ view: "home", label: "Home", icon: () => null })}>
             {(a) => <HomeIcon active={a} />}
           </Tab>
           <Tab
             label={t("Discover")}
-            active={!searchOpen && !moreOpen && view === "discover"}
+            active={!searchOpen && !moreOpen && shown === "discover"}
             onClick={() => go({ view: "discover", label: "Discover", icon: () => null, parentalKey: "discover" })}
           >
             {(a) => <DiscoverIcon active={a} />}
@@ -139,7 +158,7 @@ export function PhoneTabBar() {
           </Tab>
           <Tab
             label={t("Library")}
-            active={!searchOpen && !moreOpen && view === "library"}
+            active={!searchOpen && !moreOpen && shown === "library"}
             onClick={() => go({ view: "library", label: "Library", icon: () => null, parentalKey: "library" })}
           >
             {(a) => <LibraryIcon active={a} />}
