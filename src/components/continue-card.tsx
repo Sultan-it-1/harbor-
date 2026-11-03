@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { phoneLazy } from "@/lib/phone-images";
 import { Check, Play, X } from "lucide-react";
 import simklLogo from "@/assets/simkl.png";
 import { meta as fetchMeta, narrowMediaType, type Meta } from "@/lib/cinemeta";
@@ -214,6 +215,7 @@ export const ContinueCard = memo(function ContinueCard({ item, watched = false, 
             src={src}
             alt=""
             decoding="sync"
+            loading={phoneLazy}
             onError={() => setImgIdx((i) => i + 1)}
             className="absolute inset-0 h-full w-full object-cover brightness-95"
           />

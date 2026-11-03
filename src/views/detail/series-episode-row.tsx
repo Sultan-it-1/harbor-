@@ -1,4 +1,5 @@
 import { isPhoneLayout } from "@/lib/platform";
+import { stillSize } from "@/lib/phone-images";
 import { Check, Eye, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { EpisodeRatingBadge } from "./episode-rating-badge";
@@ -37,7 +38,7 @@ export function EpisodeRow({
   const { settings } = useSettings();
   const ratingValue = ep.imdbRating ?? ep.voteAverage;
   const ratingIsImdb = ep.imdbRating != null;
-  const tmdbStill = ep.stillPath ? `https://image.tmdb.org/t/p/${settings.hdEpisodeImages ? "original" : "w300"}${ep.stillPath}` : undefined;
+  const tmdbStill = ep.stillPath ? `https://image.tmdb.org/t/p/${stillSize(settings.hdEpisodeImages)}${ep.stillPath}` : undefined;
   const candidates = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];

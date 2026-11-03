@@ -7,6 +7,7 @@ import {
   useTmdbImdbId,
 } from "@/lib/providers/tmdb/tmdb-imdb-resolve";
 import { useSettings } from "@/lib/settings";
+import { useNearViewport } from "@/lib/phone-images";
 
 type Ratio = "portrait" | "landscape" | "wide";
 
@@ -112,13 +113,16 @@ export function Poster({
   );
   const showPlate = !current || !loaded;
   const hue = hash(seed) % 360;
+  const boxRef = useRef<HTMLDivElement>(null);
+  const near = useNearViewport(boxRef);
 
   return (
     <div
+      ref={boxRef}
       className={`harbor-poster your-card relative overflow-hidden rounded-[var(--poster-radius,12px)] ${ASPECT[ratio]} ${className}`}
       style={showPlate ? { background: gradient(hue) } : undefined}
     >
-      {current && (
+      {current && near && (
         <img
           key={current}
           ref={handleImgRef}

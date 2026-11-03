@@ -1,4 +1,5 @@
 import { Check, Play, Eye } from "lucide-react";
+import { stillSize } from "@/lib/phone-images";
 import { EpisodeRatingBadge } from "./episode-rating-badge";
 import { useEffect, useMemo, useState } from "react";
 import { DragStrip } from "@/components/drag-strip";
@@ -39,7 +40,7 @@ export function EpisodeStrip({
   const gridEpisodes = useMemo<GridEpisode[]>(
     () =>
       episodes.map((ep) => {
-        const tmdbStill = ep.stillPath ? `https://image.tmdb.org/t/p/${settings.hdEpisodeImages ? "original" : "w300"}${ep.stillPath}` : undefined;
+        const tmdbStill = ep.stillPath ? `https://image.tmdb.org/t/p/${stillSize(settings.hdEpisodeImages)}${ep.stillPath}` : undefined;
         const stills = [tmdbStill, thumbnailFor(ep)].filter((u): u is string => !!u);
         return {
           key: String(ep.id),
@@ -131,7 +132,7 @@ function EpisodeStripCard({
   }, [ep.id]);
 
   const still = useMemo(() => {
-    const tmdbSize = settings.hdEpisodeImages ? "original" : "w300";
+    const tmdbSize = stillSize(settings.hdEpisodeImages);
     if (imgIdx === 0 && ep.stillPath) return `https://image.tmdb.org/t/p/${tmdbSize}${ep.stillPath}`;
     if (imgIdx <= 1 && thumbnail) return thumbnail;
     return undefined;

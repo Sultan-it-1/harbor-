@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var player: NativePlayer
     private lateinit var fetcher: NativeFetch
     private lateinit var downloads: Downloads
+    private lateinit var images: ImageCache
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fullscreen = false
@@ -90,6 +91,7 @@ class MainActivity : ComponentActivity() {
         pendingOpenDownloads = intent?.getBooleanExtra(EXTRA_OPEN_DOWNLOADS, false) == true
 
         val assets = WebAssets(this)
+        images = ImageCache(this, minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels))
         val ws = webView.settings
         ws.javaScriptEnabled = true
         ws.domStorageEnabled = true
@@ -110,6 +112,7 @@ class MainActivity : ComponentActivity() {
         fetcher.userAgent = ws.userAgentString
         player.userAgent = ws.userAgentString
         downloads.userAgent = ws.userAgentString
+        images.userAgent = ws.userAgentString
 
         // The page keeps running when Harbor is in the background (season downloads and
         // subtitle searches happen there), so its renderer keeps the app's priority.
@@ -117,8 +120,9 @@ class MainActivity : ComponentActivity() {
 
         webView.addJavascriptInterface(JsApi(), "HarborAndroid")
         webView.webViewClient = object : WebViewClient() {
+            // The app's own files, then posters/backdrops from the phone's image cache.
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                assets.intercept(request)
+                assets.intercept(request) ?: images.intercept(request)
 
             override fun onPageFinished(view: WebView, url: String?) {
                 pageLoaded = true
