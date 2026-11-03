@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { ArrowRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DoneStep } from "@/components/onboarding/done-step";
@@ -39,14 +40,20 @@ export function OnboardingModal() {
     setTimeout(finishOnboarding, 320);
   };
 
+  // Phone app: full screen above the tab bar, scrollable body, buttons pinned to the bottom.
+  const phone = isPhoneLayout();
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-canvas/85 backdrop-blur-md ${
+      className={`fixed inset-0 ${phone ? "z-[250] bg-canvas" : "z-50 bg-canvas/85 backdrop-blur-md"} flex items-center justify-center ${
         closing ? "opacity-0 transition-opacity duration-300" : "animate-fade-in"
       }`}
     >
       <div
-        className={`relative flex w-[min(92vw,580px)] flex-col overflow-hidden rounded-[28px] border border-edge-soft bg-elevated/95 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6)] ${
+        className={`relative flex flex-col overflow-hidden ${
+          phone
+            ? "h-full w-full bg-elevated"
+            : "w-[min(92vw,580px)] rounded-[28px] border border-edge-soft bg-elevated/95 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6)]"
+        } ${
           closing ? "scale-[0.97] opacity-0 transition-all duration-300" : "animate-modal-in"
         }`}
       >
@@ -64,7 +71,13 @@ export function OnboardingModal() {
           <SplashStep onAdvance={next} />
         ) : (
           <>
-            <div className="flex min-h-[440px] flex-col justify-center px-12 py-10">
+            <div
+              className={
+                phone
+                  ? "flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-6 pt-16"
+                  : "flex min-h-[440px] flex-col justify-center px-12 py-10"
+              }
+            >
               <div key={step} className="animate-step-in">
                 {step === "welcome" && <WelcomeStep />}
                 {step === "layout" && <LayoutStep />}
@@ -76,13 +89,22 @@ export function OnboardingModal() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-t border-edge-soft bg-canvas/40 px-8 py-5">
-              <Dots
-                count={STEPS.length - 1}
-                active={Math.max(stepIdx - 1, 0)}
-                onJump={(i) => setStepIdx(i + 1)}
-              />
-              <div className="flex items-center gap-2.5">
+            <div
+              className={
+                phone
+                  ? "flex shrink-0 flex-col gap-3 border-t border-edge-soft bg-canvas/60 px-5 pt-4"
+                  : "flex items-center justify-between border-t border-edge-soft bg-canvas/40 px-8 py-5"
+              }
+              style={phone ? { paddingBottom: "calc(16px + env(safe-area-inset-bottom))" } : undefined}
+            >
+              <div className={phone ? "flex justify-center" : "contents"}>
+                <Dots
+                  count={STEPS.length - 1}
+                  active={Math.max(stepIdx - 1, 0)}
+                  onJump={(i) => setStepIdx(i + 1)}
+                />
+              </div>
+              <div className={phone ? "flex items-center justify-between gap-2 [&>button:last-child]:ms-auto" : "flex items-center gap-2.5"}>
                 {(step === "tmdb" || step === "stremio" || step === "streaming" || step === "subtitles") && (
                   <button
                     key={`skip-${step}`}
