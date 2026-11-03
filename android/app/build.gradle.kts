@@ -34,15 +34,19 @@ android {
     }
 
     signingConfigs {
-        // Optional release signing from env (CI secrets). Without it the release APK is
-        // signed with the debug key so it can still be installed directly.
-        val ksPath = System.getenv("HARBOR_KEYSTORE_PATH")
-        if (!ksPath.isNullOrBlank()) {
+        // Release key: android/keystore/harbor-release.p12 (encrypted; committed) unlocked by
+        // the HARBOR_KEYSTORE_PASSWORD secret. Same key every build => updates install over
+        // the previous version. Without the password the debug key is used.
+        val ksPassword = System.getenv("HARBOR_KEYSTORE_PASSWORD")
+        val ksFile = System.getenv("HARBOR_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) }
+            ?: rootProject.file("keystore/harbor-release.p12")
+        if (!ksPassword.isNullOrBlank() && ksFile.exists()) {
             create("release") {
-                storeFile = file(ksPath)
-                storePassword = System.getenv("HARBOR_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("HARBOR_KEY_ALIAS")
-                keyPassword = System.getenv("HARBOR_KEY_PASSWORD")
+                storeFile = ksFile
+                storeType = "pkcs12"
+                storePassword = ksPassword
+                keyAlias = System.getenv("HARBOR_KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "harbor"
+                keyPassword = System.getenv("HARBOR_KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: ksPassword
             }
         }
     }

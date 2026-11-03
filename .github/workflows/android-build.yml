@@ -55,16 +55,12 @@ jobs:
       - name: Build APK
         working-directory: android
         env:
-          # Optional: add these repo secrets to sign with your own key (keeps updates
-          # installable over each other). Without them the debug key is used.
-          HARBOR_KEYSTORE_BASE64: ${{ secrets.HARBOR_KEYSTORE_BASE64 }}
+          # Repo secret holding the password of android/keystore/harbor-release.p12.
+          # Without it the APK falls back to the debug key (updates then need a reinstall).
           HARBOR_KEYSTORE_PASSWORD: ${{ secrets.HARBOR_KEYSTORE_PASSWORD }}
-          HARBOR_KEY_ALIAS: ${{ secrets.HARBOR_KEY_ALIAS }}
-          HARBOR_KEY_PASSWORD: ${{ secrets.HARBOR_KEY_PASSWORD }}
         run: |
-          if [ -n "$HARBOR_KEYSTORE_BASE64" ]; then
-            echo "$HARBOR_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/harbor.jks"
-            export HARBOR_KEYSTORE_PATH="$RUNNER_TEMP/harbor.jks"
+          if [ -z "$HARBOR_KEYSTORE_PASSWORD" ]; then
+            echo "::warning::HARBOR_KEYSTORE_PASSWORD secret is not set; signing with the debug key (updates need a reinstall)."
           fi
           VERSION=$(node -p "require('../package.json').version")
           ./gradlew testReleaseUnitTest assembleRelease --no-daemon \
