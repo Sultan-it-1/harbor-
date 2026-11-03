@@ -9,6 +9,7 @@ import { engineP2pEligible } from "@/lib/torrent/stremio-stream";
 import { preflightCheck } from "@/lib/streams/preflight";
 import { resolveStream } from "@/lib/streams/resolve";
 import { registerStreamProxy } from "@/lib/stream-proxy";
+import { isAndroidApp } from "@/lib/android";
 import type { ScoredStream } from "@/lib/streams/types";
 import type { PlayInvite } from "@/lib/together/protocol";
 import { buildPlayInvite } from "@/lib/together/build-invite";
@@ -121,7 +122,10 @@ export function usePickHandler({
       }
       debridFailStreakRef.current = 0;
       let playUrl = r.data.url;
-      if (r.data.headers && Object.keys(r.data.headers).length > 0) {
+      // Android: the native player sends the stream's headers itself; the local proxy
+      // is a desktop-only piece, so asking for it there always failed.
+      const nativeHeaders = isAndroidApp() && r.data.headers && Object.keys(r.data.headers).length > 0 ? r.data.headers : undefined;
+      if (!nativeHeaders && r.data.headers && Object.keys(r.data.headers).length > 0) {
         try {
           const proxied = await registerStreamProxy(r.data.url, r.data.headers);
           playUrl = proxied.url;
@@ -197,6 +201,7 @@ export function usePickHandler({
           : meta.releaseInfo,
         notWebReady: r.data.notWebReady,
         subtitles: r.data.subtitles,
+        headers: nativeHeaders,
         attempt: attempt ?? 0,
         streamRef: {
           infoHash: stream.infoHash ?? null,

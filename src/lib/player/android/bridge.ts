@@ -123,6 +123,10 @@ export function createAndroidBridge(): PlayerBridge {
   let pendingSubs: NativeSub[] = [];
   let subTimer: number | null = null;
   const sentSubUrls = new Set<string>();
+  // A stream switch inside the player loads without these: keep the title's identity (its
+  // subtitles stay) and its download (saved subtitles + the save button stay).
+  let lastContentKey = "";
+  let lastDownloadId = "";
   const flushSubs = () => {
     subTimer = null;
     if (!active || owner !== token || pendingSubs.length === 0) return;
@@ -186,6 +190,10 @@ export function createAndroidBridge(): PlayerBridge {
         return nativeSub(x.url, x.lang, x.label);
       });
       emit();
+      if (src.contentKey != null) {
+        lastContentKey = src.contentKey;
+        lastDownloadId = src.downloadId ?? "";
+      }
       api?.play(
         JSON.stringify({
           url: src.url,
@@ -196,8 +204,8 @@ export function createAndroidBridge(): PlayerBridge {
           subStyle: harborSubStyle(),
           title,
           isLive: src.isLive === true,
-          contentKey: src.contentKey ?? "",
-          downloadId: src.downloadId ?? "",
+          contentKey: src.contentKey ?? lastContentKey,
+          downloadId: src.contentKey != null ? (src.downloadId ?? "") : lastDownloadId,
         }),
       );
     },

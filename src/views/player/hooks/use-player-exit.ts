@@ -1,4 +1,5 @@
 import { useCallback, type RefObject } from "react";
+import { isAndroidApp } from "@/lib/android";
 import { clearOnePickerCache } from "@/lib/picker-cache";
 import { clearPlayback, readPlayback, savePlayback, streamMatchesEntry } from "@/lib/playback-history";
 import type { PlayerBridge } from "@/lib/player/bridge";
@@ -28,6 +29,8 @@ export function usePlayerExit(params: {
   notifyHostLeaving: () => void;
   clearInvite: () => void;
   exitPlayback: () => void;
+  /** Leaves only the player (back to the source list, if playback came from one). */
+  exitPlayer?: () => void;
   openPicker: ReturnType<typeof useView>["openPicker"];
 }) {
   const {
@@ -48,6 +51,7 @@ export function usePlayerExit(params: {
     notifyHostLeaving,
     clearInvite,
     exitPlayback,
+    exitPlayer,
     openPicker,
   } = params;
 
@@ -79,8 +83,11 @@ export function usePlayerExit(params: {
       notifyHostLeaving();
       clearInvite();
     }
-    exitPlayback();
-  }, [captureExitSnapshot, exitPlayback, src.meta.id, src.meta.name, season, episode, inRoom, isHost, notifyHostLeaving, clearInvite, publishState, exitPip, liveStreamRef, liveUrl, src.url, stopCast, castActiveRef]);
+    // Android app: back from the player lands on the source list it was picked from (same
+    // results, no new search), so another source is one tap away; back again = title page.
+    if (isAndroidApp() && exitPlayer && !inRoom) exitPlayer();
+    else exitPlayback();
+  }, [captureExitSnapshot, exitPlayback, exitPlayer, src.meta.id, src.meta.name, season, episode, inRoom, isHost, notifyHostLeaving, clearInvite, publishState, exitPip, liveStreamRef, liveUrl, src.url, stopCast, castActiveRef]);
 
   const onStubEject = useCallback(() => {
     const nextAttempt = (src.attempt ?? 0) + 1;

@@ -85,6 +85,10 @@ class NativePlayer(
     private var title = ""
     private var subtitleLine = ""
     private var hasNext = false
+    /** Settings → "Show stream quality under the title"; streamQualityLabel is the stream's
+     *  own label, shown until the player knows what it's actually decoding. */
+    private var showQuality = false
+    private var streamQualityLabel = ""
     private var resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
     private var locked = false
 
@@ -120,6 +124,7 @@ class NativePlayer(
     private var topBar: LinearLayout? = null
     private var titleView: TextView? = null
     private var subtitleView: TextView? = null
+    private var qualityView: TextView? = null
     private var nextButton: View? = null
     private var unlockButton: View? = null
     private var indicator: LinearLayout? = null
@@ -217,11 +222,13 @@ class NativePlayer(
             override fun onIsPlayingChanged(isPlaying: Boolean) = sendState()
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 matchRefreshToVideo()
+                updateChrome()
                 sendState()
             }
 
             override fun onTracksChanged(tracks: Tracks) {
                 matchRefreshToVideo()
+                updateChrome()
                 maybeAutoSelectSub()
                 if (panel?.isOpen == true && (panelKind == "subs" || panelKind == "audio")) refreshPanel()
             }
@@ -330,6 +337,10 @@ class NativePlayer(
         }
         titleView = ctx.label("", 16f, bold = true, lines = 1).also { texts.addView(it) }
         subtitleView = ctx.label("", 12.5f, HarborColors.MUTED, lines = 1).also { texts.addView(it) }
+        qualityView = ctx.label("", 12f, HarborColors.SUBTLE, lines = 1).also {
+            it.fontFeatureSettings = "tnum"
+            texts.addView(it)
+        }
         bar.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         bar.addView(ctx.iconButton(R.drawable.ic_layers, "المصادر") { openStreams() })
         bar.addView(ctx.iconButton(R.drawable.ic_captions, "الترجمة") { openSubs("tracks") })
@@ -418,6 +429,65 @@ class NativePlayer(
         titleView?.text = title
         subtitleView?.text = subtitleLine
         subtitleView?.visibility = if (subtitleLine.isBlank()) View.GONE else View.VISIBLE
+        val q = if (showQuality) qualityText() else ""
+        qualityView?.text = q
+        qualityView?.visibility = if (q.isBlank()) View.GONE else View.VISIBLE
+    }
+
+    /** What's actually playing, e.g. "4K · Dolby Vision · TrueHD 7.1" (falls back to the
+     *  stream's own label until the formats are known). */
+    private fun qualityText(): String {
+        val p = player ?: return streamQualityLabel
+        val parts = ArrayList<String>()
+        p.videoFormat?.takeIf { it.width > 0 && it.height > 0 }?.let { v ->
+            parts.add(resolutionLabel(v.width, v.height))
+            hdrLabel(v)?.let { parts.add(it) }
+        }
+        p.audioFormat?.let { a -> audioShort(a)?.let { parts.add(it) } }
+        return if (parts.isEmpty()) streamQualityLabel else parts.joinToString(" · ")
+    }
+
+    private fun resolutionLabel(w: Int, h: Int): String = when {
+        w >= 3200 || h >= 2000 -> "4K"
+        w >= 2400 || h >= 1400 -> "1440p"
+        w >= 1800 || h >= 1000 -> "1080p"
+        w >= 1200 || h >= 700 -> "720p"
+        else -> "${h}p"
+    }
+
+    private fun hdrLabel(f: Format): String? {
+        val codecs = f.codecs ?: ""
+        if (f.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION || codecs.startsWith("dvh") || codecs.startsWith("dva")) return "Dolby Vision"
+        return when (f.colorInfo?.colorTransfer) {
+            C.COLOR_TRANSFER_ST2084 -> "HDR10"
+            C.COLOR_TRANSFER_HLG -> "HLG"
+            else -> null
+        }
+    }
+
+    private fun audioShort(f: Format): String? {
+        val codec = when (f.sampleMimeType) {
+            MimeTypes.AUDIO_AC3 -> "Dolby Digital"
+            MimeTypes.AUDIO_E_AC3 -> "DD+"
+            MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Atmos"
+            MimeTypes.AUDIO_TRUEHD -> "TrueHD"
+            MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_EXPRESS -> "DTS"
+            MimeTypes.AUDIO_DTS_HD -> "DTS-HD"
+            MimeTypes.AUDIO_AAC -> "AAC"
+            MimeTypes.AUDIO_OPUS -> "Opus"
+            MimeTypes.AUDIO_FLAC -> "FLAC"
+            MimeTypes.AUDIO_MPEG -> "MP3"
+            else -> f.sampleMimeType?.substringAfter('/')?.uppercase()
+        }
+        val ch = when (f.channelCount) {
+            1 -> "1.0"
+            2 -> "2.0"
+            6 -> "5.1"
+            8 -> "7.1"
+            Format.NO_VALUE -> null
+            else -> "${f.channelCount}ch"
+        }
+        return listOfNotNull(codec, ch).joinToString(" ").ifBlank { null }
     }
 
     private fun setLocked(on: Boolean) {
@@ -1065,6 +1135,8 @@ class NativePlayer(
                 c.optString("title").takeIf { it.isNotBlank() }?.let { title = it }
                 subtitleLine = c.optString("subtitle", "")
                 hasNext = c.optBoolean("hasNext", false)
+                showQuality = c.optBoolean("showQuality", false)
+                streamQualityLabel = c.optString("quality", "")
                 updateChrome()
                 return
             }

@@ -9,6 +9,8 @@ import type { ScoredStream } from "@/lib/streams/types";
 import { registerStreamProxy } from "@/lib/stream-proxy";
 import type { PlayerSrc } from "@/lib/view";
 import type { DebridStore } from "@/lib/debrid/types";
+import { isAndroidApp } from "@/lib/android";
+import { formatStreamQuality } from "@/views/play-picker/picker-utils";
 
 let checkShownThisSession = false;
 
@@ -85,7 +87,9 @@ export function useStreamSwitcher(params: {
         return;
       }
       let playUrl = r.data.url;
-      if (r.data.headers && Object.keys(r.data.headers).length > 0) {
+      // Android: the native player sends the headers itself (no local proxy there).
+      const nativeHeaders = isAndroidApp() ? r.data.headers : undefined;
+      if (!nativeHeaders && r.data.headers && Object.keys(r.data.headers).length > 0) {
         try {
           const proxied = await registerStreamProxy(r.data.url, r.data.headers);
           playUrl = proxied.url;
@@ -108,6 +112,7 @@ export function useStreamSwitcher(params: {
           url: playUrl,
           subtitles: r.data.subtitles,
           notWebReady: r.data.notWebReady,
+          headers: nativeHeaders,
           startAtSec: resumeAt > 5 ? resumeAt : undefined,
         });
         await b.play().catch(() => {});
@@ -122,6 +127,7 @@ export function useStreamSwitcher(params: {
         title: stream.title ?? null,
         parsedTitle: stream.parsedTitle ?? null,
         resolution: stream.resolution ?? null,
+        quality: formatStreamQuality(stream),
         source: stream.source ?? null,
         size: stream.size ?? null,
         bingeGroup: stream.behaviorHints?.bingeGroup ?? null,

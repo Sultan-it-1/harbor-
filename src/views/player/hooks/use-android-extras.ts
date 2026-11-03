@@ -7,6 +7,7 @@ import { badgeLabel, streamBadges } from "@/components/format-badge";
 import { streamKey } from "@/components/player/stream-switcher/switcher-row";
 import { qualityKey, QUALITY_LABEL } from "@/components/player/stream-switcher/quality";
 import { formatBytes } from "@/lib/together/source-descriptor";
+import { useSettings } from "@/lib/settings";
 
 const FLAG_EMOJI_RX = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
 const clean = (s: string) =>
@@ -51,12 +52,17 @@ function toItem(s: ScoredStream, liveUrl: string) {
 export function useAndroidPlayerExtras(params: {
   src: PlayerSrc;
   liveUrl: string;
+  /** "4K · Dolby Vision · TrueHD 7.1" from the stream's name (the player shows what it
+   *  actually decodes once it knows; this is the first guess). */
+  quality: string | null;
   swapResolvingKey: string | null;
   onSwitchStream: (s: ScoredStream) => void;
   nextEp: PlayEpisode | null;
   goNext: () => void;
 }) {
-  const { src, liveUrl, swapResolvingKey, nextEp } = params;
+  const { src, liveUrl, swapResolvingKey, nextEp, quality } = params;
+  const { settings } = useSettings();
+  const showQuality = settings.showQualityInfo === true;
   const latest = useRef(params);
   latest.current = params;
   const enabled = isAndroidApp();
@@ -67,8 +73,8 @@ export function useAndroidPlayerExtras(params: {
   const title = src.meta.name ?? src.title ?? "";
   useEffect(() => {
     if (!enabled) return;
-    send({ cmd: "meta", title, subtitle, hasNext: !!nextEp });
-  }, [enabled, title, subtitle, nextEp, liveUrl]);
+    send({ cmd: "meta", title, subtitle, hasNext: !!nextEp, showQuality, quality: quality ?? "" });
+  }, [enabled, title, subtitle, nextEp, liveUrl, showQuality, quality]);
 
   // A pick is in flight: report the outcome once the swap settles.
   const pendingRef = useRef<{ key: string; url: string } | null>(null);

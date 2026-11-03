@@ -69,18 +69,28 @@ export function pinPickerCache(meta: Meta, episode?: PlayEpisode): void {
 }
 
 export function unpinPickerCache(meta: Meta, episode?: PlayEpisode): void {
-  pinned.delete(entryKey(meta, episode));
+  const key = entryKey(meta, episode);
+  pinned.delete(key);
+  // Just stopped watching: keep this list for a while from now (back to the source list,
+  // or Play again, shouldn't search all over after a long movie).
+  const e = cache.get(key);
+  if (e) e.fetchedAt = Date.now();
 }
+
+/** Even a hard memory clean keeps the few lists you're most likely to go back to. */
+const KEEP_ON_HARD_CLEAN = 3;
 
 registerEvictable("picker-cache", (aggressive) => {
   const now = Date.now();
+  const fresh = [...cache.entries()]
+    .filter(([, e]) => now - e.fetchedAt <= STALE_MS)
+    .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt);
+  const keep = new Set((aggressive ? fresh.slice(0, KEEP_ON_HARD_CLEAN) : fresh).map(([k]) => k));
   let changed = false;
-  for (const [k, e] of cache) {
-    if (pinned.has(k)) continue;
-    if (aggressive || now - e.fetchedAt > STALE_MS) {
-      cache.delete(k);
-      changed = true;
-    }
+  for (const k of [...cache.keys()]) {
+    if (pinned.has(k) || keep.has(k)) continue;
+    cache.delete(k);
+    changed = true;
   }
   if (changed) notify();
 });
