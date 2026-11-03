@@ -1,6 +1,6 @@
 import { useCallback, type RefObject } from "react";
-import { isAndroidApp } from "@/lib/android";
 import { clearOnePickerCache } from "@/lib/picker-cache";
+import { isSwapOnTrial, PLACEHOLDER_MAX_SEC } from "@/lib/player/swap-state";
 import { clearPlayback, readPlayback, savePlayback, streamMatchesEntry } from "@/lib/playback-history";
 import type { PlayerBridge } from "@/lib/player/bridge";
 import { getPlaybackPosition } from "@/lib/player/playback-clock";
@@ -29,8 +29,8 @@ export function usePlayerExit(params: {
   notifyHostLeaving: () => void;
   clearInvite: () => void;
   exitPlayback: () => void;
-  /** Leaves only the player (back to the source list, if playback came from one). */
-  exitPlayer?: () => void;
+  /** Duration of what's playing (a placeholder clip's position isn't a resume point). */
+  durationSec?: number;
   openPicker: ReturnType<typeof useView>["openPicker"];
 }) {
   const {
@@ -51,14 +51,15 @@ export function usePlayerExit(params: {
     notifyHostLeaving,
     clearInvite,
     exitPlayback,
-    exitPlayer,
+    durationSec,
     openPicker,
   } = params;
 
   const closePlayer = useCallback(async () => {
     await captureExitSnapshot();
     const pos = getPlaybackPosition();
-    if (Number.isFinite(pos) && pos > 0) {
+    const placeholder = isSwapOnTrial() || (!!durationSec && durationSec > 0 && durationSec < PLACEHOLDER_MAX_SEC);
+    if (Number.isFinite(pos) && pos > 0 && !placeholder) {
       saveResumeMs(src.meta.id, pos * 1000, season, episode);
       if (liveStreamRef && pos >= REMEMBER_MIN_SEC) {
         savePlayback(
@@ -83,11 +84,8 @@ export function usePlayerExit(params: {
       notifyHostLeaving();
       clearInvite();
     }
-    // Android app: back from the player lands on the source list it was picked from (same
-    // results, no new search), so another source is one tap away; back again = title page.
-    if (isAndroidApp() && exitPlayer && !inRoom) exitPlayer();
-    else exitPlayback();
-  }, [captureExitSnapshot, exitPlayback, exitPlayer, src.meta.id, src.meta.name, season, episode, inRoom, isHost, notifyHostLeaving, clearInvite, publishState, exitPip, liveStreamRef, liveUrl, src.url, stopCast, castActiveRef]);
+    exitPlayback();
+  }, [captureExitSnapshot, exitPlayback, durationSec, src.meta.id, src.meta.name, season, episode, inRoom, isHost, notifyHostLeaving, clearInvite, publishState, exitPip, liveStreamRef, liveUrl, src.url, stopCast, castActiveRef]);
 
   const onStubEject = useCallback(() => {
     const nextAttempt = (src.attempt ?? 0) + 1;

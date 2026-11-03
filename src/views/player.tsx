@@ -69,7 +69,7 @@ import { setSkipSegmentsView } from "@/lib/skip-intro/segment-store";
 import type { ToastInfo } from "@/views/addons/addons-types";
 
 export function PlayerView({ src }: { src: PlayerSrc }) {
-  const { setChromeHidden, topPath, openPicker, exitPlayback, exitPlayer, replacePlayerSrc } = useView();
+  const { setChromeHidden, topPath, openPicker, exitPlayback, replacePlayerSrc } = useView();
   const { settings, update } = useSettings();
   const t = useT();
   const chromeTheme = resolveChromeTheme(settings.theme, settings.playerChromeTheme);
@@ -349,7 +349,7 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     notifyHostLeaving,
     clearInvite,
     exitPlayback,
-    exitPlayer,
+    durationSec: snap.durationSec,
     openPicker,
   });
   // Android app: the native player's back button closes playback and leaves the player view.

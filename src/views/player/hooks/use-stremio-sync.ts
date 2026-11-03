@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isSwapOnTrial, PLACEHOLDER_MAX_SEC } from "@/lib/player/swap-state";
 import { cloudWriteId, libraryGetOne, libraryPut, type LibraryItem } from "@/lib/stremio";
 import type { PlayerSnapshot } from "@/lib/player/bridge";
 import { getPlaybackPosition, subscribePlaybackClock } from "@/lib/player/playback-clock";
@@ -13,6 +14,11 @@ let activeFlusher: (() => Promise<void>) | null = null;
 
 export async function flushCloudSync(): Promise<void> {
   if (activeFlusher) await activeFlusher().catch(() => {});
+}
+
+/** No cloud progress from a placeholder clip or a just-switched source that hasn't started. */
+function unreliable(sn: { durationSec: number }): boolean {
+  return isSwapOnTrial() || (sn.durationSec > 0 && sn.durationSec < PLACEHOLDER_MAX_SEC);
 }
 
 export function useStremioSync(params: {
@@ -59,7 +65,7 @@ export function useStremioSync(params: {
       const cid = sessionCidRef.current ?? latestRef.current.canonicalId;
       if (!ak || !cid || !vid) return;
       const pos = getPlaybackPosition() || lastGoodPosRef.current;
-      if (pos < MIN_POSITION_SEC) return;
+      if (pos < MIN_POSITION_SEC || unreliable(sn)) return;
       const base = baseItemRef.current?._id === cid ? baseItemRef.current : null;
       void writeLibraryItem(ak, s, sn, base, cid, pos, false, vid).then((mt) => {
         if (mt) lastWrittenMtimesRef.current.add(mt);
@@ -82,7 +88,7 @@ export function useStremioSync(params: {
     () =>
       subscribePlaybackClock(() => {
         const pos = getPlaybackPosition();
-        if (pos >= MIN_POSITION_SEC) lastGoodPosRef.current = pos;
+        if (pos >= MIN_POSITION_SEC && !unreliable(latestRef.current.snap)) lastGoodPosRef.current = pos;
       }),
     [],
   );
@@ -118,7 +124,7 @@ export function useStremioSync(params: {
     const cid = sessionCidRef.current ?? liveCid;
     if (!cid) return;
     const pos = getPlaybackPosition() || lastGoodPosRef.current;
-    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0) return;
+    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0 || unreliable(sn)) return;
     const vid = videoIdFor(s, cid);
     const fresh =
       withGet || !wroteOnceRef.current ? await libraryGetOne(ak, cid).catch(() => null) : null;
@@ -154,7 +160,7 @@ export function useStremioSync(params: {
     const cid = sessionCidRef.current ?? liveCid;
     if (!cid) return Promise.resolve();
     const pos = getPlaybackPosition() || lastGoodPosRef.current;
-    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0) return Promise.resolve();
+    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0 || unreliable(sn)) return Promise.resolve();
     const base = baseItemRef.current?._id === cid ? baseItemRef.current : null;
     return writeLibraryItem(ak, s, sn, base, cid, pos, true).then((mt) => {
       if (mt) lastWrittenMtimesRef.current.add(mt);
@@ -178,7 +184,7 @@ export function useStremioSync(params: {
       const active = sn.status === "playing" || castActiveRef?.current === true;
       if (!active) return;
       const pos = getPlaybackPosition();
-      if (pos < MIN_POSITION_SEC || sn.durationSec <= 0) return;
+      if (pos < MIN_POSITION_SEC || sn.durationSec <= 0 || unreliable(sn)) return;
       if (import.meta.env.DEV && Date.now() - sessionStartRef.current > 30000 && !wroteOnceRef.current) {
         console.warn("[stremio-sync] playing >30s with zero successful cloud writes");
       }

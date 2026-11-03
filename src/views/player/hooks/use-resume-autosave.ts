@@ -12,6 +12,13 @@ import { getPlaybackPosition, subscribePlaybackClock } from "@/lib/player/playba
 import { useSettings } from "@/lib/settings";
 import type { PlayerSrc } from "@/lib/view";
 import { CLOUD_OK } from "@/lib/stremio";
+import { isSwapOnTrial, PLACEHOLDER_MAX_SEC } from "@/lib/player/swap-state";
+
+/** Don't save progress from a placeholder clip or a just-switched source that hasn't started:
+ *  it would overwrite where you really were. */
+function unreliable(sn: PlayerSnapshot): boolean {
+  return isSwapOnTrial() || (sn.durationSec > 0 && sn.durationSec < PLACEHOLDER_MAX_SEC);
+}
 
 const TICK_MS = 4000;
 const MIN_POSITION_SEC = 5;
@@ -52,7 +59,7 @@ export function useResumeAutosave(params: {
     () =>
       subscribePlaybackClock(() => {
         const pos = getPlaybackPosition();
-        if (pos >= MIN_POSITION_SEC) lastGoodPosRef.current = pos;
+        if (pos >= MIN_POSITION_SEC && !unreliable(latestRef.current.snap)) lastGoodPosRef.current = pos;
       }),
     [],
   );
@@ -60,6 +67,7 @@ export function useResumeAutosave(params: {
   const record = (s: PlayerSrc, sn: PlayerSnapshot, se?: number, ep?: number): void => {
     const id = s.meta.id;
     if (!id || id.startsWith("iptv:")) return;
+    if (unreliable(sn)) return;
     const pos = getPlaybackPosition() || lastGoodPosRef.current;
     if (pos < MIN_POSITION_SEC) return;
     lastSavedRef.current = pos * 1000;

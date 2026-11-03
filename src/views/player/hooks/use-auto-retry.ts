@@ -12,6 +12,7 @@ import type { Meta } from "@/lib/cinemeta";
 import type { PlayerSrc, PlayEpisode } from "@/lib/view";
 import { BLACK_SCREEN_GRACE_MS, MAX_AUTORETRY_ATTEMPTS, ROOM_STALL_MS, SLOW_LOAD_MS, STUCK_AUTORETRY_MS } from "../player-utils";
 import { GENUINE_FAILURE_WINDOW_MS, type EngineStats } from "@/lib/torrent/engine-stats";
+import { isSwappedSource } from "@/lib/player/swap-state";
 
 type OpenPicker = (
   meta: Meta,
@@ -108,6 +109,12 @@ export function useAutoRetry(params: {
   const triggerAutoRetry = useCallback(
     (reason: string) => {
       if (autoRetriedRef.current) return;
+      // Switched source in the player: the switcher goes back to the previous source itself;
+      // leaving for the source list would stop the movie (the "switching kicks me out" bug).
+      if (isSwappedSource()) {
+        console.warn(`[player] switched source: not leaving the player (${reason})`);
+        return;
+      }
       if (isLocal) {
         console.warn(`[player] local file: skipping auto-retry (${reason})`);
         return;

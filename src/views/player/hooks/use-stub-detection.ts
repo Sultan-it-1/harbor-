@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { PlayerSnapshot } from "@/lib/player/bridge";
 import type { PlayerSrc } from "@/lib/view";
+import { isSwappedSource } from "@/lib/player/swap-state";
 
 export function useStubDetection(params: {
   src: PlayerSrc;
@@ -11,6 +12,8 @@ export function useStubDetection(params: {
   const stubCheckedRef = useRef<string | null>(null);
   useEffect(() => {
     if (stubCheckedRef.current === src.url) return;
+    // A source switched to in the player is checked by the switcher (back to the previous one).
+    if (isSwappedSource()) return;
     if (src.meta.id?.startsWith("iptv:")) return;
     const metaType = String(src.meta.type ?? "").toLowerCase();
     if (metaType && !["movie", "series", "anime"].includes(metaType)) return;
@@ -29,7 +32,7 @@ export function useStubDetection(params: {
           isAnime,
           bytesAdvertised: src.streamRef?.size ?? null,
         });
-        if (!flag) return;
+        if (!flag || isSwappedSource()) return;
         const sf = {
           infoHash: src.streamRef?.infoHash ?? undefined,
           fileIdx: undefined,
