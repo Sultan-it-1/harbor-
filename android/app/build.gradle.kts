@@ -83,4 +83,6 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3")
     // FFmpeg audio decoders (AC3, E-AC3, DTS, TrueHD, …) that most phones don't ship.
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1")
+
+    testImplementation("junit:junit:4.13.2")
 }

@@ -67,7 +67,7 @@ jobs:
             export HARBOR_KEYSTORE_PATH="$RUNNER_TEMP/harbor.jks"
           fi
           VERSION=$(node -p "require('../package.json').version")
-          ./gradlew assembleRelease --no-daemon \
+          ./gradlew testReleaseUnitTest assembleRelease --no-daemon \
             -PharborVersionName="$VERSION" \
             -PharborVersionCode="${{ github.run_number }}"
           # Fixed file name so .../releases/latest/download/harbor-android.apk always works.

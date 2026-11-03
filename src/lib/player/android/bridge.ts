@@ -71,6 +71,25 @@ function preferredSubLangs(): string[] {
   }
 }
 
+/** Harbor's subtitle look, used to seed the native player's style the first time. */
+function harborSubStyle(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem("harbor.settings");
+    if (!raw) return null;
+    const st = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      fontSize: st.subFontSize,
+      color: st.subFontColor,
+      style: st.subStyle,
+      bold: st.subBold,
+      marginY: st.subMarginY,
+      boxOpacity: st.subBoxOpacity,
+    };
+  } catch {
+    return null;
+  }
+}
+
 type NativeSub = { url: string; lang?: string; label?: string };
 
 function nativeSub(url: string, lang?: string, title?: string): NativeSub {
@@ -165,6 +184,7 @@ export function createAndroidBridge(): PlayerBridge {
           startMs: Math.max(0, Math.round((src.startAtSec ?? 0) * 1000)),
           subtitles: initialSubs,
           prefSubLangs: preferredSubLangs(),
+          subStyle: harborSubStyle(),
           title,
           isLive: src.isLive === true,
         }),

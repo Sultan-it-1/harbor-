@@ -70,6 +70,11 @@ class NativePlayer(
     private var generation = 0
     private var subSeq = 0
     private var autoSelectPending = false
+    private var keepSelectedSubId: String? = null
+    private var subStyle = SubStyle()
+    private var subDelayMs = 0L
+    private var effectiveSubs: List<SubtitleStore.LocalSub> = emptyList()
+    private var overlay: List<View> = emptyList()
 
     val isShowing: Boolean get() = view?.visibility == View.VISIBLE
 
@@ -82,6 +87,10 @@ class NativePlayer(
         knownSubUrls.clear()
         subStore.clear()
         prefSubLangs = jsonStrings(src.optJSONArray("prefSubLangs"))
+        subStyle = SubStyle.load(activity) ?: SubStyle.fromHarbor(src.optJSONObject("subStyle"))
+        subDelayMs = 0
+        effectiveSubs = emptyList()
+        keepSelectedSubId = null
         start(src, src.optLong("startMs", 0))
         // Subtitles that came with the stream itself: fetch them and attach once ready.
         addSubs(src.optJSONArray("subtitles"))
@@ -114,6 +123,7 @@ class NativePlayer(
                     return@post
                 }
                 subs.addAll(got)
+                effectiveSubs = effectiveSubs + got.map { if (subDelayMs != 0L) subStore.shifted(it, subDelayMs) else it }
                 toast("تمت إضافة ${got.size} ترجمة — اضغط CC للاختيار")
                 reloadWithSubs()
             }
@@ -127,6 +137,7 @@ class NativePlayer(
         if (droppedSubs) return
         val pos = p.currentPosition
         val playing = p.playWhenReady
+        keepSelectedSubId = selectedSideSubId(p)
         p.setMediaItem(buildItem(src, withSubs = true), pos)
         p.prepare()
         p.playWhenReady = playing
@@ -142,8 +153,10 @@ class NativePlayer(
         val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
         if (textGroups.isEmpty()) return
         autoSelectPending = false
-        if (textGroups.any { it.isSelected }) return
-        val best = prefSubLangs.firstNotNullOfOrNull { pref ->
+        val keep = keepSelectedSubId?.let { id -> subs.firstOrNull { it.id == id } }
+        keepSelectedSubId = null
+        if (keep == null && textGroups.any { it.isSelected }) return
+        val best = keep ?: prefSubLangs.firstNotNullOfOrNull { pref ->
             subs.firstOrNull { s -> s.lang != null && baseLang(s.lang) == baseLang(pref) }
         } ?: return
         for (g in textGroups) {
@@ -158,6 +171,38 @@ class NativePlayer(
                 }
             }
         }
+    }
+
+    /** Our id ("s12") of the side-loaded subtitle currently shown, if any. */
+    private fun selectedSideSubId(p: ExoPlayer): String? {
+        for (g in p.currentTracks.groups) {
+            if (g.type != C.TRACK_TYPE_TEXT) continue
+            for (i in 0 until g.length) {
+                if (!g.isTrackSelected(i)) continue
+                val id = g.getTrackFormat(i).id ?: continue
+                subs.firstOrNull { id == it.id || id.endsWith(":${it.id}") }?.let { return it.id }
+            }
+        }
+        return null
+    }
+
+    private fun setSubDelay(ms: Long) {
+        if (subs.isEmpty()) {
+            toast("ما فيه ترجمات إضافات — التأخير ما يشتغل على الترجمة المدمجة")
+            return
+        }
+        subDelayMs = ms.coerceIn(-600_000, 600_000)
+        val delay = subDelayMs
+        val gen = generation
+        val snapshot = subs.toList()
+        Thread {
+            val shifted = snapshot.map { subStore.shifted(it, delay) }
+            handler.post {
+                if (gen != generation || delay != subDelayMs) return@post
+                effectiveSubs = shifted
+                reloadWithSubs()
+            }
+        }.start()
     }
 
     private fun baseLang(l: String) = l.lowercase().substringBefore('-').substringBefore('_')
@@ -177,9 +222,9 @@ class NativePlayer(
         val lower = url.lowercase()
         if (lower.contains(".m3u8") || lower.contains("/hlsv2/")) item.setMimeType(MimeTypes.APPLICATION_M3U8)
         else if (lower.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD)
-        if (withSubs && subs.isNotEmpty()) {
+        if (withSubs && effectiveSubs.isNotEmpty()) {
             item.setSubtitleConfigurations(
-                subs.map { s ->
+                effectiveSubs.map { s ->
                     MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(s.file))
                         .setMimeType(s.mime)
                         // No language on purpose: the player menu shows the language *instead of*
@@ -282,8 +327,46 @@ class NativePlayer(
         v.player = p
         v.visibility = View.VISIBLE
         v.bringToFront()
+        subStyle.applyTo(v.subtitleView)
+        if (overlay.isEmpty()) overlay = buildOverlay(v)
+        overlay.forEach { it.bringToFront() }
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         activity.setFullscreenMode(true)
+    }
+
+    /** Top-bar buttons over the player: ✕ (close) and Aa (subtitle settings); they follow the controls. */
+    private fun buildOverlay(pv: PlayerView): List<View> {
+        val dp = activity.resources.displayMetrics.density
+        fun chip(text: String, gravity: Int, onClick: () -> Unit) = android.widget.TextView(activity).apply {
+            this.text = text
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            this.gravity = android.view.Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 999f
+                setColor(Color.argb(110, 0, 0, 0))
+            }
+            setOnClickListener { onClick() }
+            root.addView(this, FrameLayout.LayoutParams((48 * dp).toInt(), (48 * dp).toInt(), gravity).apply {
+                setMargins((16 * dp).toInt(), (16 * dp).toInt(), (16 * dp).toInt(), (16 * dp).toInt())
+            })
+        }
+        val close = chip("✕", android.view.Gravity.TOP or android.view.Gravity.START) { close() }
+        val subsBtn = chip("Aa", android.view.Gravity.TOP or android.view.Gravity.END) {
+            SubtitleControls(
+                activity,
+                subStyle,
+                onStyle = { subStyle.applyTo(view?.subtitleView) },
+                getDelayMs = { subDelayMs },
+                onDelay = { setSubDelay(it) },
+            ).show()
+        }
+        val views = listOf(close, subsBtn)
+        pv.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { vis ->
+            views.forEach { it.visibility = if (view?.visibility == View.VISIBLE) vis else View.GONE }
+        })
+        return views
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -364,6 +447,7 @@ class NativePlayer(
             it.player = null
             it.visibility = View.GONE
         }
+        overlay.forEach { it.visibility = View.GONE }
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         activity.setFullscreenMode(false)
     }
