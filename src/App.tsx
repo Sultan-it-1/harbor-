@@ -394,7 +394,7 @@ function parseDeepLinkEpisode(videoId?: string): { season: number; episode: numb
 }
 
 function Shell() {
-  const { topKind, service, meta, metaLiveContext, metaEpisodeHint, episodeDetail, personId, collectionId, filter, grid, awardType, animeAwardSource, picker, player, setView, goBack, openMeta, stackKinds, chromeHidden } = useView();
+  const { topKind, service, meta, metaLiveContext, metaEpisodeHint, episodeDetail, personId, collectionId, filter, grid, awardType, animeAwardSource, picker, player, setView, goBack, openMeta, openGrid, stackKinds, chromeHidden } = useView();
   const { settings, update } = useSettings();
   const uiScaleRef = useRef(settings.uiScale);
   const preview = useThemePreview();
@@ -512,8 +512,9 @@ function Shell() {
       ...(w.harbor ?? {}),
       navigate: (v: string) => setView(v as View),
       back: () => goBack(),
+      openGrid: (g: Parameters<typeof openGrid>[0]) => openGrid(g),
     };
-  }, [setView, goBack]);
+  }, [setView, goBack, openGrid]);
 
   useEffect(() => {
     if (topKind !== "live") {

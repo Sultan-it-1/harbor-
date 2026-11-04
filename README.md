@@ -18,6 +18,7 @@ A Stremio client for Android and the web.
 - Addon subtitles with adjustable size, background, colour, position and delay.
 - Phone layout with a bottom tab bar, pinch to fill the screen while watching.
 - Downloads run in the background (movies, episodes and whole seasons) and play offline, with their subtitles.
+- Search inside any "View all" list: forgives typos, understands Arabic and English, and also finds titles by year, genre or initials ("got" finds Game of Thrones).
 - A small check on the posters and episodes you've watched, following Harbor's history, your Stremio library and Trakt (switch it off in Settings).
 - Runs at the screen's highest refresh rate; video uses a judder-free rate and hardware decoding.
 - Signed releases: each new APK installs over the previous one.
