@@ -3,6 +3,7 @@ import { Link2, Search, Unlink, X } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { getEpgOverride, setEpgOverride } from "@/lib/iptv/epg-map";
 import type { EpgIndex, IptvChannel } from "@/lib/iptv/types";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function EpgMatchModal({
   channel,
@@ -79,7 +80,7 @@ export function EpgMatchModal({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("Search {n} EPG channels", { n: entries.length.toLocaleString() })}
+            placeholder={t("Search {n} EPG channels", { n: entries.length.toLocaleString(uiLocale()) })}
             autoFocus
             className="flex-1 bg-transparent text-[13.5px] text-ink placeholder:text-ink-subtle focus:outline-none"
           />

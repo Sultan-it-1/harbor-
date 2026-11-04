@@ -11,6 +11,7 @@ import {
 } from "@/lib/download/season-download";
 import { useSettings } from "@/lib/settings";
 import { useView, type PlayEpisode } from "@/lib/view";
+import { t } from "@/lib/i18n/translate";
 
 /**
  * "Download season": picks the best saveable source for every episode of the season
@@ -54,7 +55,7 @@ export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes:
         <button
           type="button"
           onClick={() => stopSeasonDownload(key)}
-          aria-label="Stop"
+          aria-label={t("Stop")}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-edge-soft text-ink-subtle"
         >
           <X size={16} />
@@ -88,7 +89,7 @@ export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes:
       className={`${base} w-fit border border-edge-soft bg-elevated/50 text-ink hover:bg-elevated`}
     >
       <Download size={15} />
-      Download season
+      {t("Download season")}
     </button>
   );
 }

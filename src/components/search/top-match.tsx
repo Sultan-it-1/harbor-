@@ -2,6 +2,7 @@ import { Play, Star } from "lucide-react";
 import type { SearchResults } from "@/lib/search";
 import { ResultPoster } from "./result-poster";
 import { useView } from "@/lib/view";
+import { t } from "@/lib/i18n/translate";
 
 export function TopMatch({
   match,
@@ -52,7 +53,7 @@ export function TopMatch({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="text-[11.5px] font-semibold uppercase tracking-[0.22em] text-accent">
-            Top match
+            {t("Top match")}
           </span>
           <h2
             className="mt-1.5 text-[clamp(32px,3.4vw,52px)] font-medium leading-[1.02] tracking-tight text-ink"
@@ -85,7 +86,7 @@ export function TopMatch({
           )}
           <div className="mt-6 inline-flex h-12 max-w-max items-center gap-2 self-start rounded-full bg-ink px-6 text-[14.5px] font-semibold text-canvas shadow-[0_8px_24px_-8px_rgba(255,255,255,0.25)] transition-all group-hover:bg-ink group-hover:shadow-[0_10px_28px_-6px_rgba(255,255,255,0.4)]">
             <Play size={15} className="fill-current" strokeWidth={0} />
-            Open
+            {t("Open")}
           </div>
         </div>
       </button>

@@ -1,6 +1,7 @@
 import { ArrowRight, FileDown, Library, Palette } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { t } from "@/lib/i18n/translate";
 
 export function HeroCards({
   onOpenLibrary,
@@ -20,7 +21,7 @@ export function HeroCards({
     <div className="grid gap-4 md:grid-cols-3">
       <HeroCard
         icon={<Library size={28} strokeWidth={2} />}
-        title="Theme Library"
+        title={t("Theme Library")}
         body={`Browse all ${libraryCount} themes. Apply with one click.`}
         cta="Open library"
         onClick={onOpenLibrary}
@@ -30,7 +31,7 @@ export function HeroCards({
       {onOpenStudio && (
         <HeroCard
           icon={<Palette size={28} strokeWidth={2} />}
-          title="Build a Theme"
+          title={t("Build a Theme")}
           body="Pick a layout, set colors and fonts. No code needed."
           cta="Open studio"
           onClick={onOpenStudio}
@@ -38,7 +39,7 @@ export function HeroCards({
       )}
       <HeroCard
         icon={<FileDown size={28} strokeWidth={2} />}
-        title="Import a Theme"
+        title={t("Import a Theme")}
         body="Got a theme a friend shared? Drop it in."
         cta="Choose file"
         onClick={onImport}
@@ -130,7 +131,7 @@ function ImportBadge({ name }: { name: string }) {
     >
       <span
         className="flex h-6 w-6 animate-pulse items-center justify-center rounded-full bg-accent text-[14px] font-bold leading-none text-canvas shadow-[0_3px_10px_-2px_var(--color-accent)] ring-2 ring-[var(--color-surface)]"
-        aria-label={`${name} imported to your library`}
+        aria-label={t("{name} imported to your library", { name: name })}
       >
         !
       </span>
@@ -140,7 +141,7 @@ function ImportBadge({ name }: { name: string }) {
             style={{ position: "fixed", top: tip.top, right: tip.right, zIndex: 9999 }}
             className="pointer-events-none w-max max-w-[260px] rounded-lg border border-edge bg-elevated px-3 py-2 text-start text-[12.5px] leading-snug text-ink shadow-[0_18px_44px_-16px_rgba(0,0,0,0.75)]"
           >
-            <span className="font-semibold text-accent">{name}</span> imported to your library
+            <span className="font-semibold text-accent">{name}</span> {t("imported to your library")}
           </div>,
           document.body,
         )}

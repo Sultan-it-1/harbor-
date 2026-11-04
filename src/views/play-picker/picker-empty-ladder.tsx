@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import { EmptyState, FilteredOutState, NoSourcesState, TheatresEmptyState } from "./empty-states";
 import type { usePipelineResult } from "./use-pipeline-result";
+import { t } from "@/lib/i18n/translate";
 
 type PipelineResult = ReturnType<typeof usePipelineResult>["result"];
 
@@ -122,7 +123,7 @@ export function PickerEmptyLadder({
               onClick={onShowAll}
               className="shrink-0 rounded-full border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-[12.5px] font-semibold text-amber-100 transition-[transform,background-color] hover:scale-[1.02] hover:bg-amber-300/20 active:scale-[0.98]"
             >
-              Show everything anyway
+              {t("Show everything anyway")}
             </button>
           )}
         </div>

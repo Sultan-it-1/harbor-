@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import snip404 from "@/assets/snip404.svg";
 import { HarborMark } from "@/components/icons/harbor-mark";
 import { submitErrorReport } from "@/lib/bug-report";
+import { t } from "@/lib/i18n/translate";
 
 export type HarborError = {
   code: string;
@@ -171,7 +172,7 @@ export function ErrorView() {
 
       <div className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col gap-5 px-6 pb-10 pt-6 sm:gap-6 sm:px-8 lg:ms-auto lg:me-[8vw] lg:gap-7 lg:py-0">
         <h1 className="font-display text-[80px] font-medium leading-[0.9] tracking-tight text-ink drop-shadow-[0_4px_22px_rgba(0,0,0,0.45)] sm:text-[110px] lg:text-[148px] lg:leading-[0.86]">
-          Oops..
+          {t("Oops..")}
         </h1>
 
         <p className="max-w-[460px] text-[14.5px] leading-relaxed text-ink-muted sm:text-[15.5px]">
@@ -187,7 +188,7 @@ export function ErrorView() {
             className="inline-flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-[13.5px] font-semibold text-canvas transition-colors hover:bg-accent/90"
           >
             <ArrowLeftIcon className="dir-icon h-[16px] w-[16px]" />
-            Take me back
+            {t("Take me back")}
           </button>
           <button
             type="button"
@@ -217,7 +218,7 @@ export function ErrorView() {
           <button
             type="button"
             onClick={reload}
-            aria-label="Reload"
+            aria-label={t("Reload")}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-elevated/60 hover:text-ink"
           >
             <ReloadIcon className="h-[15px] w-[15px]" />
@@ -227,13 +228,13 @@ export function ErrorView() {
         <p className="text-[11.5px] text-ink-subtle">
           {report.kind === "sent" ? (
             <>
-              Thanks. Tracked as{" "}
+              {t("Thanks. Tracked as")}{" "}
               <span className="font-mono text-ink-muted">{report.id}</span>.
             </>
           ) : report.kind === "error" ? (
-            <span className="text-danger/80">Could not send: {report.message}</span>
+            <span className="text-danger/80">{t("Could not send:")} {report.message}</span>
           ) : (
-            <>Sends the context above straight to the Harbor team. No keys or library data.</>
+            <>{t("Sends the context above straight to the Harbor team. No keys or library data.")}</>
           )}
         </p>
       </div>
@@ -286,7 +287,7 @@ function TechnicalDetail({ content }: { content: string }) {
         className="inline-flex w-fit items-center gap-2 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
       >
         <ChevronIcon className={`h-[10px] w-[10px] transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
-        Technical detail
+        {t("Technical detail")}
       </button>
 
       <div
@@ -299,8 +300,8 @@ function TechnicalDetail({ content }: { content: string }) {
             <button
               type="button"
               onClick={onCopy}
-              aria-label={copied ? "Copied" : "Copy to clipboard"}
-              title={copied ? "Copied" : "Copy"}
+              aria-label={copied ? t("Copied") : t("Copy to clipboard")}
+              title={copied ? t("Copied") : t("Copy")}
               className={`absolute end-2.5 top-2.5 inline-flex h-8 w-8 items-center justify-center rounded-full transition-[background-color,color,transform] active:scale-95 ${
                 copied
                   ? "bg-accent/20 text-accent"

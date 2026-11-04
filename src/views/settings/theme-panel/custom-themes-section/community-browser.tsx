@@ -3,6 +3,9 @@ import { AlertCircle, Check, Download, Loader2, Search, Star, Upload } from "luc
 import { browseThemes, downloadTheme, rateTheme, type StoreTheme } from "@/lib/theme-store";
 import { CommunityDetail } from "./community-detail";
 import { ThemeUploadFlow } from "./theme-upload-flow";
+import { t } from "@/lib/i18n/translate";
+// `t` is a theme inside the cards below: the translator goes by `tr` there.
+import { t as tr } from "@/lib/i18n/translate";
 
 const SORTS = [
   { id: "top", label: "Top rated" },
@@ -56,14 +59,14 @@ export function CommunityPane() {
           onClick={() => setUploadOpen(true)}
           className="ms-auto flex h-9 items-center gap-1.5 rounded-full bg-ink px-4 text-[12.5px] font-semibold text-canvas transition-opacity hover:opacity-90"
         >
-          <Upload size={14} strokeWidth={2.2} /> Share a theme
+          <Upload size={14} strokeWidth={2.2} /> {t("Share a theme")}
         </button>
         <div className="flex h-9 items-center gap-2 rounded-full border border-edge-soft bg-elevated/40 px-3.5">
           <Search size={15} className="text-ink-subtle" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search themes"
+            placeholder={t("Search themes")}
             className="w-44 bg-transparent text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none"
           />
         </div>
@@ -129,7 +132,7 @@ function CommunityCard({ theme, onOpen }: { theme: StoreTheme; onOpen: () => voi
   return (
     <div
       onClick={onOpen}
-      role="button"
+      role="group"
       tabIndex={0}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen()}
       className="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-edge-soft bg-surface text-start transition-all hover:border-edge hover:shadow-[0_18px_36px_-22px_rgba(0,0,0,0.3)]"
@@ -153,9 +156,9 @@ function CommunityCard({ theme, onOpen }: { theme: StoreTheme; onOpen: () => voi
           <Star size={10} className="fill-amber-300 text-amber-300" /> {t.ratingAvg || "-"}
         </div>
         <div className="absolute inset-0 flex flex-col justify-end gap-2 bg-gradient-to-t from-black/85 via-black/35 to-transparent p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          <div className="flex items-center justify-center gap-0.5" role="group" aria-label="Rate this theme">
+          <div className="flex items-center justify-center gap-0.5" role="group" aria-label={tr("Rate this theme")}>
             {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} onClick={(e) => rate(e, n)} aria-label={`Rate ${n} stars`} className="p-0.5">
+              <button key={n} onClick={(e) => rate(e, n)} aria-label={tr("Rate {n} stars", { n })} className="p-0.5">
                 <Star size={15} className={n <= shownRating ? "fill-amber-300 text-amber-300" : "text-white/60"} />
               </button>
             ))}
@@ -192,7 +195,7 @@ function CommunityCard({ theme, onOpen }: { theme: StoreTheme; onOpen: () => voi
       <div className="flex min-w-0 flex-col px-4 py-3">
         <span className="truncate text-[14.5px] font-semibold text-ink">{t.name}</span>
         <span className="truncate text-[11.5px] text-ink-subtle">
-          {t.author} · {t.downloads} downloads
+          {t.author} · {tr("{n} downloads", { n: t.downloads })}
         </span>
       </div>
     </div>

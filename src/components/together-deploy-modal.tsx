@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n";
 import { useSettings } from "@/lib/settings";
 import { deployRelay, listAccounts, type CfAccount } from "@/lib/together/cf-deploy";
 import { openUrl } from "@/lib/window";
+import { Interpolate } from "@/components/interpolate";
 
 type Phase = "intro" | "token" | "account" | "deploying" | "done" | "error";
 
@@ -451,20 +452,5 @@ function linkifyMessage(text: string): React.ReactNode {
     ) : (
       <span key={i}>{part}</span>
     ),
-  );
-}
-
-function Interpolate({ text, values }: { text: string; values: Record<string, React.ReactNode> }) {
-  const parts = text.split(/({[a-zA-Z0-9]+})/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        const match = part.match(/^{([a-zA-Z0-9]+)}$/);
-        if (match && values[match[1]]) {
-          return <span key={i}>{values[match[1]]}</span>;
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </>
   );
 }

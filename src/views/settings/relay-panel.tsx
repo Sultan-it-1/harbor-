@@ -99,7 +99,7 @@ export function TogetherRelayPanel({
             {isPubRelay ? (
               <img
                 src={pubRelaySvg}
-                alt="Harbor public relay"
+                alt={t("Harbor public relay")}
                 className="h-14 w-14 shrink-0 object-contain"
                 draggable={false}
               />

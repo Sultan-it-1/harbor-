@@ -16,6 +16,7 @@ import {
   RenderedStremioControl,
   type StremioRenderCtx,
 } from "./transport/control-renderer-stremio";
+import { t } from "@/lib/i18n/translate";
 
 export type TransportStremioProps = {
   snap: PlayerSnapshot;
@@ -263,7 +264,7 @@ export function TransportStremio(p: TransportStremioProps) {
             <a
               href={`vlc://${download.url}`}
               className="pointer-events-auto flex items-center justify-center rounded-full bg-orange-500/80 px-3 py-1 text-[13px] font-bold text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
-              aria-label="Play in VLC"
+              aria-label={t("Play in VLC")}
             >
               VLC
             </a>

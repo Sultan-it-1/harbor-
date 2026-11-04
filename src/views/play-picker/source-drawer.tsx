@@ -19,6 +19,7 @@ import {
   tierChipBadges,
   torrentFilename,
 } from "./picker-utils";
+import { t } from "@/lib/i18n/translate";
 
 export function SourceDrawer({
   open,
@@ -74,14 +75,14 @@ export function SourceDrawer({
           <span className="flex items-center gap-2">
             <AddonLogoStack addons={usedAddons} size="sm" max={5} />
             <span className="text-ink-subtle/80">
-              {addonCount} addon{addonCount === 1 ? "" : "s"}
+              {addonCount} {t("addon")}{addonCount === 1 ? "" : "s"}
             </span>
           </span>
         )}
       </button>
       {open && addonOptions.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <AddonPill active={addonFilter === "all"} onClick={() => setAddonFilter("all")} label="All" count={streams.length} />
+          <AddonPill active={addonFilter === "all"} onClick={() => setAddonFilter("all")} label={t("All")} count={streams.length} />
           {addonOptions.map((o) => (
             <AddonPill
               key={o.id}
@@ -218,17 +219,17 @@ function SourceRow({
           {libraryDebrids.length > 0 ? (
             <span className="inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-accent">
               <Zap size={12} fill="currentColor" strokeWidth={0} />
-              In {libraryDebrids.map((d) => d.name).join(" + ")}
+              {t("In")} {libraryDebrids.map((d) => d.name).join(" + ")}
             </span>
           ) : cachedDebrids.length > 0 ? (
             <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
               <Zap size={11} strokeWidth={2} />
-              Cached on {cachedDebrids.map((d) => d.name).join(" + ")}
+              {t("Cached on")} {cachedDebrids.map((d) => d.name).join(" + ")}
             </span>
           ) : !stream.url && !stream.infoHash && (stream.externalUrl || stream.ytId) ? (
             <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
               <ExternalLink size={11} strokeWidth={2.2} />
-              External
+              {t("External")}
             </span>
           ) : !stream.url ? (
             <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">

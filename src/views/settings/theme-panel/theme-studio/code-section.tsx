@@ -2,6 +2,7 @@ import { BookOpen, Code2 } from "lucide-react";
 import { useState } from "react";
 import type { CodeLang } from "@/components/code-editor";
 import { CheatSheet } from "./cheat-sheet";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function CodeSection({
   css,
@@ -31,7 +32,7 @@ export function CodeSection({
       <div className="flex items-center justify-between gap-3 rounded-lg border border-edge-soft bg-elevated/15 px-4 py-3">
         <span className="text-[13px] text-ink-muted">
           {anyCode
-            ? `CSS ${css.length.toLocaleString()} · HTML ${html.length.toLocaleString()} · JS ${js.length.toLocaleString()}`
+            ? `CSS ${css.length.toLocaleString(uiLocale())} · HTML ${html.length.toLocaleString(uiLocale())} · JS ${js.length.toLocaleString(uiLocale())}`
             : "No custom code yet."}
         </span>
         <button

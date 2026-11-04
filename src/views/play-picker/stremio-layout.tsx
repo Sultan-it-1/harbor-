@@ -6,6 +6,7 @@ import type { ScoredStream } from "@/lib/streams/types";
 import { StremioRow } from "./stremio-row";
 import { QualityFilterBar, qualityTier, qualityTiersOf } from "./quality-filter";
 import { addonInstanceKey, buildAddonOptions } from "./picker-utils";
+import { t } from "@/lib/i18n/translate";
 
 export function StremioLayout({
   streams,
@@ -119,7 +120,7 @@ export function StremioLayout({
               }`}
             >
               <CircleLogo addonId={null} addonName="All" logo={null} />
-              <span className="flex-1 truncate">All sources</span>
+              <span className="flex-1 truncate">{t("All sources")}</span>
               <span className="text-[12px] text-ink-subtle">{streams.length}</span>
             </button>
             {addonOptions.map((opt) => (
@@ -242,7 +243,7 @@ function PendingChip({ addon }: { addon: Addon }) {
   const src = remoteLogo ?? bundled ?? null;
   return (
     <span className="flex items-center gap-2 text-[12px] text-ink">
-      <span className="text-ink-subtle">Waiting for</span>
+      <span className="text-ink-subtle">{t("Waiting for")}</span>
       <span className="flex items-center gap-1.5">
         {src ? (
           <img src={src} alt="" className="h-4 w-4 rounded-sm object-contain" />

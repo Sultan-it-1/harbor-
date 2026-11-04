@@ -3,6 +3,7 @@ import { AddonLogo } from "@/components/addon-logo";
 import { useDebridClients } from "@/lib/debrid/registry";
 import type { ScoredStream } from "@/lib/streams/types";
 import { directStreamAvailable } from "@/lib/torrent/stremio-stream";
+import { t } from "@/lib/i18n/translate";
 
 export function PlayProvenance({
   stream,
@@ -30,7 +31,7 @@ export function PlayProvenance({
   if (stream.url) {
     return (
       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-ink-subtle">
-        <span>via</span>
+        <span>{t("via")}</span>
         {addonChip}
       </p>
     );
@@ -40,10 +41,10 @@ export function PlayProvenance({
       return (
         <div className="flex flex-col gap-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-ink-muted">
-            Streams from peers
+            {t("Streams from peers")}
           </p>
           <p className="flex items-center gap-1.5 text-[10px] font-medium tracking-[0.18em] text-ink-subtle/70">
-            <span>found by</span>
+            <span>{t("found by")}</span>
             {addonChip}
           </p>
         </div>
@@ -52,10 +53,10 @@ export function PlayProvenance({
     return (
       <div className="flex flex-col gap-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-danger/80">
-          No debrid configured
+          {t("No debrid configured")}
         </p>
         <p className="flex items-center gap-1.5 text-[10px] font-medium tracking-[0.18em] text-ink-subtle/80">
-          add one in settings · found by {addonChip}
+          {t("add one in settings · found by")} {addonChip}
         </p>
       </div>
     );
@@ -69,7 +70,7 @@ export function PlayProvenance({
         {isCached ? `plays via ${target.name}` : "uncached on debrid"}
       </p>
       <p className="flex items-center gap-1.5 text-[10px] font-medium tracking-[0.18em] text-ink-subtle/70">
-        <span>found by</span>
+        <span>{t("found by")}</span>
         {addonChip}
       </p>
     </div>

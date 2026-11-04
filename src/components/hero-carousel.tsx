@@ -160,6 +160,8 @@ export function HeroCarousel({ slides, full = false, fullQuality = false }: { sl
                 key={`${s.meta.id}-${i}`}
                 dir={rtl ? "rtl" : "ltr"}
                 aria-hidden={!isActive}
+                // Off-screen slides: hidden from TalkBack and out of the focus order too.
+                inert={!isActive}
                 className="w-full shrink-0"
                 style={{
                   opacity: dragging ? 1 : isActive ? 1 : 0.42,

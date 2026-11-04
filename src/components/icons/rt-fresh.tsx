@@ -1,9 +1,10 @@
-export function RtFresh({ className }: { className?: string }) {
+
+import { t } from "@/lib/i18n/translate";export function RtFresh({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 32 32"
       className={className}
-      aria-label="Rotten Tomatoes Fresh"
+      aria-label={t("Rotten Tomatoes Fresh")}
       role="img"
     >
       <path

@@ -117,7 +117,7 @@ export function SideRail() {
           <GoldRule collapsed={collapsed} />
 
           <nav className="flex flex-col gap-0.5">
-            <RailItem label="Settings" active={view === "settings"} collapsed={collapsed} onClick={() => setView("settings")} />
+            <RailItem label={t("Settings")} active={view === "settings"} collapsed={collapsed} onClick={() => setView("settings")} />
           </nav>
         </div>
 

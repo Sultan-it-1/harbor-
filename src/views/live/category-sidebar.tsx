@@ -4,6 +4,7 @@ import { useT } from "@/lib/i18n";
 import { FAVORITES_GROUP_KEY } from "@/lib/iptv/favorites";
 import { toggleGroupHidden, toggleGroupPin, useGroupPrefs } from "@/lib/iptv/group-order";
 import { isPhoneLayout } from "@/lib/platform";
+import { uiLocale } from "@/lib/i18n/locale";
 
 // Phone: there is no hover, so the pin/hide buttons are always shown (see index.css) and the
 // row keeps room for them instead of drawing them over the channel count.
@@ -260,7 +261,7 @@ function CategoryItem({
             active ? "bg-canvas text-ink-muted" : "bg-canvas/55 text-ink-subtle"
           } ${hasActions && !PHONE ? "group-hover/cat:opacity-0" : ""}`}
         >
-          {count.toLocaleString()}
+          {count.toLocaleString(uiLocale())}
         </span>
       </button>
       {hasActions && (

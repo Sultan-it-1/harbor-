@@ -311,6 +311,8 @@ function CinemaSlide({
   return (
     <div
       aria-hidden={!active}
+      // An inactive slide is also out of the focus order (its buttons must not be reachable).
+      inert={!active}
       className="relative h-full w-full"
     >
       {bg && (

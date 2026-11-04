@@ -9,6 +9,7 @@ import {
 import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
+import { uiLocale } from "@/lib/i18n/locale";
 
 const SOURCE_TINTS: Record<AwardSourceId, string> = {
   crunchyroll: "#f47521",
@@ -144,7 +145,7 @@ function Banner({
             {data.meta.name}
           </h1>
           <p className="text-[14px] font-semibold uppercase tracking-[0.18em]" style={{ color: tint }}>
-            <span className="text-ink">{totalWins.toLocaleString()}</span> {t("recorded winners")} ·{" "}
+            <span className="text-ink">{totalWins.toLocaleString(uiLocale())}</span> {t("recorded winners")} ·{" "}
             <span className="text-ink">{data.categories.length}</span>{" "}
             {data.categories.length === 1 ? t("category") : t("categories")}
             {yearSpan && (

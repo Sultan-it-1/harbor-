@@ -31,7 +31,7 @@ export function PickerHeader({
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-elevated/70 ring-1 ring-edge-soft transition-colors group-hover/back:bg-elevated">
             <ChevronLeft size={26} strokeWidth={2.4} className="dir-icon" />
           </span>
-          Back
+          {t("Back")}
         </button>
         {onRefresh && (
           <button
@@ -50,7 +50,7 @@ export function PickerHeader({
       {episode ? (
         <>
           <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-subtle">
-            {meta.name} · Season {episode.imdbSeason ?? episode.season} · Episode {String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}
+            {meta.name} {t("· Season")} {episode.imdbSeason ?? episode.season} {t("· Episode")} {String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}
           </p>
           <h1 className={`font-display font-medium leading-[0.96] tracking-tight text-ink ${PHONE ? "text-[34px]" : "text-[64px]"}`}>
             {episode.name || `Episode ${episode.episode}`}

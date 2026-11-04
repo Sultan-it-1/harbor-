@@ -2,6 +2,7 @@ import type { CalendarFilter, CalendarItem } from "@/lib/calendar";
 import { type LibraryItem } from "@/lib/stremio";
 import type { Meta } from "@/lib/cinemeta";
 import type { Cell } from "./types";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -86,7 +87,7 @@ export function buildMonthCells(year: number, month: number, weekStartsMonday = 
 export function formatDateLong(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(y, (m ?? 1) - 1, d ?? 1);
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(uiLocale(), {
     weekday: "long",
     month: "long",
     day: "numeric",

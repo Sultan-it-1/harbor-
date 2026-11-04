@@ -5,6 +5,7 @@ import { FormatBadge } from "@/components/format-badge";
 import { useDebridClients } from "@/lib/debrid/registry";
 import type { ScoredStream, Tier } from "@/lib/streams/types";
 import { formatSize, hasUncachedMarker, streamLeadBadge, streamLeadLabel } from "./picker-utils";
+import { t } from "@/lib/i18n/translate";
 
 export function TierStrip({
   tiers,
@@ -25,7 +26,7 @@ export function TierStrip({
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <p className="text-[12px] font-bold uppercase tracking-[0.32em] text-ink-subtle">
-          Switch quality
+          {t("Switch quality")}
         </p>
         <QualityDisclaimer />
         {langFilterSlot}
@@ -125,10 +126,10 @@ function QualityDisclaimer() {
           >
             <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-accent">
               <Info size={11} strokeWidth={2.4} />
-              Quality labels come from addons
+              {t("Quality labels come from addons")}
             </span>
             <p className="text-[12.5px] leading-snug text-ink-muted">
-              Each row's resolution badge is whatever the addon claimed. Some addons mislabel files: a 1080p or 4K tag on a brand-new theatrical release is often a CAM or TS rebadged. Harbor pushes obvious mismatches down the ranking, but if a top result looks suspicious, scroll the source list or pick the Theater Capture tier instead.
+              {t("Each row's resolution badge is whatever the addon claimed. Some addons mislabel files: a 1080p or 4K tag on a brand-new theatrical release is often a CAM or TS rebadged. Harbor pushes obvious mismatches down the ranking, but if a top result looks suspicious, scroll the source list or pick the Theater Capture tier instead.")}
             </p>
           </div>,
           document.body,

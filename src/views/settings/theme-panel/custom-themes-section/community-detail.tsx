@@ -2,6 +2,8 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Download, Loader2, Share2, Star, X } from "lucide-react";
 import { downloadTheme, rateTheme, type StoreTheme } from "@/lib/theme-store";
+// `t` is the theme here: the translator goes by `tr`.
+import { t as tr } from "@/lib/i18n/translate";
 
 export function CommunityDetail({
   theme,
@@ -53,7 +55,7 @@ export function CommunityDetail({
 
   return createPortal(
     <div className="fixed inset-0 z-[230] flex items-center justify-center p-6">
-      <button aria-label="Close" onClick={onClose} className="absolute inset-0 cursor-default bg-canvas/70 backdrop-blur-sm" />
+      <button aria-label={tr("Close")} onClick={onClose} className="absolute inset-0 cursor-default bg-canvas/70 backdrop-blur-sm" />
       <div className="modal-panel relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-edge-soft bg-elevated shadow-[0_30px_90px_-30px_rgba(0,0,0,0.8)]">
         <button onClick={onClose} className="absolute end-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-canvas/80 text-ink-muted backdrop-blur-md transition-colors hover:text-ink">
           <X size={16} />
@@ -69,7 +71,7 @@ export function CommunityDetail({
               </div>
               <h2 className="mt-2 font-display text-[26px] font-medium leading-tight text-ink">{t.name}</h2>
               <p className="text-[13px] text-ink-subtle">
-                by {t.author} · {t.downloads} downloads · {t.ratingAvg || "-"}/5 ({t.ratingCount})
+                {tr("by {author}", { author: t.author })} · {tr("{n} downloads", { n: t.downloads })} · {t.ratingAvg || "-"}/5 ({t.ratingCount})
               </p>
             </div>
             {t.blurb && <p className="text-[14px] leading-relaxed text-ink-muted">{t.blurb}</p>}
@@ -91,9 +93,9 @@ export function CommunityDetail({
               >
                 {copied ? <Check size={15} /> : <Share2 size={15} />} {copied ? "Copied" : "Share"}
               </button>
-              <div className="ms-auto flex items-center gap-0.5" role="group" aria-label="Rate this theme">
+              <div className="ms-auto flex items-center gap-0.5" role="group" aria-label={tr("Rate this theme")}>
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <button key={n} onClick={() => rate(n)} aria-label={`Rate ${n} stars`} className="p-0.5">
+                  <button key={n} onClick={() => rate(n)} aria-label={tr("Rate {n} stars", { n })} className="p-0.5">
                     <Star size={20} className={n <= shownRating ? "fill-amber-300 text-amber-300" : "text-ink-subtle"} />
                   </button>
                 ))}

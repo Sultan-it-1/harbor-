@@ -6,6 +6,7 @@ import { Laurel } from "@/components/icons/laurel";
 import type { AwardEntry, AwardType } from "@/lib/providers/wikidata";
 import { useView } from "@/lib/view";
 import { meta as cinemetaMeta, type Meta } from "@/lib/cinemeta";
+import { t } from "@/lib/i18n/translate";
 
 const TYPE_TITLE: Record<AwardType, string> = {
   oscar: "Academy Awards",
@@ -112,7 +113,7 @@ export function AwardDetailModal({
         </div>
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t("Close")}
           className="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-canvas/60 hover:text-ink"
         >
           <X size={13} strokeWidth={2.2} />

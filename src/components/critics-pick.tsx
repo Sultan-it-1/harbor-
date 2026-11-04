@@ -191,10 +191,10 @@ export function CriticsPick({ meta }: { meta: Meta }) {
     <section className="flex flex-col gap-5">
       <div className="flex items-baseline justify-between">
         <h2 className={`font-display font-medium leading-tight tracking-tight text-ink ${PHONE ? "text-[20px]" : "text-[28px]"}`}>
-          Critics' Pick
+          {t("Critics' Pick")}
         </h2>
         <span className={`uppercase text-ink-subtle ${PHONE ? "text-[10.5px] tracking-[0.16em]" : "text-[12px] tracking-[0.22em]"}`}>
-          Loved by reviewers today
+          {t("Loved by reviewers today")}
         </span>
       </div>
       <div className={PHONE ? "flex flex-col gap-3" : "grid grid-cols-[minmax(0,1fr)_360px] items-stretch gap-4"}>
@@ -452,7 +452,7 @@ export function CriticsPick({ meta }: { meta: Meta }) {
               }}
               className="rounded-full bg-ink px-6 py-2 text-[13px] font-semibold text-canvas transition-colors duration-200 hover:bg-ink/90"
             >
-              Play
+              {t("Play")}
             </button>
           </div>
         </aside>

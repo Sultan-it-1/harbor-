@@ -4,6 +4,7 @@ import type { AddonResultGroup } from "@/lib/search-addons";
 import type { Meta } from "@/lib/cinemeta";
 import { Poster } from "@/components/poster";
 import { useView } from "@/lib/view";
+import { t } from "@/lib/i18n/translate";
 
 export function AddonResults({ groups, onClose }: { groups: AddonResultGroup[]; onClose: () => void }) {
   if (groups.length === 0) return null;
@@ -11,7 +12,7 @@ export function AddonResults({ groups, onClose }: { groups: AddonResultGroup[]; 
     <section className="flex flex-col gap-6">
       <h3 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-ink-subtle">
         <Blocks size={11} strokeWidth={2.2} />
-        From your addons
+        {t("From your addons")}
       </h3>
       {groups.map((g) => (
         <AddonGroup key={g.id} group={g} onClose={onClose} />

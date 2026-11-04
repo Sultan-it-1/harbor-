@@ -4,6 +4,7 @@ import type { Meta } from "@/lib/cinemeta";
 import { consumeRecentStubEvent } from "@/lib/dead-streams";
 import { type PlayEpisode } from "@/lib/view";
 import { LogoOrText } from "./logo-or-text";
+import { t } from "@/lib/i18n/translate";
 
 export function AutoPlayTransition({
   meta,
@@ -73,7 +74,7 @@ export function AutoPlayTransition({
             strokeLinecap="round"
           />
         </svg>
-        Cancel
+        {t("Cancel")}
       </button>
     </main>
   );

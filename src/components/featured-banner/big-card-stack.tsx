@@ -122,7 +122,7 @@ export function BigCardStack({
   return (
     <div
       ref={containerRef}
-      role="button"
+      role="group"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -157,6 +157,7 @@ export function BigCardStack({
           <div
             key={m.id}
             aria-hidden={i !== active}
+            inert={i !== active}
             className="absolute inset-[2px] overflow-hidden rounded-[14px]"
             style={{
               opacity: i === active ? 1 : 0,

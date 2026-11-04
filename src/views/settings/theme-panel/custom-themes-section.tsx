@@ -28,6 +28,7 @@ import {
   type ActiveThemeId,
   type ThemePreset,
 } from "@/lib/theme";
+import { t } from "@/lib/i18n/translate";
 
 export function CustomThemesSection() {
   const { settings, update } = useSettings();
@@ -180,7 +181,7 @@ export function CustomThemesSection() {
             onClick={() => setError(null)}
             className="ms-auto rounded px-2 text-[11px] font-semibold uppercase tracking-wider opacity-70 hover:opacity-100"
           >
-            Dismiss
+            {t("Dismiss")}
           </button>
         </div>
       )}

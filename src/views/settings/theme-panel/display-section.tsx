@@ -4,6 +4,7 @@ import previewPoster from "@/assets/preview/poster1.webp";
 import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
 import { Section, Segmented, ToggleRow } from "../shared";
+import { t } from "@/lib/i18n/translate";
 
 export function DisplaySection() {
   const t = useT();
@@ -326,7 +327,7 @@ function PxField({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      title="Click to edit"
+      title={t("Click to edit")}
       className="rounded px-1 py-0.5 tabular-nums text-ink-muted transition-colors hover:bg-raised hover:text-ink"
     >
       {value}px

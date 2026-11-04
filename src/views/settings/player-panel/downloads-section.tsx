@@ -4,6 +4,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { FolderOpen, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSettings } from "@/lib/settings";
+import { t } from "@/lib/i18n/translate";
 
 export function DownloadsSection() {
   const { settings, update } = useSettings();
@@ -69,7 +70,7 @@ export function DownloadsSection() {
             className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
           >
             <FolderOpen size={13} strokeWidth={2.2} />
-            Open
+            {t("Open")}
           </button>
         )}
       </div>
@@ -79,7 +80,7 @@ export function DownloadsSection() {
           onClick={pickFolder}
           className="flex h-10 items-center gap-2 rounded-lg bg-ink px-4 text-[13px] font-semibold text-canvas transition-transform hover:scale-[1.02] active:scale-[0.97]"
         >
-          Choose folder
+          {t("Choose folder")}
         </button>
         {isCustom && (
           <button
@@ -88,7 +89,7 @@ export function DownloadsSection() {
             className="flex h-10 items-center gap-1.5 rounded-lg border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
           >
             <RotateCcw size={13} strokeWidth={2.2} />
-            Reset to default
+            {t("Reset to default")}
           </button>
         )}
       </div>

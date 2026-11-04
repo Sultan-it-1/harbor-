@@ -1,5 +1,6 @@
 import { useT } from "@/lib/i18n";
 import { formatTimeLabel, PX_PER_MIN, RULER_HEIGHT_PX } from "./guide-utils";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function GuideTimeRuler({
   windowStart,
@@ -69,5 +70,5 @@ function dayHint(ms: number, todayMs: number): string {
   );
   if (diffDays === 1) return "Tomorrow";
   if (diffDays === -1) return "Yesterday";
-  return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(d);
+  return new Intl.DateTimeFormat(uiLocale(), { weekday: "short" }).format(d);
 }

@@ -6,6 +6,8 @@ import { addonSiteUrl, listAddons, type SAAddon } from "@/lib/providers/stremio-
 import { fetchManifestAt, installAddon, manifestToConfigureUrl } from "@/lib/addon-store";
 import { openInstallerViewport } from "@/components/installer-viewport";
 import { openUrl } from "@/lib/window";
+import { t } from "@/lib/i18n/translate";
+import { uiLocale } from "@/lib/i18n/locale";
 
 const SITE_NAME = "stremio-addons.net";
 const SITE_URL = "https://stremio-addons.net";
@@ -60,7 +62,7 @@ export function CommunityAddonsRail({
           <button
             type="button"
             onClick={() => openUrl(SITE_URL)}
-            aria-label={`Open ${SITE_NAME}`}
+            aria-label={t("Open {SITE_NAME}", { SITE_NAME: SITE_NAME })}
             className="group/logo relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-1 ring-edge-soft transition-all hover:-translate-y-0.5 hover:ring-2 hover:ring-accent/50 hover:shadow-[0_12px_28px_-12px_var(--color-accent-soft)]"
           >
             <img
@@ -72,10 +74,10 @@ export function CommunityAddonsRail({
           </button>
           <div className="flex flex-col gap-1">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.22em] text-accent">
-              Community ratings
+              {t("Community ratings")}
             </span>
             <h3 className="text-[24px] font-medium tracking-tight text-ink">
-              Top on{" "}
+              {t("Top on")}{" "}
               <button
                 type="button"
                 onClick={() => openUrl(SITE_URL)}
@@ -85,7 +87,7 @@ export function CommunityAddonsRail({
               </button>
             </h3>
             <p className="max-w-[52ch] text-[12.5px] text-ink-muted">
-              Ranked by the {SITE_NAME} community from their public index.
+              {t("Ranked by the")} {SITE_NAME} {t("community from their public index.")}
             </p>
           </div>
         </div>
@@ -97,7 +99,7 @@ export function CommunityAddonsRail({
             className="flex h-9 items-center gap-1.5 rounded-full border border-edge-soft px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink"
           >
             <ArrowUpRight size={12} strokeWidth={2.4} className="dir-icon" />
-            Browse all
+            {t("Browse all")}
           </button>
         </div>
       </div>
@@ -227,7 +229,7 @@ function CommunityCard({
   };
   return (
     <article
-      role="button"
+      role="group"
       tabIndex={0}
       onClick={openDetail}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openDetail()}
@@ -245,7 +247,7 @@ function CommunityCard({
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
         <div className="absolute end-2.5 top-2.5 flex items-center gap-1 rounded-full bg-canvas/70 px-2 py-0.5 text-[11px] font-bold text-accent ring-1 ring-accent/30 backdrop-blur-sm">
           <Star size={10} strokeWidth={2.6} fill="currentColor" className="harbor-rating-star" />
-          {addon.stars.toLocaleString()}
+          {addon.stars.toLocaleString(uiLocale())}
         </div>
         {logo && (
           <img
@@ -267,7 +269,7 @@ function CommunityCard({
               openUrl(addonSiteUrl(addon.slug));
             }}
             className="text-start text-[14px] font-semibold leading-tight text-ink transition-colors hover:text-accent hover:underline hover:underline-offset-4"
-            title={`Open ${name} on ${SITE_NAME}`}
+            title={t("Open {name} on {SITE_NAME}", { name: name, SITE_NAME: SITE_NAME })}
           >
             {name}
           </button>
@@ -291,7 +293,7 @@ function CommunityCard({
           {installed ? (
             <span className="flex h-8 items-center gap-1 rounded-full bg-accent/15 px-2.5 text-[11.5px] font-semibold text-accent">
               <Check size={11} strokeWidth={2.6} />
-              Installed
+              {t("Installed")}
             </span>
           ) : (
             <button
@@ -305,7 +307,7 @@ function CommunityCard({
               ) : (
                 <Plus size={11} strokeWidth={2.6} />
               )}
-              Install
+              {t("Install")}
             </button>
           )}
         </div>
@@ -330,7 +332,7 @@ function SkeletonRow() {
 function EmptyState() {
   return (
     <p className="rounded-xl border border-dashed border-edge bg-canvas/30 px-4 py-6 text-center text-[12.5px] text-ink-subtle">
-      No addons match these filters right now.
+      {t("No addons match these filters right now.")}
     </p>
   );
 }
@@ -338,7 +340,7 @@ function EmptyState() {
 function ErrorState({ message }: { message: string }) {
   return (
     <p className="rounded-xl border border-dashed border-edge bg-canvas/30 px-4 py-6 text-center text-[12.5px] text-ink-subtle">
-      {SITE_NAME} should be reachable in a moment. They're deploying right now. Refresh once their docs go live.
+      {SITE_NAME} {t("should be reachable in a moment. They're deploying right now. Refresh once their docs go live.")}
       <br />
       <span className="text-[10.5px] opacity-70">({message})</span>
     </p>

@@ -1,6 +1,7 @@
 import { Sparkles, Star } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useCommunity } from "@/lib/providers/stremio-addons-index";
+import { uiLocale } from "@/lib/i18n/locale";
 
 const NEW_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -27,10 +28,10 @@ export function AddonStarBadge({
       {community.stars > 0 && (
         <span
           className={`${palette.bg} ${palette.fg} ${palette.ring} ${dims.pill} inline-flex shrink-0 items-center gap-1 rounded-full font-bold`}
-          title={t("{count} community ratings on stremio-addons.net", { count: community.stars.toLocaleString() })}
+          title={t("{count} community ratings on stremio-addons.net", { count: community.stars.toLocaleString(uiLocale()) })}
         >
           <Star size={dims.icon} strokeWidth={2.6} fill="currentColor" className="harbor-rating-star" />
-          {community.stars.toLocaleString()}
+          {community.stars.toLocaleString(uiLocale())}
         </span>
       )}
       {isNew && (

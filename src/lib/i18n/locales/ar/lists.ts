@@ -42,6 +42,7 @@ const lists: Record<string, string> = {
     "{media} من إنتاج {name}، مرتّبة من أكبر النجاحات إلى الجواهر المُغفَلة.",
   "Series from {name}: current hits, classics, and the deep cuts.":
     "مسلسلات من {name}: النجاحات الحالية والكلاسيكيات والأعمال النادرة.",
+  "lists.menu.edit": "تعديل",
 };
 
 export default lists;

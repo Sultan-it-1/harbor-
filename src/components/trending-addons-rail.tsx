@@ -3,6 +3,8 @@ import { useState } from "react";
 import { ArrowedScrollRow } from "@/components/arrowed-scroll-row";
 import { installAddon } from "@/lib/addon-store";
 import { useTopMovers, type MoverEntry } from "@/lib/providers/stremio-addons-velocity";
+import { t } from "@/lib/i18n/translate";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function TrendingAddonsRail({
   onChange,
@@ -23,14 +25,15 @@ export function TrendingAddonsRail({
           </span>
           <div className="flex flex-col">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.22em] text-rose-300">
-              Trending up
+              {t("Trending up")}
             </span>
             <h3 className="text-[22px] font-medium tracking-tight text-ink">
-              Rising on stremio-addons.net
+              {t("Rising on stremio-addons.net")}
             </h3>
             <p className="text-[12.5px] text-ink-muted">
-              Most stars gained in the last {windowDays} {windowDays === 1 ? "day" : "days"}.
-              Tracked locally. Your Harbor visits power this.
+              {windowDays === 1
+                ? t("Most stars gained in the last day. Tracked locally. Your Harbor visits power this.")
+                : t("Most stars gained in the last {n} days. Tracked locally. Your Harbor visits power this.", { n: windowDays })}
             </p>
           </div>
         </div>
@@ -86,7 +89,7 @@ function MoverCard({
 
   return (
     <article
-      role="button"
+      role="group"
       tabIndex={0}
       onClick={open}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && open()}
@@ -129,7 +132,7 @@ function MoverCard({
         <div className="mt-auto flex items-center justify-between gap-2">
           <span className="flex items-center gap-1 text-[11px] font-bold text-accent">
             <Star size={10} strokeWidth={2.6} fill="currentColor" />
-            {entry.community.stars.toLocaleString()}
+            {entry.community.stars.toLocaleString(uiLocale())}
           </span>
           <button
             type="button"
@@ -142,7 +145,7 @@ function MoverCard({
             ) : (
               <Plus size={11} strokeWidth={2.6} />
             )}
-            Install
+            {t("Install")}
           </button>
         </div>
       </div>

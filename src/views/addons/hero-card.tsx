@@ -25,7 +25,7 @@ export function HeroCard({
   const isTorrentio = idOf(resolved) === "com.stremio.torrentio.addon";
   return (
     <div
-      role="button"
+      role="group"
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen()}
@@ -55,7 +55,7 @@ export function HeroCard({
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.32em] text-ink-subtle">
-              {c.hero.eyebrow}
+              {t(c.hero.eyebrow)}
             </span>
             <AddonStarBadge manifestId={resolved.manifest?.id} size="md" />
           </div>
@@ -63,7 +63,7 @@ export function HeroCard({
             {c.hero.title}
           </h2>
           <p className="max-w-[26rem] text-[14.5px] leading-relaxed text-ink-muted">
-            {c.hero.subtitle}
+            {t(c.hero.subtitle)}
           </p>
         </div>
         <div className="flex items-center gap-2">

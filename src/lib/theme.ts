@@ -531,6 +531,12 @@ export function applyTheme(theme: ThemeSettings): void {
   for (const [k, v] of Object.entries(resolveTokens(theme))) {
     root.style.setProperty(k, v);
   }
+  // Phone, default theme: its faint text (oklch 0.50, 3.1:1 on the canvas) is used for labels
+  // and captions at 10-13 px there, below the 4.5:1 that small text needs. 0.65 reaches about
+  // 5:1 on the canvas and surfaces while staying fainter than the muted text (0.72).
+  if (isPhoneLayout() && (theme.preset === "cool-grey" || !getThemeById(theme.preset))) {
+    if (theme.preset !== "custom") root.style.setProperty("--color-ink-subtle", "oklch(0.65 0.003 260)");
+  }
   const preset = theme.preset !== "custom" ? getThemeById(theme.preset) : null;
   const fontPairId = preset?.fontPair ?? theme.fontPair;
   const pair = FONT_PAIRS[fontPairId] ?? FONT_PAIRS["sentient-switzer"];

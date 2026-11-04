@@ -1,6 +1,7 @@
 import { Check, ExternalLink, KeyRound, X } from "lucide-react";
 import { useEffect } from "react";
 import { openUrl } from "@/lib/window";
+import { t } from "@/lib/i18n/translate";
 
 const STEPS: { title: string; body: string; callout?: boolean }[] = [
   {
@@ -52,14 +53,14 @@ export function TmdbGuideModal({ open, onClose }: { open: boolean; onClose: () =
             </span>
             <div className="flex flex-col">
               <h2 className="font-display text-[20px] font-medium tracking-tight text-ink">
-                Get your free TMDB key
+                {t("Get your free TMDB key")}
               </h2>
-              <p className="text-[12.5px] text-ink-muted">About 30 seconds. No payment, ever.</p>
+              <p className="text-[12.5px] text-ink-muted">{t("About 30 seconds. No payment, ever.")}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-subtle transition-colors hover:bg-raised hover:text-ink"
           >
             <X size={18} strokeWidth={2.2} />
@@ -93,13 +94,13 @@ export function TmdbGuideModal({ open, onClose }: { open: boolean; onClose: () =
             onClick={onClose}
             className="rounded-full px-4 py-2 text-[13.5px] font-semibold text-ink-muted transition-colors hover:text-ink"
           >
-            Close
+            {t("Close")}
           </button>
           <button
             onClick={() => openUrl("https://www.themoviedb.org/settings/api")}
             className="flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-[13.5px] font-semibold text-canvas transition-opacity hover:opacity-90"
           >
-            Open TMDB
+            {t("Open TMDB")}
             <ExternalLink size={14} strokeWidth={2.2} />
           </button>
         </div>

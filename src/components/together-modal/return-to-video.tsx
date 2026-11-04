@@ -1,5 +1,6 @@
 import { Play } from "lucide-react";
 import type { SyncState } from "@/lib/together/protocol";
+import { t } from "@/lib/i18n/translate";
 
 export function ReturnToVideo({ media, onReturn }: { media: SyncState; onReturn: () => void }) {
   return (
@@ -21,7 +22,7 @@ export function ReturnToVideo({ media, onReturn }: { media: SyncState; onReturn:
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
-          Now watching
+          {t("Now watching")}
         </span>
         <span className="truncate text-[13px] font-semibold text-ink">
           {media.mediaTitle ?? "Untitled"}

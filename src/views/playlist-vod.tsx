@@ -13,6 +13,7 @@ import { useIptvPlaylist } from "./live/hooks/use-iptv-playlist";
 import { SeriesDetail } from "./playlist-vod/series-detail";
 import { useVodSources } from "./playlist-vod/use-vod-sources";
 import { VodCard } from "./playlist-vod/vod-card";
+import { uiLocale } from "@/lib/i18n/locale";
 
 type Tab = "movies" | "series";
 
@@ -234,7 +235,7 @@ function TabButton({ active, onClick, icon, label, count }: { active: boolean; o
       {label}
       {count > 0 && (
         <span className={`rounded-full px-1.5 text-[10.5px] tabular-nums ${active ? "bg-canvas/25" : "bg-canvas/70 text-ink-subtle"}`}>
-          {count.toLocaleString()}
+          {count.toLocaleString(uiLocale())}
         </span>
       )}
     </button>
@@ -247,12 +248,12 @@ function CapNote({ shown, total, kind }: { shown: number; total: number; kind: "
   const text =
     kind === "movies"
       ? t("Showing {shown} of {total} movies. Search to find the rest.", {
-          shown: shown.toLocaleString(),
-          total: total.toLocaleString(),
+          shown: shown.toLocaleString(uiLocale()),
+          total: total.toLocaleString(uiLocale()),
         })
       : t("Showing {shown} of {total} shows. Search to find the rest.", {
-          shown: shown.toLocaleString(),
-          total: total.toLocaleString(),
+          shown: shown.toLocaleString(uiLocale()),
+          total: total.toLocaleString(uiLocale()),
         });
   return <p className="mb-4 text-[12.5px] text-ink-subtle">{text}</p>;
 }

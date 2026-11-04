@@ -9,6 +9,7 @@ import {
   useUpdate,
 } from "@/lib/updater/use-update";
 import { UpdateCard } from "./update-card";
+import { t } from "@/lib/i18n/translate";
 
 export function UpdateRoot() {
   const u = useUpdate();
@@ -45,7 +46,7 @@ export function UpdateRoot() {
       {u.status === "available" && (
         <button
           onClick={dismissUpdate}
-          aria-label="Dismiss"
+          aria-label={t("Dismiss")}
           className="flex h-7 w-7 items-center justify-center rounded-full bg-elevated/90 text-ink-subtle shadow-md transition-colors hover:bg-raised hover:text-ink"
         >
           <X size={13} strokeWidth={2.4} />

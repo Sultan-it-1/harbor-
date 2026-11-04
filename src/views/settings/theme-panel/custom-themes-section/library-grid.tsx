@@ -1,6 +1,7 @@
 import { Check, Copy, FilePlus2, Palette, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { ThemePreset } from "@/lib/theme";
+import { t } from "@/lib/i18n/translate";
 
 export type LibraryEntry = {
   theme: ThemePreset;
@@ -53,7 +54,7 @@ function CreateTile({ onCreate }: { onCreate: () => void }) {
         background:
           "linear-gradient(160deg, var(--color-accent-soft) 0%, var(--color-surface) 60%, var(--color-surface) 100%)",
       }}
-      aria-label="Build a new theme"
+      aria-label={t("Build a new theme")}
     >
       <span
         aria-hidden
@@ -62,11 +63,11 @@ function CreateTile({ onCreate }: { onCreate: () => void }) {
       />
       <div className="relative flex flex-col gap-1.5">
         <span className="inline-flex w-fit items-center rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-canvas">
-          New
+          {t("New")}
         </span>
-        <span className="text-[18px] font-semibold tracking-tight text-ink">Build a theme</span>
+        <span className="text-[18px] font-semibold tracking-tight text-ink">{t("Build a theme")}</span>
         <span className="max-w-[24ch] text-[12.5px] leading-snug text-ink-muted">
-          Pick a layout, set colors and fonts, save it to your library. No code needed.
+          {t("Pick a layout, set colors and fonts, save it to your library. No code needed.")}
         </span>
       </div>
       <div className="relative flex items-end justify-between gap-3 self-stretch">
@@ -77,7 +78,7 @@ function CreateTile({ onCreate }: { onCreate: () => void }) {
           <Palette size={20} strokeWidth={2} />
         </span>
         <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5">
-          Open studio →
+          {t("Open studio →")}
         </span>
       </div>
     </button>
@@ -116,13 +117,13 @@ function ImportTile({ onUpload }: { onUpload: (file: File) => void }) {
           ? "border-accent bg-accent-soft"
           : "border-edge-soft bg-canvas/40 hover:-translate-y-0.5 hover:border-edge hover:bg-canvas/55"
       }`}
-      aria-label="Import a theme file"
+      aria-label={t("Import a theme file")}
     >
       <div className="relative flex flex-col gap-1.5">
         <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-ink-subtle">
-          Have a file?
+          {t("Have a file?")}
         </span>
-        <span className="text-[18px] font-semibold tracking-tight text-ink">Import a theme</span>
+        <span className="text-[18px] font-semibold tracking-tight text-ink">{t("Import a theme")}</span>
         <span className="max-w-[24ch] text-[12.5px] leading-snug text-ink-muted">
           {dragOver
             ? "Release to add it to your library"
@@ -140,7 +141,7 @@ function ImportTile({ onUpload }: { onUpload: (file: File) => void }) {
           <FilePlus2 size={20} strokeWidth={2} />
         </span>
         <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-muted transition-colors group-hover:text-ink">
-          Browse files →
+          {t("Browse files →")}
         </span>
       </div>
     </button>
@@ -189,7 +190,7 @@ function LibraryCard({
         <CategoryBadge category={category} active={active} />
         {active && (
           <span className="absolute end-3 top-3 flex h-7 items-center gap-1 rounded-full bg-accent px-2.5 text-[10.5px] font-bold uppercase tracking-[0.18em] text-canvas shadow-[0_4px_12px_-4px_rgba(0,0,0,0.4)]">
-            <Check size={11} strokeWidth={3} /> Active
+            <Check size={11} strokeWidth={3} /> {t("Active")}
           </span>
         )}
         <SwatchStrip swatch={theme.swatch} />
@@ -215,11 +216,11 @@ function LibraryCard({
           >
             {active ? "Active" : "Apply"}
           </button>
-          <ActionBtn label="Copy" onClick={onExport}>
+          <ActionBtn label={t("Copy")} onClick={onExport}>
             <Copy size={12} strokeWidth={2.2} />
           </ActionBtn>
           {removable && (
-            <ActionBtn label="Remove" onClick={onRemove} danger>
+            <ActionBtn label={t("Remove")} onClick={onRemove} danger>
               <Trash2 size={12} strokeWidth={2.2} />
             </ActionBtn>
           )}

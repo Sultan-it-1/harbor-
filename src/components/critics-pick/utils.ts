@@ -1,3 +1,4 @@
+import { uiLocale } from "@/lib/i18n/locale";
 export function upsizeTmdb(url?: string): string | undefined {
   if (!url) return url;
   return url.replace("/t/p/w780/", "/t/p/w1280/").replace("/t/p/w342/", "/t/p/w1280/");
@@ -24,5 +25,5 @@ export function excerptReview(content: string): string {
 export function formatReviewDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short" });
+  return d.toLocaleDateString(uiLocale(), { year: "numeric", month: "short" });
 }

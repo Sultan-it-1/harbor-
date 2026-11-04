@@ -1,4 +1,5 @@
 import { CatAvatar } from "@/components/icons/cat-avatar";
+import { t } from "@/lib/i18n/translate";
 
 export function AvatarRing({
   src,
@@ -22,7 +23,7 @@ export function AvatarRing({
         <CatAvatar className="h-full w-full" />
       )}
       <span className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/65 to-transparent pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white opacity-0 transition-opacity group-hover:opacity-100">
-        Change
+        {t("Change")}
       </span>
     </button>
   );

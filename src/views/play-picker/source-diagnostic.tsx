@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useDebridClients } from "@/lib/debrid/registry";
 import type { PipelineResult } from "@/lib/streams/pipeline";
 import type { Stream } from "@/lib/streams/types";
+import { t } from "@/lib/i18n/translate";
 
 export function SourceDiagnostic({
   result,
@@ -34,9 +35,9 @@ export function SourceDiagnostic({
         onClick={() => setExpanded((v) => !v)}
         className="flex items-center gap-2 self-start text-[12px] text-ink-subtle/80 transition-colors hover:text-ink-muted"
       >
-        <span className="font-semibold text-ink-muted">{cachedTotal} cached</span>
+        <span className="font-semibold text-ink-muted">{cachedTotal} {t("cached")}</span>
         <span className="text-ink-subtle/40">·</span>
-        <span>{totalRaw} found across {counts.length} {sourceWord}</span>
+        <span>{totalRaw} {t("found across")} {counts.length} {sourceWord}</span>
         <ChevronDown
           size={13}
           strokeWidth={2}
@@ -45,10 +46,10 @@ export function SourceDiagnostic({
       </button>
       {expanded && (
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 ps-1 text-[11px] text-ink-subtle/70">
-          <span>{result.picker.all.length} kept after dedupe</span>
+          <span>{result.picker.all.length} {t("kept after dedupe")}</span>
           <span className="text-ink-subtle/40">·</span>
           {counts.length === 0 ? (
-            <span className="text-ink-subtle/60">no sources returned anything</span>
+            <span className="text-ink-subtle/60">{t("no sources returned anything")}</span>
           ) : (
             counts.map(([name, n], i) => (
               <span key={name} className="flex items-center gap-1.5">

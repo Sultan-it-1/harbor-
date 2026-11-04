@@ -1,5 +1,6 @@
 import { androidApi, onNativePlayerEvent } from "@/lib/android";
 import { emptySnapshot, type PlayerBridge, type PlayerSnapshot } from "../bridge";
+import { uiLocale } from "@/lib/i18n/locale";
 
 const MAX_INITIAL_SUBS = 20;
 const SUB_BATCH_MS = 700;
@@ -52,7 +53,7 @@ function toLangCode(lang: string): string {
 function langDisplayName(lang: string | undefined): string | null {
   if (!lang) return null;
   try {
-    const dn = new Intl.DisplayNames([navigator.language || "en"], { type: "language" });
+    const dn = new Intl.DisplayNames([uiLocale()], { type: "language" });
     return dn.of(toLangCode(lang)) ?? lang;
   } catch {
     return lang;

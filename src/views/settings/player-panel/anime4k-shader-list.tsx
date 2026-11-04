@@ -8,6 +8,7 @@ import {
   type Anime4kTier,
 } from "@/lib/player/anime4k-modes";
 import { useSettings } from "@/lib/settings";
+import { t } from "@/lib/i18n/translate";
 
 export function Anime4kShaderList() {
   const { settings, update } = useSettings();
@@ -57,10 +58,9 @@ export function Anime4kShaderList() {
           <Sparkles size={16} strokeWidth={2.2} />
         </span>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[14px] font-semibold text-ink">Anime4K presets</span>
+          <span className="text-[14px] font-semibold text-ink">{t("Anime4K presets")}</span>
           <span className="text-[12.5px] leading-snug text-ink-subtle">
-            GPU shaders that sharpen lines and clean up gradients on anime as it plays. Pick a mode,
-            Harbor handles the shaders.
+            {t("GPU shaders that sharpen lines and clean up gradients on anime as it plays. Pick a mode, Harbor handles the shaders.")}
           </span>
         </div>
       </div>
@@ -68,7 +68,7 @@ export function Anime4kShaderList() {
       {!folder ? (
         <div className="flex flex-col gap-3 rounded-xl border border-edge-soft bg-canvas/50 px-4 py-4">
           <span className="text-[12.5px] leading-snug text-ink-muted">
-            One-time setup downloads the shader pack (about 1 MB) into Harbor. No files to hunt down.
+            {t("One-time setup downloads the shader pack (about 1 MB) into Harbor. No files to hunt down.")}
           </span>
           {error && (
             <span className="rounded-lg bg-danger/15 px-3 py-2 text-[12px] text-danger ring-1 ring-danger/30">
@@ -88,8 +88,8 @@ export function Anime4kShaderList() {
       ) : (
         <>
           <div className="flex items-center gap-1 self-start rounded-full bg-elevated/50 p-1 ring-1 ring-edge-soft/60">
-            <TierBtn active={tier === "hq"} onClick={() => pickTier("hq")} label="Quality" />
-            <TierBtn active={tier === "fast"} onClick={() => pickTier("fast")} label="Performance" />
+            <TierBtn active={tier === "hq"} onClick={() => pickTier("hq")} label={t("Quality")} />
+            <TierBtn active={tier === "fast"} onClick={() => pickTier("fast")} label={t("Performance")} />
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {ANIME4K_MODES.map((m) => {
@@ -123,7 +123,7 @@ export function Anime4kShaderList() {
           <div className="flex items-center justify-between gap-3 pt-0.5">
             <span className="flex items-center gap-1.5 text-[12px] text-ink-subtle">
               <Check size={13} className="text-emerald-300" strokeWidth={2.6} />
-              Shaders installed
+              {t("Shaders installed")}
             </span>
             <button
               type="button"

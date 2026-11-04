@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import type { ScoredStream } from "@/lib/streams/types";
 import { formatSize, streamSummaryParts } from "./picker-utils";
+import { t } from "@/lib/i18n/translate";
 
 export function P2pConfirmModal({
   meta,
@@ -34,11 +35,10 @@ export function P2pConfirmModal({
       <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/60 to-black/85" />
       <div className="relative flex h-full flex-col items-center justify-center gap-6 px-8 text-center">
         <h1 className="max-w-2xl font-display text-[40px] font-medium leading-[1.06] text-white">
-          Stream this via peer-to-peer?
+          {t("Stream this via peer-to-peer?")}
         </h1>
         <p className="max-w-xl text-[14.5px] leading-relaxed text-white/75">
-          This source isn&apos;t cached on your debrid, so Harbor would pull it directly from peers.
-          It can take a moment to start and may buffer on low-seed torrents.
+          {t("This source isn't cached on your debrid, so Harbor would pull it directly from peers. It can take a moment to start and may buffer on low-seed torrents.")}
         </p>
         <div className="flex max-w-xl flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3.5">
           <span className="line-clamp-2 font-mono text-[13px] text-white/90">{title}</span>
@@ -46,7 +46,7 @@ export function P2pConfirmModal({
             {stream.seeders != null && (
               <span className="flex items-center gap-1.5 text-white/80">
                 <Users size={12} strokeWidth={2.2} />
-                {stream.seeders} seeders
+                {stream.seeders} {t("seeders")}
               </span>
             )}
             {stream.size != null && <span>{formatSize(stream.size)}</span>}
@@ -60,7 +60,7 @@ export function P2pConfirmModal({
             onChange={(e) => setRemember(e.target.checked)}
             className="h-4 w-4 accent-accent"
           />
-          Auto-play peer-to-peer sources from now on
+          {t("Auto-play peer-to-peer sources from now on")}
         </label>
         <div className="flex items-center gap-3 pt-1">
           <button
@@ -69,7 +69,7 @@ export function P2pConfirmModal({
             className="flex h-12 items-center gap-2 rounded-xl bg-accent px-6 text-[14px] font-semibold text-canvas transition-transform hover:scale-[1.02] active:scale-[0.97]"
           >
             <Radio size={15} strokeWidth={2.4} />
-            Stream via P2P
+            {t("Stream via P2P")}
           </button>
           <button
             type="button"
@@ -77,7 +77,7 @@ export function P2pConfirmModal({
             className="flex h-12 items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 text-[14px] font-medium text-white/75 backdrop-blur-md transition-all hover:border-white/30 hover:bg-white/10 hover:text-white"
           >
             <X size={15} strokeWidth={2.2} />
-            Back to sources
+            {t("Back to sources")}
           </button>
         </div>
       </div>

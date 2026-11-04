@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { t } from "@/lib/i18n/translate";
 
 export const HARBOR_COLOR_SWATCHES = [
   "#7dd3fc",
@@ -25,7 +26,7 @@ export function ColorPicker({
   return (
     <div className="flex flex-col gap-2 pt-1">
       <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
-        Your color
+        {t("Your color")}
       </span>
       <div className="flex flex-wrap items-center gap-2">
         {HARBOR_COLOR_SWATCHES.map((hex) => {
@@ -46,12 +47,12 @@ export function ColorPicker({
         <ColorPopoverTrigger
           value={value}
           onChange={onChange}
-          label={!isPreset ? value.toUpperCase() : "Custom"}
+          label={!isPreset ? value.toUpperCase() : t("Custom")}
           highlighted={!isPreset}
         />
       </div>
       <span className="text-[11.5px] text-ink-subtle">
-        Used for your cursor in Watch Together, your draw color, and your name pill in chat.
+        {t("Used for your cursor in Watch Together, your draw color, and your name pill in chat.")}
       </span>
     </div>
   );
@@ -310,7 +311,7 @@ function CustomColorPanel({
           }}
           className="h-8 w-24 rounded-md border border-edge-soft bg-canvas px-2 font-mono text-[12px] text-ink outline-none focus:border-ink"
         />
-        <span className="text-[11px] text-ink-subtle">click swatch or drag</span>
+        <span className="text-[11px] text-ink-subtle">{t("click swatch or drag")}</span>
       </div>
     </div>
   );

@@ -148,6 +148,8 @@ const en: Record<string, string> = {
   "Please add your TMDB API key in the Library & Metadata settings to view this folder.": "Please add your TMDB API key in the Library & Metadata settings to view this folder.",
   "OK": "OK",
   "Loading...": "Loading...",
+  // Harbor's own "Edit" (the bare "Edit" key names a Cloudflare button and stays English).
+  "lists.menu.edit": "Edit",
 };
 
 export default en;

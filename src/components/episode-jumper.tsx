@@ -1,5 +1,6 @@
 import { Hash } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "@/lib/i18n/translate";
 
 const CHUNK_SIZE = 50;
 
@@ -99,7 +100,7 @@ export function EpisodeJumper({
               disabled={!draft.trim()}
               className="h-9 rounded-lg bg-ink px-3.5 text-[12.5px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:opacity-40"
             >
-              Jump
+              {t("Jump")}
             </button>
           </form>
           {ranges.length > 0 && (
@@ -119,11 +120,11 @@ export function EpisodeJumper({
       )}
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label="Jump to episode"
+        aria-label={t("Jump to episode")}
         className="flex h-8 items-center gap-1.5 rounded-md border border-edge-soft/40 bg-canvas/90 px-2.5 text-[12px] font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
       >
         <Hash size={12} strokeWidth={2.2} />
-        <span>Jump</span>
+        <span>{t("Jump")}</span>
       </button>
     </div>
   );

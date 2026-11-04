@@ -1,12 +1,13 @@
 import type { CastMember } from "./types";
 import { profileUrl } from "./utils";
+import { t } from "@/lib/i18n/translate";
 
 export function CastChip({ member, onClick }: { member: CastMember; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Open ${member.name}`}
+      aria-label={t("Open {name}", { name: member.name })}
       className="group/chip flex w-[68px] flex-shrink-0 flex-col items-center gap-1.5"
       style={{ scrollSnapAlign: "start" }}
     >

@@ -3,6 +3,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { applyBackup, backupKeyCount, downloadBackup, parseBackup, type Backup } from "@/lib/backup";
 import { useT } from "@/lib/i18n";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function BackupRow() {
   const t = useT();
@@ -125,7 +126,7 @@ function RestoreConfirm({
   onCancel: () => void;
 }) {
   const t = useT();
-  const when = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : t("an unknown date");
+  const when = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString(uiLocale()) : t("an unknown date");
   return createPortal(
     <div
       className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"

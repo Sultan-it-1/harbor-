@@ -226,7 +226,7 @@ function OwnedCard({ entry }: { entry: LocalEntry }) {
       onMouseLeave={() => setConfirm(false)}
     >
       <div
-        role="button"
+        role="group"
         tabIndex={0}
         onClick={onPlay}
         onKeyDown={(e) => {

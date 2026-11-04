@@ -5,6 +5,7 @@ import { awardSourceMeta, findAnyAwardWins, parseAwardYear } from "@/lib/anime-a
 import type { Meta } from "@/lib/cinemeta";
 import { awardSummary, useAwards, type AwardType } from "@/lib/providers/wikidata";
 import { mergeBundledAwards } from "@/lib/awards-history";
+import { t } from "@/lib/i18n/translate";
 
 const HEADLINE_FOR: Record<string, string> = {
   oscar: "Academy Award",
@@ -85,7 +86,7 @@ function AnimeCorner({ name, year }: { name: string; year?: number }) {
         {!compact && <span className="truncate text-[13px] font-semibold text-ink/85">{subline}</span>}
         {!compact && otherWins > 0 && (
           <span className="truncate text-[11px] text-ink-subtle">
-            +{otherWins} more award{otherWins === 1 ? "" : "s"}
+            +{otherWins} {otherWins === 1 ? t("more award") : t("more awards")}
           </span>
         )}
       </div>

@@ -5,6 +5,7 @@ import { CastErrorModal } from "./cast-error-modal";
 import { CastSessionBar } from "./cast-session-bar";
 import { CastingOverlay } from "./casting-overlay";
 import type { PlayerCastController } from "./hooks/use-player-cast";
+import { t } from "@/lib/i18n/translate";
 
 export function CastLayer({
   cast,
@@ -79,14 +80,14 @@ export function CastLayer({
             }}
             className="shrink-0 rounded-full bg-amber-300/30 px-3 py-1 text-[11.5px] font-semibold text-amber-50 hover:bg-amber-300/50"
           >
-            Pick another
+            {t("Pick another")}
           </button>
           <button
             type="button"
             onClick={() => cast.setCastIncompatError(null)}
             className="shrink-0 rounded-full px-2 py-1 text-[11.5px] font-medium text-amber-50/80 hover:text-amber-50"
           >
-            Dismiss
+            {t("Dismiss")}
           </button>
         </div>
       )}

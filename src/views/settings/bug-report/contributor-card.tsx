@@ -1,5 +1,6 @@
 import { GitPullRequest, Github } from "lucide-react";
 import { openUrl } from "@/lib/window";
+import { t } from "@/lib/i18n/translate";
 
 const REPO = "https://github.com/harborstremio/harbor";
 
@@ -11,10 +12,9 @@ export function ContributorCard() {
           <GitPullRequest size={15} strokeWidth={1.9} />
         </span>
         <div className="flex flex-col gap-1">
-          <h3 className="text-[14px] font-semibold text-ink">Want to fix it yourself?</h3>
+          <h3 className="text-[14px] font-semibold text-ink">{t("Want to fix it yourself?")}</h3>
           <p className="text-[12.5px] leading-relaxed text-ink-muted">
-            Harbor is open source. PRs that reference a bug get reviewed within 48h and ship with credit
-            in the release notes.
+            {t("Harbor is open source. PRs that reference a bug get reviewed within 48h and ship with credit in the release notes.")}
           </p>
         </div>
       </div>
@@ -25,7 +25,7 @@ export function ContributorCard() {
           className="flex h-9 items-center gap-2 rounded-lg border border-edge-soft bg-elevated px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-raised hover:text-ink"
         >
           <Github size={13} strokeWidth={1.9} />
-          Open repo on GitHub
+          {t("Open repo on GitHub")}
         </button>
         <button
           type="button"
@@ -33,7 +33,7 @@ export function ContributorCard() {
           className="flex h-9 items-center gap-2 rounded-lg border border-edge-soft bg-elevated px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-raised hover:text-ink"
         >
           <GitPullRequest size={13} strokeWidth={1.9} />
-          Browse pull requests
+          {t("Browse pull requests")}
         </button>
       </div>
     </div>

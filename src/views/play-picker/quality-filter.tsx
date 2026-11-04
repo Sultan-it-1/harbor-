@@ -1,4 +1,5 @@
 import type { ScoredStream } from "@/lib/streams/types";
+import { t } from "@/lib/i18n/translate";
 
 export type QualityTier = "4K" | "1080p" | "720p" | "SD";
 
@@ -37,7 +38,7 @@ export function QualityFilterBar({
   if (options.length < 2) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <Pill active={value === "all"} label="All" count={total} onClick={() => onChange("all")} />
+      <Pill active={value === "all"} label={t("All")} count={total} onClick={() => onChange("all")} />
       {options.map((o) => (
         <Pill
           key={o.tier}

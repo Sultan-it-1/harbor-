@@ -11,6 +11,8 @@ import { isLinuxDesktop, isPhoneLayout, isWeb } from "@/lib/platform";
 import { openUrl } from "@/lib/window";
 import { HarborLoader } from "@/components/harbor-loader";
 import { InstallOverlay } from "./installer-viewport/install-overlay";
+import { Interpolate } from "@/components/interpolate";
+import { t } from "@/lib/i18n/translate";
 
 const EVENT = "harbor:open-installer";
 
@@ -306,14 +308,14 @@ function InstallerViewport({
             </span>
           )}
           <span className={`truncate font-bold uppercase text-accent ${PHONE ? "text-[11px] tracking-[0.16em]" : "text-[10.5px] tracking-[0.24em]"}`}>
-            Setup · {title}
+            {t("Setup ·")} {title}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={reload}
-            aria-label="Reload"
+            aria-label={t("Reload")}
             className={`flex h-9 items-center gap-1.5 rounded-full border border-edge-soft text-[12px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink ${
               PHONE ? "w-9 justify-center" : "px-3"
             }`}
@@ -335,13 +337,13 @@ function InstallerViewport({
               className="flex h-9 items-center gap-1.5 rounded-full border border-edge-soft px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink"
             >
               <ExternalLink size={12} strokeWidth={2.4} />
-              Open in browser
+              {t("Open in browser")}
             </button>
           )}
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
             disabled={phase.kind === "installing"}
             className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-elevated/60 hover:text-ink disabled:opacity-40"
           >
@@ -359,7 +361,7 @@ function InstallerViewport({
         {pageRefused && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-canvas px-6 text-center">
             <p className="text-[14px] font-semibold text-ink">
-              {title} can&apos;t open inside Harbor.
+              {title} {t("can't open inside Harbor.")}
             </p>
             <p className="max-w-[44ch] text-[12.5px] leading-relaxed text-ink-muted">
               {PHONE
@@ -372,7 +374,7 @@ function InstallerViewport({
               className="flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[13px] font-semibold text-canvas transition-opacity hover:opacity-90"
             >
               <ArrowUpRight size={13} strokeWidth={2.4} />
-              Open in browser
+              {t("Open in browser")}
             </button>
           </div>
         )}
@@ -401,22 +403,23 @@ function InstallerViewport({
         {PHONE && pageRefused ? (
           // The message above already says what to do; this is only the paste option.
           <p className="text-[12.5px] leading-snug text-ink-muted">
-            Already have the addon link? Paste it below (long-press the field, then Paste).
+            {t("Already have the addon link? Paste it below (long-press the field, then Paste).")}
           </p>
         ) : PHONE ? (
           <>
             <ol className="flex flex-col gap-1.5 text-[12.5px] leading-snug text-ink-muted">
               <li className="flex gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">1</span>
-                <span>Set up the addon on the page above, then tap its <b className="text-ink">Install</b> button.</span>
+                {/* "Install" stays English: it names the button on the addon's own (English) page. */}
+                <span><Interpolate text={t("Set up the addon on the page above, then tap its {b1} button.")} values={{ b1: <b className="text-ink">{t("Install")}</b> }} /></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">2</span>
-                <span>Page not showing? Open it in your browser, set it up there, tap <b className="text-ink">Install</b> and choose <b className="text-ink">Harbor</b>.</span>
+                <span><Interpolate text={t("Page not showing? Open it in your browser, set it up there, tap {b1} and choose {b2}.")} values={{ b1: <b className="text-ink">{t("Install")}</b>, b2: <b className="text-ink">Harbor</b> }} /></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">3</span>
-                <span>Or paste the addon link (<span className="font-mono text-[11.5px]">stremio://…</span> or <span className="font-mono text-[11.5px]">…/manifest.json</span>) below.</span>
+                <span><Interpolate text={t("Or paste the addon link ({c1} or {c2}) below.")} values={{ c1: <span className="font-mono text-[11.5px]">stremio://…</span>, c2: <span className="font-mono text-[11.5px]">…/manifest.json</span> }} /></span>
               </li>
             </ol>
             <button
@@ -425,14 +428,14 @@ function InstallerViewport({
               className="flex h-11 items-center justify-center gap-2 rounded-full border border-edge bg-elevated/70 text-[13.5px] font-semibold text-ink transition-colors hover:bg-elevated"
             >
               <ExternalLink size={14} strokeWidth={2.3} />
-              Open in browser
+              {t("Open in browser")}
             </button>
           </>
         ) : (
           <p className="text-[12.5px] leading-snug text-ink-muted">
             {isWeb()
-              ? "Configure the addon above, then copy its manifest URL and paste it here. The web app can't catch the Install button automatically the way the desktop app does."
-              : "Paste the manifest URL, or click Install on the addon's configuration page above."}
+              ? t("Configure the addon above, then copy its manifest URL and paste it here. The web app can't catch the Install button automatically the way the desktop app does.")
+              : t("Paste the manifest URL, or click Install on the addon's configuration page above.")}
           </p>
         )}
         <form
@@ -470,7 +473,7 @@ function InstallerViewport({
               className="flex h-10 items-center gap-1.5 rounded-full border border-edge-soft px-3.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink disabled:opacity-40"
             >
               <ClipboardCopy size={13} strokeWidth={2.2} />
-              From clipboard
+              {t("From clipboard")}
             </button>
           )}
           <button
@@ -481,7 +484,7 @@ function InstallerViewport({
             }`}
           >
             <Sparkles size={13} strokeWidth={2.4} />
-            Install
+            {t("Install")}
           </button>
         </form>
         {phase.kind === "error" && (
@@ -492,7 +495,7 @@ function InstallerViewport({
               onClick={dismissError}
               className="font-semibold uppercase tracking-wider opacity-70 hover:opacity-100"
             >
-              Dismiss
+              {t("Dismiss")}
             </button>
           </div>
         )}

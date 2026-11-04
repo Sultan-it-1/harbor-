@@ -7,6 +7,7 @@ import {
   type AwardWin,
 } from "@/lib/anime-awards";
 import { useView } from "@/lib/view";
+import { t } from "@/lib/i18n/translate";
 
 export function AnimeAwardsBlock({ name, year }: { name: string; year?: number }) {
   const wins = findAnyAwardWins(name, year);
@@ -17,7 +18,7 @@ export function AnimeAwardsBlock({ name, year }: { name: string; year?: number }
   return (
     <div id="anime-awards-section" className="scroll-mt-24 border-t border-edge-soft pt-14">
       <div className="mb-10 flex items-baseline justify-between gap-4">
-        <h3 className="text-[24px] font-medium tracking-tight text-ink">Anime Awards & Recognition</h3>
+        <h3 className="text-[24px] font-medium tracking-tight text-ink">{t("Anime Awards & Recognition")}</h3>
         <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
           <span className="text-accent">{totalWins}</span> {totalWins === 1 ? "Win" : "Wins"} ·{" "}
           {groups.length} {groups.length === 1 ? "ceremony" : "ceremonies"}
@@ -46,7 +47,7 @@ function SourceGroup({ source, wins }: { source: AwardSourceId; wins: AwardWin[]
           type="button"
           onClick={() => openAnimeAward(source)}
           className="shrink-0 rounded-md transition-opacity hover:opacity-80"
-          aria-label={`Open ${meta.name} winners`}
+          aria-label={t("Open {name} winners", { name: meta.name })}
         >
           <img src={meta.icon} alt={meta.name} className={logoClass} draggable={false} />
         </button>
@@ -76,7 +77,7 @@ function SourceGroup({ source, wins }: { source: AwardSourceId; wins: AwardWin[]
             onClick={() => openAnimeAward(source)}
             className="mt-1 w-fit text-[11.5px] font-semibold uppercase tracking-[0.14em] text-accent transition-opacity hover:opacity-80"
           >
-            See all winners →
+            {t("See all winners →")}
           </button>
         </div>
       </header>

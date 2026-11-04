@@ -8,6 +8,7 @@ import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 import { NativeTrailerPlayer } from "./native-trailer-player";
 import { Tooltip } from "./tooltip";
+import { t } from "@/lib/i18n/translate";
 
 export function TrailerOverlay({
   id,
@@ -159,7 +160,7 @@ function YouTubeEmbed({ id, title }: { id: string; title: string }) {
   return (
     <iframe
       src={`https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`}
-      title={`${title} trailer`}
+      title={t("{title} trailer", { title: title })}
       allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
       allowFullScreen
       referrerPolicy="strict-origin-when-cross-origin"

@@ -25,6 +25,7 @@ import flagTur from "@/assets/flags/flag-tur.svg";
 import flagUkr from "@/assets/flags/flag-ukr.svg";
 import flagVie from "@/assets/flags/flag-vie.svg";
 import flagZho from "@/assets/flags/flag-zho.svg";
+import { t } from "@/lib/i18n/translate";
 
 const FLAG: Record<string, string> = {
   English: flagEng,
@@ -94,7 +95,7 @@ export function Flag({
         className="inline-flex items-center gap-0 rounded-[3px] bg-accent/15 px-1.5 text-[9.5px] font-extrabold uppercase tracking-[0.18em] text-accent ring-1 ring-accent/35"
         style={{ height: FLAG_HEIGHT[size] + 4, lineHeight: 1 }}
       >
-        Multi
+        {t("Multi")}
       </span>
     );
   }

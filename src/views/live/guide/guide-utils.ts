@@ -1,3 +1,5 @@
+import { uiLocale } from "@/lib/i18n/locale";
+import { t } from "@/lib/i18n/translate";
 export const PX_PER_MIN = 5;
 export const PX_PER_MS = PX_PER_MIN / 60_000;
 export const CHANNEL_COL_PX = 200;
@@ -14,7 +16,7 @@ export function startOfWindow(nowMs: number, paddingBeforeMinutes = 60): number 
 
 export function formatTimeLabel(ms: number, locale?: string): string {
   const d = new Date(ms);
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(locale ?? uiLocale(), {
     hour: "numeric",
     minute: "2-digit",
   }).format(d);
@@ -27,11 +29,11 @@ export function formatDayLabel(ms: number, todayMs: number): string {
     d.getFullYear() === today.getFullYear() &&
     d.getMonth() === today.getMonth() &&
     d.getDate() === today.getDate();
-  if (sameDay) return "Today";
+  if (sameDay) return t("Today");
   const diff = Math.round((startOfDay(d).getTime() - startOfDay(today).getTime()) / 86_400_000);
-  if (diff === 1) return "Tomorrow";
-  if (diff === -1) return "Yesterday";
-  return new Intl.DateTimeFormat(undefined, {
+  if (diff === 1) return t("Tomorrow");
+  if (diff === -1) return t("Yesterday");
+  return new Intl.DateTimeFormat(uiLocale(), {
     weekday: "short",
     month: "short",
     day: "numeric",

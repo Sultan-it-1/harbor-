@@ -115,7 +115,7 @@ export function SwitcherRow({
             <a
               href={`vlc://${link}`}
               className="flex h-7 items-center justify-center rounded-md bg-orange-500/80 px-2 text-[10.5px] font-bold uppercase tracking-wider text-white shadow transition-colors hover:bg-orange-500 active:scale-95"
-              title="Play in VLC"
+              title={t("Play in VLC")}
             >
               VLC
             </a>

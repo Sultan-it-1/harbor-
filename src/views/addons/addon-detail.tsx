@@ -18,6 +18,7 @@ import { idOf, nameOf, resourceLabels } from "./addons-utils";
 import { DetailRail } from "./detail-rail";
 import { TagRow } from "./tag-row";
 import { useTapToConfirm } from "./use-tap-to-confirm";
+import { uiLocale } from "@/lib/i18n/locale";
 
 // Android app: single column that fits the screen (the desktop layout put a 220px logo next to
 // the text and was wider than the phone, so the page scrolled sideways).
@@ -213,7 +214,7 @@ export function AddonDetail({
               className="text-accent harbor-rating-star"
             />
             <span className={`${PHONE ? "text-[26px]" : "text-[32px]"} font-semibold tabular-nums leading-none text-ink`}>
-              {community.stars.toLocaleString()}
+              {community.stars.toLocaleString(uiLocale())}
             </span>
           </button>
         )}

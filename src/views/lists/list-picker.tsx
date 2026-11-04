@@ -14,6 +14,7 @@ import { sourceLabel, type CustomList } from "@/lib/lists/types";
 import { useT } from "@/lib/i18n";
 import { AddListForm } from "./add-list-form";
 import { SOURCE_DOT } from "./source-dot";
+import { uiLocale } from "@/lib/i18n/locale";
 
 type Mode = "list" | "add" | "edit";
 type ActionsState = { id: string; copied: boolean };
@@ -93,7 +94,7 @@ export function ListPicker({
         <span className="max-w-[200px] truncate">{active?.name ?? t("No lists yet")}</span>
         {count != null && (
           <span className="rounded-full bg-canvas/70 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-ink-muted">
-            {count.toLocaleString()}
+            {count.toLocaleString(uiLocale())}
           </span>
         )}
         <ChevronDown
@@ -245,7 +246,7 @@ function ListRow({
       {isMenuOpen && (
         <PortalMenu triggerRef={triggerRef} onClose={onCloseMenu}>
           <MenuItem icon={<Pencil size={14} strokeWidth={1.9} />} onClick={onEdit}>
-            {t("Edit")}
+            {t("lists.menu.edit")}
           </MenuItem>
           <MenuItem
             icon={copied ? <Check size={14} strokeWidth={2.2} /> : <Copy size={14} strokeWidth={1.9} />}

@@ -12,6 +12,7 @@ import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 import { EpisodeDownloadButton } from "./episode-download-button";
+import { uiLocale } from "@/lib/i18n/locale";
 
 type Translator = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -310,5 +311,5 @@ function formatAired(date: string | null | undefined): string | null {
   if (!date) return null;
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(uiLocale(), { month: "short", day: "numeric", year: "numeric" });
 }

@@ -38,6 +38,9 @@ jobs:
           git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
           pnpm install --frozen-lockfile
 
+      - name: Check Arabic translations
+        run: pnpm run check:i18n
+
       - name: Build web UI
         run: pnpm run build
 

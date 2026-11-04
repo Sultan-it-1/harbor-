@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useT } from "@/lib/i18n";
 import { MOVIE_GENRES } from "@/lib/feed/tags";
 import type { Settings, WebhookTrigger } from "@/lib/settings";
+import { t } from "@/lib/i18n/translate";
 
 type Rule = Settings["webhookRules"][number];
 type TrackedPerson = Settings["customCalendar"]["trackedPeople"][number];
@@ -189,7 +190,7 @@ export function RuleBuilder({
               <button
                 type="button"
                 onClick={() => toggleEnabled(r.id)}
-                aria-label={r.enabled ? "Disable rule" : "Enable rule"}
+                aria-label={r.enabled ? t("Disable rule") : t("Enable rule")}
                 className="shrink-0"
               >
                 <span
@@ -220,12 +221,12 @@ export function RuleBuilder({
                 onClick={() => setEditing(r)}
                 className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-ink-muted hover:bg-canvas/60 hover:text-ink"
               >
-                Edit
+                {t("Edit")}
               </button>
               <button
                 type="button"
                 onClick={() => remove(r.id)}
-                aria-label="Delete rule"
+                aria-label={t("Delete rule")}
                 className="flex h-7 w-7 items-center justify-center rounded-full text-ink-subtle transition-colors hover:bg-danger/15 hover:text-danger"
               >
                 <Trash2 size={12} strokeWidth={1.9} />
@@ -280,14 +281,14 @@ function RuleEditor({
           <button
             type="button"
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={t("Close")}
             className="flex h-8 w-8 items-center justify-center rounded-full text-ink-subtle hover:bg-canvas/70 hover:text-ink"
           >
             <X size={14} strokeWidth={2.2} />
           </button>
         </div>
 
-        <Field label="Name">
+        <Field label={t("Name")}>
           <input
             type="text"
             value={draft.name}
@@ -315,7 +316,7 @@ function RuleEditor({
         {draft.trigger.event === "fromGenre" && (
           <TriggerSubFields>
             <SubSelect
-              label="Media type"
+              label={t("Media type")}
               value={draft.trigger.mediaType}
               options={[
                 { value: "movie", label: "Movies" },
@@ -326,7 +327,7 @@ function RuleEditor({
               }
             />
             <SubChips
-              label="Genres"
+              label={t("Genres")}
               items={Object.entries(MOVIE_GENRES).map(([name, id]) => ({
                 key: String(id),
                 label: name,
@@ -346,7 +347,7 @@ function RuleEditor({
         {draft.trigger.event === "fromProvider" && (
           <TriggerSubFields>
             <SubChips
-              label="Streamers"
+              label={t("Streamers")}
               items={PROVIDERS.map((p) => ({
                 key: String(p.id),
                 label: p.name,
@@ -366,7 +367,7 @@ function RuleEditor({
         {draft.trigger.event === "fromCountry" && (
           <TriggerSubFields>
             <SubChips
-              label="Countries"
+              label={t("Countries")}
               items={COUNTRIES.map((c) => ({
                 key: c.code,
                 label: c.name,
@@ -395,11 +396,11 @@ function RuleEditor({
                 }}
                 className="h-4 w-4 accent-ink"
               />
-              <span className="text-[12.5px] text-ink">Only my favorited channels</span>
+              <span className="text-[12.5px] text-ink">{t("Only my favorited channels")}</span>
             </label>
             <label className="flex items-center gap-3">
               <span className="w-[140px] shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                Heads up
+                {t("Heads up")}
               </span>
               <select
                 value={String(
@@ -419,14 +420,14 @@ function RuleEditor({
               </select>
             </label>
             <p className="text-[11.5px] text-ink-subtle">
-              Harbor scans your IPTV playlists' EPG every 30 min for programs about to start.
+              {t("Harbor scans your IPTV playlists' EPG every 30 min for programs about to start.")}
             </p>
           </TriggerSubFields>
         )}
 
         {draft.trigger.event === "fromTrackedPerson" && trackedPeople.length === 0 && (
           <div className="rounded-lg border border-amber-200/30 bg-amber-200/5 px-3 py-2 text-[12px] text-amber-200/85">
-            Add people in the Custom calendar manager first, then come back here.
+            {t("Add people in the Custom calendar manager first, then come back here.")}
           </div>
         )}
 
@@ -451,7 +452,7 @@ function RuleEditor({
           </TriggerSubFields>
         )}
 
-        <Field label="THEN notify on">
+        <Field label={t("THEN notify on")}>
           <div className="flex gap-2">
             <ChannelToggle
               label="Discord"
@@ -474,7 +475,7 @@ function RuleEditor({
             onClick={onCancel}
             className="h-10 rounded-xl px-4 text-[13px] font-medium text-ink-muted hover:text-ink"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             type="button"
@@ -482,7 +483,7 @@ function RuleEditor({
             disabled={!draft.channels.discord && !draft.channels.telegram}
             className="h-10 rounded-xl bg-ink px-5 text-[13px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            Save rule
+            {t("Save rule")}
           </button>
         </div>
       </div>
@@ -591,7 +592,7 @@ function ChannelToggle({
             ? "border-ink bg-ink text-canvas"
             : "border-edge-soft bg-canvas/40 text-ink-muted hover:border-edge hover:text-ink"
       }`}
-      title={disabled ? "Configure URL above first" : undefined}
+      title={disabled ? t("Configure URL above first") : undefined}
     >
       {label}
     </button>

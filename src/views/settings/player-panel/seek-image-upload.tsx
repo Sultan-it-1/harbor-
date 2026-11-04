@@ -1,5 +1,6 @@
 import { AlertTriangle, Image as ImageIcon, Loader2, Upload, X } from "lucide-react";
 import { useRef, useState } from "react";
+import { t } from "@/lib/i18n/translate";
 
 const ACCEPTED_TYPES = "image/png,image/gif,image/webp,image/jpeg,image/svg+xml,.svg";
 const MAX_GIF_SIZE = 2 * 1024 * 1024;
@@ -107,7 +108,7 @@ export function SeekImageUpload({
           }}
           disabled={!value}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-raised text-ink-muted transition-all duration-200 hover:bg-danger hover:text-white disabled:pointer-events-none disabled:scale-90 disabled:opacity-0"
-          aria-label="Remove image"
+          aria-label={t("Remove image")}
         >
           <X size={13} strokeWidth={2.2} />
         </button>

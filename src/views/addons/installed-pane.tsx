@@ -138,7 +138,7 @@ function InstalledRow({
 
   return (
     <div
-      role="button"
+      role="group"
       tabIndex={0}
       onClick={() => !busy && onOpen(idOf(r))}
       onKeyDown={(e) => !busy && (e.key === "Enter" || e.key === " ") && onOpen(idOf(r))}

@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { FONT_PAIRS, type FontPairId } from "@/lib/theme";
 import { CustomFontTiles } from "./custom-font-tiles";
+import { t } from "@/lib/i18n/translate";
 
 export function FontGrid({
   pairValue,
@@ -41,7 +42,7 @@ export function FontGrid({
                 Harbor
               </span>
               <span className="text-[13px] text-ink-muted" style={{ fontFamily: p.sans }}>
-                The quick brown fox jumps over the lazy dog
+                {t("The quick brown fox jumps over the lazy dog")}
               </span>
             </div>
             <p className="text-[11.5px] text-ink-subtle">{p.blurb}</p>

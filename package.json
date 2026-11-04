@@ -13,7 +13,8 @@
     "tauri:build:linux-system": "tauri build --config src-tauri/tauri.linux-system.conf.json",
     "setup:libmpv": "node scripts/fetch-libmpv.mjs",
     "setup:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
-    "setup:fonts": "node scripts/fetch-fonts.mjs"
+    "setup:fonts": "node scripts/fetch-fonts.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

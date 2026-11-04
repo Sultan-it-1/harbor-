@@ -2,6 +2,7 @@ import { ArchiveRestore } from "lucide-react";
 import { useMemo } from "react";
 import { loadBackups, type AddonOrderBackup } from "@/lib/addons-store/reorder";
 import { useT } from "@/lib/i18n";
+import { uiLocale } from "@/lib/i18n/locale";
 
 function previewNames(names: string[], t: (key: string, vars?: Record<string, string | number>) => string): string {
   const first = names.slice(0, 3).join(", ");
@@ -9,7 +10,7 @@ function previewNames(names: string[], t: (key: string, vars?: Record<string, st
 }
 
 function timeLabel(at: number): string {
-  return new Date(at).toLocaleString(undefined, {
+  return new Date(at).toLocaleString(uiLocale(), {
     month: "short",
     day: "numeric",
     hour: "numeric",

@@ -19,6 +19,9 @@ function interpolate(template: string, vars?: Vars): string {
 function resolve(lang: UiLanguage, key: string): string {
   const active = catalogs[lang]?.[key];
   if (active !== undefined) return active;
+  // Test hook: a UI sweep sets window.__harborI18nMisses to a Set to collect the texts this
+  // language is missing (labels that come from data never show up in a scan of the code).
+  if (lang !== "en") (globalThis as { __harborI18nMisses?: Set<string> }).__harborI18nMisses?.add(key);
   const fallback = catalogs.en[key];
   if (fallback !== undefined) return fallback;
   return key;

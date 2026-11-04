@@ -5,6 +5,7 @@ import { tmdbMovieImages } from "@/lib/providers/tmdb";
 import { useSettings } from "@/lib/settings";
 import { ImdbIcon } from "../icons/imdb-icon";
 import type { LightboxState } from "./types";
+import { t } from "@/lib/i18n/translate";
 
 export function SidePanel({
   meta,
@@ -88,7 +89,7 @@ export function SidePanel({
         <div className="mt-auto flex items-center gap-1.5 rounded-full border border-edge-soft bg-canvas/40 px-2.5 py-1 text-[12px] font-semibold text-ink self-start">
           <ImdbIcon className="h-[12px] w-auto rounded-[2px]" />
           <span>{meta.imdbRating}</span>
-          <span className="text-ink-subtle">· Top Rated</span>
+          <span className="text-ink-subtle">{t("· Top Rated")}</span>
         </div>
       )}
     </aside>
@@ -123,7 +124,7 @@ function Still({
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Expand ${alt} image`}
+      aria-label={t("Expand {alt} image", { alt: alt })}
       className="group/still relative aspect-[16/9] overflow-hidden rounded-md border border-edge-soft transition-colors duration-200 hover:border-ink"
     >
       <img

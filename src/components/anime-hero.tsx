@@ -13,6 +13,7 @@ import { observe, usePageVisible } from "@/lib/visibility";
 import { MalLogo } from "./icons/mal-logo";
 import { PickCard } from "./pick-card";
 import { Row } from "./row";
+import { t } from "@/lib/i18n/translate";
 
 const ROTATE_MS = 14000;
 const FADE_MS = 700;
@@ -135,6 +136,7 @@ export function AnimeHero({
             <div
               key={m.id}
               aria-hidden={i !== active}
+              inert={i !== active}
               className="absolute inset-0"
               style={{
                 opacity: i === active ? 1 : 0,
@@ -345,7 +347,7 @@ function CrunchyrollBadge({ name, year }: { name: string; year?: number }) {
           {win.year} {win.categoryName}
         </div>
         <div className="mt-0.5 text-[11.5px] text-ink-muted">
-          {win.year} ceremony · {win.title}
+          {win.year} {t("ceremony ·")} {win.title}
         </div>
       </div>
     </div>

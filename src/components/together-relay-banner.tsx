@@ -57,7 +57,7 @@ export function TogetherRelayBanner() {
             }}
             className="mt-1 w-fit rounded-lg border border-edge px-2.5 py-1 text-[11.5px] font-medium text-ink-muted transition-colors hover:bg-raised hover:text-ink"
           >
-            Open relay settings
+            {t("Open relay settings")}
           </button>
         )}
       </div>

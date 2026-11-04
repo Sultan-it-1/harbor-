@@ -5,6 +5,7 @@ import { tmdbImdbCached } from "@/lib/providers/tmdb";
 import { toggleWatchlist, useInWatchlist } from "@/lib/watchlist";
 import { ImdbIcon } from "../icons/imdb-icon";
 import { MalLogo } from "../icons/mal-logo";
+import { t } from "@/lib/i18n/translate";
 
 function DecisionLine({ data }: { data: PreviewData }) {
   const parts: ReactNode[] = [];
@@ -49,8 +50,8 @@ function WatchlistToggle({ data }: { data: PreviewData }) {
     <button
       type="button"
       tabIndex={-1}
-      title={active ? "In watchlist" : "Add to watchlist"}
-      aria-label={active ? "In watchlist" : "Add to watchlist"}
+      title={active ? t("In watchlist") : t("Add to watchlist")}
+      aria-label={active ? t("In watchlist") : t("Add to watchlist")}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
@@ -105,7 +106,7 @@ export function PreviewBlock({ data, onDetails }: { data: PreviewData; onDetails
             }}
             className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle transition-colors duration-150 hover:text-ink"
           >
-            Details
+            {t("Details")}
           </button>
         ) : (
           <WatchlistToggle data={data} />

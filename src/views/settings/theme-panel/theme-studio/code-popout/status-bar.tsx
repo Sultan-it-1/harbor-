@@ -1,4 +1,5 @@
 import { IDE, type ThemeFile } from "./files";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function StatusBar({
   file,
@@ -28,7 +29,7 @@ export function StatusBar({
         Ln {line}, Col {col}
       </span>
       <span className="tabular-nums">{lines} lines</span>
-      <span className="tabular-nums">{chars.toLocaleString()} chars</span>
+      <span className="tabular-nums">{chars.toLocaleString(uiLocale())} chars</span>
       <span className="ms-auto flex items-center gap-4">
         <span>Spaces: 2</span>
         <span>UTF-8</span>

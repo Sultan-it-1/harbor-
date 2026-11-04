@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, FolderOpen, X } from "lucide-react";
 import { saveTextFileWithPath } from "@/lib/download-text";
+import { t } from "@/lib/i18n/translate";
 
 export function DownloadMenu({
   docsRef,
@@ -69,7 +70,7 @@ export function DownloadMenu({
         <div className="absolute end-0 top-[calc(100%+8px)] z-30 flex w-44 flex-col overflow-hidden rounded-xl border border-edge-soft bg-elevated shadow-[0_18px_50px_-15px_rgba(0,0,0,0.6)] backdrop-blur-md animate-in fade-in slide-in-from-top-1 duration-150">
           <DownloadOption label="Plain text (.txt)" onClick={() => void exportAs("txt")} />
           <DownloadOption label="JSON (.json)" onClick={() => void exportAs("json")} />
-          <DownloadOption label="PDF (print)" onClick={() => void exportAs("pdf")} />
+          <DownloadOption label={t("PDF (print)")} onClick={() => void exportAs("pdf")} />
         </div>
       )}
     </div>
@@ -120,7 +121,7 @@ export function SavePill({ path, onDismiss }: { path: string; onDismiss: () => v
           <Check size={13} strokeWidth={2.8} />
         </span>
         <div className="flex min-w-0 flex-col">
-          <span className="text-[12.5px] font-semibold leading-tight text-ink">Saved</span>
+          <span className="text-[12.5px] font-semibold leading-tight text-ink">{t("Saved")}</span>
           <span className="truncate text-[11px] leading-tight text-ink-subtle" title={path}>
             {dir || name}
           </span>
@@ -131,12 +132,12 @@ export function SavePill({ path, onDismiss }: { path: string; onDismiss: () => v
           className="ms-1 flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-raised px-3 text-[11.5px] font-semibold text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
         >
           <FolderOpen size={13} strokeWidth={2.2} />
-          Show
+          {t("Show")}
         </button>
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={t("Dismiss")}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-subtle transition-colors hover:bg-raised hover:text-ink"
         >
           <X size={14} strokeWidth={2.4} />

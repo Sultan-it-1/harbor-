@@ -6,6 +6,7 @@ import { markEpisodesWatched, unmarkEpisodeWatched } from "@/lib/simkl/history";
 import { stremioIdToSimklTarget } from "@/lib/simkl/ids";
 import { useSimkl } from "@/lib/simkl/provider";
 import { isPhoneLayout } from "@/lib/platform";
+import { t } from "@/lib/i18n/translate";
 
 const PHONE = isPhoneLayout();
 
@@ -68,7 +69,7 @@ export function EpisodeWatchedMenu({
       {target.watched ? (
         <Item
           icon={<EyeOff size={14} strokeWidth={2} />}
-          label="Mark as unwatched"
+          label={t("Mark as unwatched")}
           onClick={() => {
             setManualWatched(metaId, target.season, target.episode, false);
             if (showIds) void unmarkEpisodeWatched(showIds, target.season, target.episode);
@@ -79,7 +80,7 @@ export function EpisodeWatchedMenu({
         <>
           <Item
             icon={<Check size={14} strokeWidth={2} />}
-            label="Mark as watched"
+            label={t("Mark as watched")}
             onClick={() => {
               setManualWatched(metaId, target.season, target.episode, true);
               if (showIds) void markEpisodesWatched(showIds, target.season, [target.episode]);
@@ -88,7 +89,7 @@ export function EpisodeWatchedMenu({
           />
           <Item
             icon={<Eye size={14} strokeWidth={2} />}
-            label="Mark watched up to here"
+            label={t("Mark watched up to here")}
             onClick={() => {
               if (allEpisodes && allEpisodes.length > 0) {
                 const upTo = allEpisodes.filter(

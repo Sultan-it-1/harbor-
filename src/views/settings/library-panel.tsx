@@ -28,6 +28,7 @@ import { useT } from "@/lib/i18n";
 import { RegionField } from "./region-cascade";
 import { ExtLink, KeyField, Section, ToggleRow } from "./shared";
 import { TmdbGuideModal } from "./tmdb-tutorial-modal";
+import { t } from "@/lib/i18n/translate";
 
 export type LibraryKey = "tmdb" | "omdb" | "rpdb" | "fanart" | "tvdb";
 
@@ -320,12 +321,11 @@ export function LibraryPanel({
           }
           help={
             <>
-              Highly recommended. This is what gives you the full Harbor experience: Popular,
-              Trending, In Theaters, and per-service rails. Free at{" "}
+              {t("Highly recommended. This is what gives you the full Harbor experience: Popular, Trending, In Theaters, and per-service rails. Free at")}{" "}
               <ExtLink href="https://www.themoviedb.org/settings/api">
                 themoviedb.org/settings/api
               </ExtLink>
-              . Use the v3 key, not the read access token.
+              {t(". Use the v3 key, not the read access token.")}
             </>
           }
         />
@@ -339,11 +339,11 @@ export function LibraryPanel({
           iconSrc={omdbLogo}
           help={
             <>
-              Free at{" "}
+              {t("Free at")}{" "}
               <ExtLink href="https://www.omdbapi.com/apikey.aspx">
                 omdbapi.com/apikey.aspx
               </ExtLink>
-              . They email an activation link the first time. Click it, then come back and save.
+              {t(". They email an activation link the first time. Click it, then come back and save.")}
             </>
           }
         />
@@ -357,10 +357,8 @@ export function LibraryPanel({
           iconSrc={rpdbLogo}
           help={
             <>
-              Paid plan at{" "}
-              <ExtLink href="https://ratingposterdb.com">ratingposterdb.com</ExtLink>. Once
-              saved, every poster gets re-rendered with IMDb, Rotten Tomatoes, and Metacritic
-              stamped on it.
+              {t("Paid plan at")}{" "}
+              <ExtLink href="https://ratingposterdb.com">ratingposterdb.com</ExtLink>{t(". Once saved, every poster gets re-rendered with IMDb, Rotten Tomatoes, and Metacritic stamped on it.")}
             </>
           }
         />
@@ -377,9 +375,7 @@ export function LibraryPanel({
           iconSrc={mdblistLogo}
           help={
             <>
-              Free key at <ExtLink href="https://mdblist.com/preferences/">mdblist.com</ExtLink>.
-              Adds Letterboxd and Trakt community ratings to detail pages, covering what OMDb
-              misses.
+              {t("Free key at")} <ExtLink href="https://mdblist.com/preferences/">mdblist.com</ExtLink>{t(". Adds Letterboxd and Trakt community ratings to detail pages, covering what OMDb misses.")}
             </>
           }
         />
@@ -396,11 +392,10 @@ export function LibraryPanel({
           iconSrc={rpdbLogo}
           help={
             <>
-              Leave empty to use your RPDB key above. Or paste{" "}
-              <strong>Better Posters</strong> (<code>https://btttr.cc</code>), a bare
-              RPDB-compatible server (your RPDB key is still sent), or a full URL template using{" "}
-              <code>{"{imdbId}"}</code>, <code>{"{tmdbId}"}</code>, <code>{"{type}"}</code>, or{" "}
-              <code>{"{id}"}</code>. PostersPlus needs the template form, e.g.{" "}
+              {t("Leave empty to use your RPDB key above. Or paste")}{" "}
+              <strong>{t("Better Posters")}</strong> (<code>https://btttr.cc</code>{t("), a bare RPDB-compatible server (your RPDB key is still sent), or a full URL template using")}{" "}
+              <code>{"{imdbId}"}</code>, <code>{"{tmdbId}"}</code>, <code>{"{type}"}</code>{t(", or")}{" "}
+              <code>{"{id}"}</code>{t(". PostersPlus needs the template form, e.g.")}{" "}
               <code>{"postersplus.elfhosted.com/poster?tmdb_id={tmdbId}&imdb_id={imdbId}&type={type}"}</code>.
             </>
           }
@@ -417,10 +412,9 @@ export function LibraryPanel({
           saved={extraSaved === "ai"}
           help={
             <>
-              Adds an "Ask AI" button to search, so you can type things like{" "}
-              <em>popular French TV shows last year</em>. Get a key at{" "}
-              <ExtLink href="https://openrouter.ai/keys">openrouter.ai/keys</ExtLink>. It only runs
-              when you tap that button, so it never costs anything unless you ask.
+              {t("Adds an \"Ask AI\" button to search, so you can type things like")}{" "}
+              <em>{t("popular French TV shows last year")}</em>{t(". Get a key at")}{" "}
+              <ExtLink href="https://openrouter.ai/keys">openrouter.ai/keys</ExtLink>{t(". It only runs when you tap that button, so it never costs anything unless you ask.")}
             </>
           }
         />
@@ -457,11 +451,11 @@ export function LibraryPanel({
           iconSrc={fanartLogo}
           help={
             <>
-              Fills in where TMDB comes up empty (anime, older catalog). Free at{" "}
+              {t("Fills in where TMDB comes up empty (anime, older catalog). Free at")}{" "}
               <ExtLink href="https://fanart.tv/get-an-api-key/">
                 fanart.tv/get-an-api-key
               </ExtLink>
-              . Use the "personal" key, not the project one.
+              {t(". Use the \"personal\" key, not the project one.")}
             </>
           }
         />
@@ -475,12 +469,11 @@ export function LibraryPanel({
           iconSrc={tvdbLogo}
           help={
             <>
-              Episode titles, alternate names, and network info. Layered on TMDB so the better
-              source wins per field. Free at{" "}
+              {t("Episode titles, alternate names, and network info. Layered on TMDB so the better source wins per field. Free at")}{" "}
               <ExtLink href="https://thetvdb.com/api-information">
                 thetvdb.com/api-information
               </ExtLink>
-              . Pick the "Negotiated API key" path.
+              {t(". Pick the \"Negotiated API key\" path.")}
             </>
           }
         />
@@ -1076,7 +1069,7 @@ function RetentionPicker({
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
-        Keep frames for
+        {t("Keep frames for")}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {options.map((opt) => {
@@ -1122,7 +1115,7 @@ function ClearSnapshotsButton() {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-edge-soft bg-canvas/40 px-3.5 py-2.5">
       <div className="flex flex-col gap-0.5">
-        <p className="text-[12.5px] font-medium text-ink">Clear all saved frames</p>
+        <p className="text-[12.5px] font-medium text-ink">{t("Clear all saved frames")}</p>
         <p className="text-[11.5px] leading-snug text-ink-subtle">
           {count > 0
             ? `${count} frame${count === 1 ? "" : "s"} stored. Wiping rebuilds them next time you watch.`

@@ -42,7 +42,7 @@ export function TileCard({
 
   return (
     <div
-      role="button"
+      role="group"
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen()}

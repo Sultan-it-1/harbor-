@@ -1,4 +1,5 @@
 import type { CastDeviceInfo } from "@/lib/cast";
+import { t } from "@/lib/i18n/translate";
 
 export function CastSessionBar({
   device,
@@ -31,20 +32,20 @@ export function CastSessionBar({
       </span>
       <div className="flex flex-col">
         <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
-          Casting to
+          {t("Casting to")}
         </span>
         <span className="text-[12.5px] font-semibold text-ink">{device.name}</span>
       </div>
       {transcoding && (
         <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-amber-200">
-          Transcoding
+          {t("Transcoding")}
         </span>
       )}
       <div className="ms-2 flex items-center gap-1.5">
         <button
           onClick={() => void onTogglePlay()}
           className="flex h-8 w-8 items-center justify-center rounded-full bg-canvas/60 text-ink transition-colors hover:bg-canvas/85"
-          aria-label={playing ? "Pause" : "Play"}
+          aria-label={playing ? t("Pause") : t("Play")}
         >
           {playing ? (
             <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
@@ -73,7 +74,7 @@ export function CastSessionBar({
           onClick={() => void onStop()}
           className="rounded-full bg-rose-400/20 px-3 py-1 text-[11px] font-semibold text-rose-100 transition-colors hover:bg-rose-400/30"
         >
-          Stop
+          {t("Stop")}
         </button>
       </div>
     </div>

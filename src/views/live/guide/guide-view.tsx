@@ -21,6 +21,7 @@ import {
   clampDuration,
   startOfWindow,
 } from "./guide-utils";
+import { uiLocale } from "@/lib/i18n/locale";
 
 const COL_MIN = 140;
 const COL_MAX = 560;
@@ -148,8 +149,8 @@ export function GuideView({
             <div className="flex items-center gap-2 text-[12px] text-ink-subtle">
               <Loader2 size={13} className="animate-spin" />
               {t("Loading more channels ({shown} of {total})", {
-                shown: channels.length.toLocaleString(),
-                total: allChannels.length.toLocaleString(),
+                shown: channels.length.toLocaleString(uiLocale()),
+                total: allChannels.length.toLocaleString(uiLocale()),
               })}
             </div>
           </div>
@@ -298,16 +299,16 @@ export function GuideView({
           <div className="flex items-center gap-2 text-[12px] text-ink-subtle">
             <Loader2 size={13} className="animate-spin" />
             {t("Loading more channels ({shown} of {total})", {
-              shown: channels.length.toLocaleString(),
-              total: allChannels.length.toLocaleString(),
+              shown: channels.length.toLocaleString(uiLocale()),
+              total: allChannels.length.toLocaleString(uiLocale()),
             })}
           </div>
         </div>
       ) : allChannels.length > channels.length ? (
         <div className="mx-6 mt-3 mb-2 rounded-xl border border-edge-soft/55 bg-elevated/60 px-4 py-2.5 text-center text-[12px] text-ink-subtle">
           {t("Showing first {shown} of {total} channels. Use search or a category to narrow down.", {
-            shown: channels.length.toLocaleString(),
-            total: allChannels.length.toLocaleString(),
+            shown: channels.length.toLocaleString(uiLocale()),
+            total: allChannels.length.toLocaleString(uiLocale()),
           })}
         </div>
       ) : null}

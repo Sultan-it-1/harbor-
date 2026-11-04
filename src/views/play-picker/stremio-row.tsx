@@ -7,6 +7,7 @@ import { HostMatchChip } from "@/components/host-match-chip";
 import { useSettings } from "@/lib/settings";
 import type { ScoredStream } from "@/lib/streams/types";
 import { EditionChip } from "./edition-chip";
+import { t } from "@/lib/i18n/translate";
 
 const PHONE = isPhoneLayout();
 
@@ -66,7 +67,7 @@ export function StremioRow({
           </div>
         )}
         {failed && (
-          <p className="text-[13px] font-medium text-danger">Unavailable, try another.</p>
+          <p className="text-[13px] font-medium text-danger">{t("Unavailable, try another.")}</p>
         )}
       </div>
       <div
@@ -76,7 +77,7 @@ export function StremioRow({
         {link && <CopyLinkButton url={link} size={16} className={PHONE ? "h-8 w-8" : "h-9 w-9"} />}
         <button
           onClick={onPlay}
-          aria-label="Play"
+          aria-label={t("Play")}
           className={`flex items-center justify-center rounded-full bg-accent text-canvas transition-transform active:scale-95 hover:opacity-90 ${PHONE ? "h-11 w-11" : "h-16 w-16"}`}
         >
           <Play size={PHONE ? 19 : 26} fill="currentColor" className="ml-0.5" />

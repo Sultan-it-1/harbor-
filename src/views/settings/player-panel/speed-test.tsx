@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import cloudflareLogo from "@/assets/cloudflare.webp";
 import { isTauri } from "./internals";
+import { t } from "@/lib/i18n/translate";
 
 const SPEEDTEST_CHUNK = 25_000_000;
 const SPEEDTEST_URL = `https://speed.cloudflare.com/__down?bytes=${SPEEDTEST_CHUNK}`;
@@ -81,13 +82,12 @@ function SpeedResultBadge({ value }: { value: string }) {
               className="h-4 w-4 shrink-0 object-contain"
             />
             <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-              How this is measured
+              {t("How this is measured")}
             </span>
           </div>
           <p className="mb-2.5 text-[12.5px] leading-snug text-ink-muted">
-            Harbor opens 4 parallel HTTP streams to{" "}
-            <span className="font-medium text-ink">speed.cloudflare.com</span>, runs for 8 seconds,
-            and discards the first 1.5s of warmup so TCP slow-start doesn't tank the result.
+            {t("Harbor opens 4 parallel HTTP streams to")}{" "}
+            <span className="font-medium text-ink">speed.cloudflare.com</span>{t(", runs for 8 seconds, and discards the first 1.5s of warmup so TCP slow-start doesn't tank the result.")}
           </p>
           <p className="mb-2 text-[12.5px] leading-snug text-ink-muted">
             The reported number is your steady-state throughput, which is what fast.com and
@@ -97,7 +97,7 @@ function SpeedResultBadge({ value }: { value: string }) {
             <span className="h-1 w-1 rounded-full bg-ink-subtle/60" />
             One test uses ~your speed × 7s of bandwidth
             <span className="h-1 w-1 rounded-full bg-ink-subtle/60" />
-            60s cooldown
+            {t("60s cooldown")}
           </div>
         </div>
       )}
@@ -109,7 +109,7 @@ export function SpeedTestButton() {
   if (!isTauri) {
     return (
       <span className="flex h-8 shrink-0 items-center rounded-full border border-edge-soft px-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-        Desktop only
+        {t("Desktop only")}
       </span>
     );
   }
@@ -212,7 +212,7 @@ function SpeedTestButtonInner() {
         onClick={run}
         className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-danger/40 px-3 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-danger transition-colors hover:bg-danger/10"
       >
-        Retry
+        {t("Retry")}
       </button>
     );
   }
@@ -223,7 +223,7 @@ function SpeedTestButtonInner() {
         onClick={run}
         className="flex h-8 shrink-0 items-center rounded-full border border-edge-soft px-3 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ink-muted transition-colors hover:border-edge hover:text-ink"
       >
-        Run speed test
+        {t("Run speed test")}
       </button>
     );
   }
@@ -234,7 +234,7 @@ function SpeedTestButtonInner() {
         type="button"
         onClick={run}
         disabled={cooling}
-        aria-label={cooling ? `Wait ${Math.ceil(cooldownRemaining / 1000)}s` : "Re-test"}
+        aria-label={cooling ? `Wait ${Math.ceil(cooldownRemaining / 1000)}s` : t("Re-test")}
         className={`flex h-7 items-center justify-center rounded-full text-ink-subtle transition-colors ${
           cooling
             ? "w-auto cursor-not-allowed px-2 text-[10.5px] font-semibold tabular-nums tracking-wide"

@@ -3,11 +3,12 @@ import { Check, ChevronDown, Hourglass, Play, RotateCcw, Star } from "lucide-rea
 import { SPOILER_TEXT_CLASS, SPOILER_THUMB_CLASS, type SpoilerMask } from "@/lib/spoilers";
 import type { PlayEpisode } from "@/lib/view";
 import { useT } from "@/lib/i18n";
+import { uiLocale } from "@/lib/i18n/locale";
 
 function formatAirDate(d: string): string {
   const date = new Date(`${d}T00:00:00`);
   if (Number.isNaN(date.getTime())) return d;
-  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return date.toLocaleDateString(uiLocale(), { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function EpisodeRow({

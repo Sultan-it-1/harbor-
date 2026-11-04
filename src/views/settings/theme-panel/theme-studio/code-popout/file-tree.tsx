@@ -1,6 +1,7 @@
 import { ChevronDown, Download, Folder } from "lucide-react";
 import type { CodeLang } from "@/components/code-editor";
 import { IDE, type ThemeFile } from "./files";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function FileTree({
   files,
@@ -70,7 +71,7 @@ export function FileTree({
                     className="shrink-0 tabular-nums text-[11.5px] transition-opacity group-hover/row:opacity-0"
                     style={{ color: IDE.textFaint }}
                   >
-                    {len.toLocaleString()}
+                    {len.toLocaleString(uiLocale())}
                   </span>
                 )}
               </button>

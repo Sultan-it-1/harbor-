@@ -48,6 +48,7 @@ import { useAddons } from "./play-picker/use-addons";
 import { useImdbId } from "./play-picker/use-imdb-id";
 import { usePipelineResult } from "./play-picker/use-pipeline-result";
 import { useStreamIds } from "./play-picker/use-stream-ids";
+import { t } from "@/lib/i18n/translate";
 
 const TIER_ORDER: Tier[] = ["4K_DV", "4K_HDR", "4K", "1080p_HDR", "1080p", "720p", "SD", "ROUGH"];
 
@@ -559,7 +560,7 @@ export function PlayPicker({
 
         {isDownload && (
           <div className="rounded-2xl border border-edge-soft bg-elevated/60 px-5 py-3.5 text-[13.5px] text-ink-muted">
-            Choose a source to save offline. You can track progress on the Downloads page.
+            {t("Choose a source to save offline. You can track progress on the Downloads page.")}
           </div>
         )}
 

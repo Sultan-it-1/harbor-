@@ -4,6 +4,7 @@ import { blockedTrackerCount, subscribeBlockedTrackers } from "@/lib/privacy/blo
 import { useSettings } from "@/lib/settings";
 import { ToggleRow } from "./shared";
 import { useT } from "@/lib/i18n";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function PrivacyRow() {
   const t = useT();
@@ -15,7 +16,7 @@ export function PrivacyRow() {
   // online by the title's id (skip-intro times), which the switch below controls.
   const sub = settings.blockTrackers
     ? count > 0
-      ? t("{count} tracker request blocked this session. Harbor sends no analytics of its own.", { count: count.toLocaleString() })
+      ? t("{count} tracker request blocked this session. Harbor sends no analytics of its own.", { count: count.toLocaleString(uiLocale()) })
       : t("Watching for ad, analytics, and tracking requests. Harbor sends no analytics of its own.")
     : t("Ad, analytics, and tracking requests pass through untouched.");
 

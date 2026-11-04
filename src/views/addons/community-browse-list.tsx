@@ -8,6 +8,7 @@ import { listAddons, risingEntryFor, useRising, type SAAddon } from "@/lib/provi
 import { useTopMovers } from "@/lib/providers/stremio-addons-velocity";
 import { openUrl } from "@/lib/window";
 import { useT } from "@/lib/i18n";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export type BrowseMode = "top" | "new" | "rising";
 
@@ -312,7 +313,7 @@ function CommunityRow({
 
   return (
     <div
-      role="button"
+      role="group"
       tabIndex={0}
       onClick={open}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && open()}
@@ -332,7 +333,7 @@ function CommunityRow({
           {addon.stars > 0 && (
             <span className="inline-flex h-5 items-center gap-1 rounded-full bg-canvas/70 px-1.5 text-[10.5px] font-bold text-accent ring-1 ring-accent/30 backdrop-blur-sm">
               <Star size={9} strokeWidth={2.6} fill="currentColor" className="harbor-rating-star" />
-              {addon.stars.toLocaleString()}
+              {addon.stars.toLocaleString(uiLocale())}
             </span>
           )}
           {showRising && risingDelta != null && (

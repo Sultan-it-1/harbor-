@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useTogether } from "@/lib/together/provider";
+import { t } from "@/lib/i18n/translate";
 
 export function TogetherParticipantLeftToast() {
   const { incomingParticipantLeft, dismissParticipantLeft, snapshot } = useTogether();
@@ -25,7 +26,7 @@ export function TogetherParticipantLeftToast() {
         >
           {initial}
         </span>
-        <span className="text-[13.5px] font-semibold text-ink">{name} left the room</span>
+        <span className="text-[13.5px] font-semibold text-ink">{name} {t("left the room")}</span>
       </div>
     </div>
   );

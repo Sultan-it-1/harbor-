@@ -370,7 +370,7 @@ export function WatchlistCard({ meta, onRemove }: { meta: Meta; onRemove?: () =>
       onMouseLeave={() => setConfirm(false)}
     >
       <div
-        role="button"
+        role="group"
         tabIndex={0}
         onClick={open}
         onKeyDown={(e) => {

@@ -2,6 +2,7 @@ import lottie, { type AnimationItem } from "lottie-web";
 import { Check } from "lucide-react";
 import { useEffect, useRef } from "react";
 import installBoat from "@/assets/lottie/install-boat-white.json";
+import { t } from "@/lib/i18n/translate";
 
 export type OverlayPhase =
   | { kind: "installing"; name: string | null }
@@ -63,18 +64,18 @@ export function InstallOverlay({ phase, logo }: { phase: OverlayPhase; logo: str
         <div className="flex flex-col items-center gap-1.5">
           {installing ? (
             <span className="text-[10.5px] font-bold uppercase tracking-[0.26em] text-accent">
-              Installing
+              {t("Installing")}
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.26em] text-emerald-400">
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
                 <Check size={11} strokeWidth={3} />
               </span>
-              Added to Harbor
+              {t("Added to Harbor")}
             </span>
           )}
           <span className="font-display text-[24px] leading-none tracking-tight text-ink">{name}</span>
-          {!installing && <span className="text-[12.5px] text-ink-muted">Saved to your library.</span>}
+          {!installing && <span className="text-[12.5px] text-ink-muted">{t("Saved to your library.")}</span>}
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { useView } from "@/lib/view";
 import { type AwardEntry, type AwardType } from "@/lib/providers/wikidata";
 import { AwardLogo, laurelColorFor } from "./icons/award-logo";
 import { Laurel } from "./icons/laurel";
+import { t } from "@/lib/i18n/translate";
 
 const TYPE_ORDER: Record<AwardType, number> = {
   oscar: 0,
@@ -49,7 +50,7 @@ export function AwardsBlock({ awards }: { awards: AwardEntry[] }) {
 
   return (
     <div id="awards-section" className="scroll-mt-24 border-t border-edge-soft pt-14">
-      <h3 className="mb-10 text-[24px] font-medium tracking-tight text-ink">Awards & Recognition</h3>
+      <h3 className="mb-10 text-[24px] font-medium tracking-tight text-ink">{t("Awards & Recognition")}</h3>
       <div className="flex flex-col gap-14">
         {sorted.map(([type, entries]) => (
           <AwardGroup key={type} type={type} entries={entries} />
@@ -143,7 +144,7 @@ function AwardGroup({ type, entries }: { type: AwardType; entries: AwardEntry[] 
           <div className="flex flex-col gap-2">
             {wins.length > 0 && (
               <h5 className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-subtle">
-                Also Nominated
+                {t("Also Nominated")}
               </h5>
             )}
             <ul className="grid grid-cols-1 gap-x-10 gap-y-0 xl:grid-cols-2">
@@ -160,7 +161,7 @@ function AwardGroup({ type, entries }: { type: AwardType; entries: AwardEntry[] 
 
         {!hasDetail && (
           <p className="text-[13px] leading-relaxed text-ink-subtle">
-            Recognized at the {TYPE_TITLE[type].toLowerCase()}.
+            {t("Recognized at the")} {TYPE_TITLE[type].toLowerCase()}.
           </p>
         )}
       </div>

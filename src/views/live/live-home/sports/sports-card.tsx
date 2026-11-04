@@ -18,6 +18,7 @@ function startLabel(
 }
 
 import { SportsHoverPreview } from "./sports-hover-preview";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function SportsCard({ game, onSelect }: { game: SportsGame; onSelect: (g: SportsGame) => void }) {
   const finalGame = game.state === "post";
@@ -86,8 +87,8 @@ function SideRow({ side, active, dim, showWinner }: { side: SportsSide; active: 
 
 function Status({ game }: { game: SportsGame }) {
   const t = useT();
-  const lang = useUiLanguage();
-  const locale = lang === "ar" ? "ar-SA" : "en-US";
+  useUiLanguage(); // re-render with the new date format when the language changes
+  const locale = uiLocale();
 
   if (game.state === "in") {
     return (

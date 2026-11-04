@@ -2,6 +2,7 @@ import { MOVIE_GENRES, TV_GENRES } from "@/lib/feed/tags";
 import type { TmdbDetail } from "@/lib/providers/tmdb";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
+import { uiLocale } from "@/lib/i18n/locale";
 
 const ANIME_ROW_BY_GENRE: Record<string, string> = {
   Action: "genre-action",
@@ -112,7 +113,7 @@ export function InfoBlock({ detail, isAnime = false }: { detail: TmdbDetail; isA
       ? {
           label: t("Rating"),
           kind: "text",
-          value: `${detail.rating} · ${t("{n} votes", { n: detail.voteCount.toLocaleString() })}`,
+          value: `${detail.rating} · ${t("{n} votes", { n: detail.voteCount.toLocaleString(uiLocale()) })}`,
         }
       : null,
   ];

@@ -1,9 +1,10 @@
+import { uiLocale } from "@/lib/i18n/locale";
 export function formatAirDate(value: string | null | undefined): string {
   if (!value) return "";
   const trimmed = value.length === 10 ? `${value}T00:00:00Z` : value;
   const d = new Date(trimmed);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(uiLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -16,7 +17,7 @@ export function formatAirDateShort(value: string | null | undefined): string {
   const trimmed = value.length === 10 ? `${value}T00:00:00Z` : value;
   const d = new Date(trimmed);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(uiLocale(), {
     month: "short",
     day: "numeric",
     timeZone: "UTC",

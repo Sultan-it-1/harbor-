@@ -1,4 +1,5 @@
 import type { PersonCredit } from "@/lib/providers/tmdb";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export const WRITER_JOBS = new Set([
   "Writer",
@@ -77,7 +78,7 @@ export function calcAge(birth: string, death: string | null): number | null {
 export function fmtDate(s: string): string {
   const d = parseFlexibleDate(s);
   if (!d) return s;
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(uiLocale(), {
     year: "numeric",
     month: "long",
     day: "numeric",

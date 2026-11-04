@@ -7,6 +7,7 @@ import { Lightbox } from "./featured-banner/lightbox";
 import { SidePanel } from "./featured-banner/side-panel";
 import { Dots } from "./featured-banner/stepper";
 import type { LightboxState } from "./featured-banner/types";
+import { t } from "@/lib/i18n/translate";
 
 const ROTATE_MS = 14000;
 
@@ -52,7 +53,7 @@ export function FeaturedBanner({ items }: { items: Meta[] }) {
       onMouseLeave={() => setPaused(false)}
     >
       <h2 className={`font-display font-medium leading-tight tracking-tight text-ink ${PHONE ? "text-[22px]" : "text-[28px]"}`}>
-        Featured & Recommended
+        {t("Featured & Recommended")}
       </h2>
 
       {PHONE ? (

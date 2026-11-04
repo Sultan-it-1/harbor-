@@ -2,6 +2,7 @@ import { ArrowRight, X } from "lucide-react";
 import { useTogether } from "@/lib/together/provider";
 import { useView, type View } from "@/lib/view";
 import type { Meta } from "@/lib/cinemeta";
+import { t } from "@/lib/i18n/translate";
 
 export function TogetherSummonToast() {
   const { incomingSummon, dismissSummon } = useTogether();
@@ -59,7 +60,7 @@ export function TogetherSummonToast() {
 
         <div className="flex min-w-0 flex-col gap-0.5 pe-2">
           <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-accent">
-            {name} wants you here
+            {name} {t("wants you here")}
           </span>
           <span className="max-w-[280px] truncate text-[13.5px] font-semibold text-ink">
             {headline}
@@ -70,13 +71,13 @@ export function TogetherSummonToast() {
           onClick={handleAccept}
           className="inline-flex h-9 items-center gap-1.5 rounded-full bg-ink px-4 text-[12.5px] font-semibold text-canvas transition-transform hover:scale-[1.04]"
         >
-          Sure
+          {t("Sure")}
           <ArrowRight size={13} strokeWidth={2.4} />
         </button>
 
         <button
           onClick={dismissSummon}
-          aria-label="Dismiss"
+          aria-label={t("Dismiss")}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
         >
           <X size={15} strokeWidth={2.2} />

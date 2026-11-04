@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { t } from "@/lib/i18n/translate";
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -9,7 +10,7 @@ export function DesktopOnlyBlock({ children }: { children: ReactNode }) {
       <div className="pointer-events-none select-none opacity-40">{children}</div>
       <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-3">
         <span className="rounded-full border border-edge-soft bg-elevated/95 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-ink-subtle backdrop-blur-sm">
-          Desktop only
+          {t("Desktop only")}
         </span>
       </div>
     </div>

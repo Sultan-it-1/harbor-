@@ -10,6 +10,7 @@ import { ListsEmptyState } from "./lists/empty-state";
 import { ListPicker } from "./lists/list-picker";
 import { useCustomLists } from "./lists/use-custom-lists";
 import { useListItems } from "./lists/use-list-items";
+import { uiLocale } from "@/lib/i18n/locale";
 
 const RENDER_CAP = 500;
 
@@ -48,7 +49,7 @@ export default function ListsView({ active }: { active: boolean }) {
         </button>
         {count != null && (
           <span className="ms-auto rounded-full bg-canvas/70 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-ink-muted">
-            {t("{n} titles", { n: count.toLocaleString() })}
+            {t("{n} titles", { n: count.toLocaleString(uiLocale()) })}
           </span>
         )}
       </header>
@@ -74,12 +75,12 @@ export default function ListsView({ active }: { active: boolean }) {
                   {activeList.name}
                 </h1>
                 <span className="text-[13px] text-ink-subtle">
-                  {t("{n} titles", { n: items.length.toLocaleString() })} · {sourceLabel(activeList.source)}
+                  {t("{n} titles", { n: items.length.toLocaleString(uiLocale()) })} · {sourceLabel(activeList.source)}
                 </span>
               </div>
               {items.length > RENDER_CAP && (
                 <p className="mb-4 text-[12.5px] text-ink-subtle">
-                  {t("Showing {shown} of {total}.", { shown: RENDER_CAP.toLocaleString(), total: items.length.toLocaleString() })}
+                  {t("Showing {shown} of {total}.", { shown: RENDER_CAP.toLocaleString(uiLocale()), total: items.length.toLocaleString(uiLocale()) })}
                 </p>
               )}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-8">

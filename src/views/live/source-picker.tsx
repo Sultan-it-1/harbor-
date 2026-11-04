@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n";
 import type { IptvPlaylistSource } from "@/lib/iptv/types";
 import { isPhoneLayout } from "@/lib/platform";
 import { EMPTY_FORM, PlaylistForm, type PlaylistFormValue } from "./source-picker/playlist-form";
+import { uiLocale } from "@/lib/i18n/locale";
 
 type ActionsState = { id: string; copied: boolean };
 
@@ -129,7 +130,7 @@ export function SourcePicker({
           <span className="max-w-[200px] truncate">{active?.name ?? t("No playlist")}</span>
           {channelCount != null && (
             <span className="rounded-full bg-canvas/70 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-ink-muted">
-              {channelCount.toLocaleString()}
+              {channelCount.toLocaleString(uiLocale())}
             </span>
           )}
           <ChevronDown

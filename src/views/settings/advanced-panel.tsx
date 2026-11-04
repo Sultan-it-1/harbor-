@@ -33,6 +33,8 @@ import { Signature } from "./signature";
 import { CustomCodeCard, DownloadsSection } from "./player-panel";
 import { DesktopOnlyBlock } from "./player-panel/internals";
 import { useT } from "@/lib/i18n";
+import { t } from "@/lib/i18n/translate";
+import { Interpolate } from "@/components/interpolate";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 const DOWNLOAD_URL = "https://harbor.site/download";
@@ -149,24 +151,20 @@ function LegalDisclaimer() {
   return (
     <section className="rounded-2xl border border-edge-soft bg-canvas/30 p-5">
       <span className="block text-[10.5px] font-bold uppercase tracking-[0.22em] text-ink-subtle">
-        Legal
+        {t("Legal")}
       </span>
       <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
-        Harbor is an independent, open-source desktop and web client. It is{" "}
-        <span className="font-semibold text-ink">not affiliated with, endorsed by, sponsored by, or in any way associated with Stremio Ltd.</span>,{" "}
-        the maker of <span className="font-semibold text-ink">Stremio</span>, or with any company,
-        addon author, or trademark holder referenced inside the app.
-        &quot;Stremio&quot;, &quot;Cinemeta&quot;, &quot;OpenSubtitles&quot;, &quot;Real-Debrid&quot;,
-        &quot;Premiumize&quot;, &quot;AllDebrid&quot;, &quot;TorBox&quot;, &quot;DebridLink&quot;,
-        &quot;TMDB&quot;, &quot;Trakt&quot;, &quot;IMDb&quot;, &quot;Netflix&quot;, &quot;Disney+&quot;,
-        and all other names, logos, and brand references are property of their respective owners
-        and are used here only for compatibility and identification.
+        <Interpolate
+          text={t("Harbor is an independent, open-source desktop and web client. It is {notAffiliated}, the maker of {stremio}, or with any company, addon author, or trademark holder referenced inside the app. {brands} and all other names, logos, and brand references are property of their respective owners and are used here only for compatibility and identification.")}
+          values={{
+            notAffiliated: <span className="font-semibold text-ink">{t("not affiliated with, endorsed by, sponsored by, or in any way associated with Stremio Ltd.")}</span>,
+            stremio: <span className="font-semibold text-ink">Stremio</span>,
+            brands: '"Stremio", "Cinemeta", "OpenSubtitles", "Real-Debrid", "Premiumize", "AllDebrid", "TorBox", "DebridLink", "TMDB", "Trakt", "IMDb", "Netflix", "Disney+"',
+          }}
+        />
       </p>
       <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
-        Harbor itself does not host, distribute, or index any media. All streams come from
-        third-party addons, debrid services, or your own Stremio account that you configure
-        yourself. You are responsible for what you choose to play and for complying with the
-        laws of your jurisdiction.
+        {t("Harbor itself does not host, distribute, or index any media. All streams come from third-party addons, debrid services, or your own Stremio account that you configure yourself. You are responsible for what you choose to play and for complying with the laws of your jurisdiction.")}
       </p>
     </section>
   );

@@ -21,6 +21,7 @@ import { Pill } from "@/views/detail/pill";
 import { PlayModeHint } from "@/views/detail/play-mode-hint";
 import { TraktComments } from "@/views/detail/trakt-comments";
 import { stremioIdToTraktTarget } from "@/lib/trakt/ids";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export interface EpisodeDetailViewProps {
   seriesId: string;
@@ -233,7 +234,7 @@ export function EpisodeDetailView({
               <div className="mt-6 flex flex-wrap items-center gap-3 text-[13px] font-medium text-ink-muted">
                 {episodeData.airDate && (
                   <Pill>
-                    {t("Aired {date}", { date: new Date(episodeData.airDate).toLocaleDateString() })}
+                    {t("Aired {date}", { date: new Date(episodeData.airDate).toLocaleDateString(uiLocale()) })}
                   </Pill>
                 )}
                 {episodeData.runtime && episodeData.runtime > 0 && (

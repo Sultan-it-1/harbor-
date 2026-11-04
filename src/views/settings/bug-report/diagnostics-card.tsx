@@ -1,13 +1,14 @@
 import { ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import type { Diagnostics } from "@/lib/bug-report";
+import { t } from "@/lib/i18n/translate";
 
 export function DiagnosticsCard({ diag }: { diag: Diagnostics | null }) {
   const [open, setOpen] = useState(false);
   if (!diag) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-edge-soft/55 bg-canvas/30 px-4 py-3 text-[12px] text-ink-subtle">
-        Loading environment details…
+        {t("Loading environment details…")}
       </div>
     );
   }
@@ -23,7 +24,7 @@ export function DiagnosticsCard({ diag }: { diag: Diagnostics | null }) {
           <ShieldCheck size={14} strokeWidth={1.9} />
         </span>
         <div className="flex min-w-0 flex-col">
-          <span className="text-[12px] font-semibold text-ink">What gets sent</span>
+          <span className="text-[12px] font-semibold text-ink">{t("What gets sent")}</span>
           <span className="truncate text-[11.5px] text-ink-subtle">{compact}</span>
         </div>
         <span className="ms-auto text-ink-subtle">
@@ -33,7 +34,7 @@ export function DiagnosticsCard({ diag }: { diag: Diagnostics | null }) {
       {open && (
         <div className="border-t border-edge-soft/55 px-4 py-3">
           <p className="mb-2 text-[11.5px] leading-relaxed text-ink-muted">
-            Auto-included. No keys, no library, no URLs. Just structural flags so reproductions go faster.
+            {t("Auto-included. No keys, no library, no URLs. Just structural flags so reproductions go faster.")}
           </p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11.5px] font-mono text-ink-muted">
             <Pair k="App" v={diag.appVersion} />

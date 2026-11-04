@@ -1,4 +1,5 @@
-export function Still({
+
+import { t } from "@/lib/i18n/translate";export function Still({
   src,
   alt,
   onClick,
@@ -19,7 +20,7 @@ export function Still({
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Expand ${alt} image`}
+      aria-label={t("Expand {alt} image", { alt: alt })}
       className="group/still relative aspect-[16/9] overflow-hidden rounded-md border border-edge-soft transition-colors duration-200 hover:border-ink"
     >
       <img

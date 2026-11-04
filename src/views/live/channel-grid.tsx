@@ -9,6 +9,7 @@ import { findCurrent } from "@/lib/iptv/xmltv";
 import { ChannelCard } from "./channel-card";
 import { useChannelHydration } from "./hooks/use-channel-hydration";
 import { useLazyVisible } from "./hooks/use-lazy-visible";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function ChannelGrid({
   channels,
@@ -68,22 +69,22 @@ export function ChannelGrid({
           <div className="flex items-center gap-2 text-[12.5px] text-ink-subtle">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-subtle" />
             {t("Loading more channels ({shown} of {total})", {
-              shown: visible.length.toLocaleString(),
-              total: channels.length.toLocaleString(),
+              shown: visible.length.toLocaleString(uiLocale()),
+              total: channels.length.toLocaleString(uiLocale()),
             })}
           </div>
         </div>
       ) : channels.length > visible.length ? (
         <div className="mx-auto max-w-[460px] rounded-xl border border-edge-soft/55 bg-elevated/60 px-4 py-2.5 text-center text-[12px] text-ink-subtle">
           {t("Showing first {shown} of {total} channels. Use search or a category to narrow down.", {
-            shown: visible.length.toLocaleString(),
-            total: channels.length.toLocaleString(),
+            shown: visible.length.toLocaleString(uiLocale()),
+            total: channels.length.toLocaleString(uiLocale()),
           })}
         </div>
       ) : (
         channels.length > 60 && (
           <div className="mx-auto rounded-xl border border-edge-soft/55 bg-elevated/60 px-4 py-2 text-[12px] text-ink-subtle">
-            {t("All {total} channels loaded", { total: channels.length.toLocaleString() })}
+            {t("All {total} channels loaded", { total: channels.length.toLocaleString(uiLocale()) })}
           </div>
         )
       )}

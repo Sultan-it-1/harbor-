@@ -5,6 +5,7 @@ import type { EpgIndex, IptvChannel, IptvPlaylist, IptvPlaylistSource } from "@/
 import { Grid } from "./multiview/grid";
 import { ChannelPicker } from "./multiview/channel-picker";
 import { pushActivityHint } from "@/lib/discord/activity-hint";
+import { t } from "@/lib/i18n/translate";
 
 const LAYOUTS: { id: Layout; label: string }[] = [
   { id: "1", label: "Single" },
@@ -115,14 +116,14 @@ export function MultiviewView({
               className="flex h-9 items-center gap-2 rounded-xl border border-edge-soft/55 px-4 text-[12.5px] font-semibold text-ink-muted transition-colors hover:border-danger/40 hover:text-danger"
             >
               <StopCircle size={15} />
-              Clear all
+              {t("Clear all")}
             </button>
           </>
         )}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? "Show controls" : "Hide controls, full grid"}
-          aria-label={collapsed ? "Show controls" : "Hide controls"}
+          title={collapsed ? t("Show controls") : t("Hide controls, full grid")}
+          aria-label={collapsed ? t("Show controls") : t("Hide controls")}
           className="ms-auto flex h-8 w-8 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-elevated hover:text-ink"
         >
           {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
@@ -133,14 +134,12 @@ export function MultiviewView({
         <div className="mx-6 mb-3 flex items-start gap-2.5 rounded-xl border border-edge-soft/60 bg-elevated/30 px-3.5 py-2.5">
           <Info size={13} strokeWidth={2.2} className="mt-0.5 shrink-0 text-ink-subtle" />
           <p className="flex-1 text-[11.5px] leading-relaxed text-ink-muted">
-            Most IPTV providers cap simultaneous streams per account (commonly 1–2). If a tile
-            drops to "Stream offline" while others play, your provider may be throttling. Try
-            closing a stream and retrying.
+            {t("Most IPTV providers cap simultaneous streams per account (commonly 1–2). If a tile drops to \"Stream offline\" while others play, your provider may be throttling. Try closing a stream and retrying.")}
           </p>
           <button
             type="button"
             onClick={dismissBanner}
-            aria-label="Dismiss"
+            aria-label={t("Dismiss")}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-subtle transition-colors hover:bg-elevated hover:text-ink"
           >
             <X size={12} strokeWidth={2.4} />

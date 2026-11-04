@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Globe } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { flagUrl, type Country } from "@/lib/iptv/country-detect";
+import { uiLocale } from "@/lib/i18n/locale";
 
 export function CountryBar({
   countries,
@@ -79,7 +80,7 @@ function Chip({
       <span className="max-w-[150px] truncate">{label}</span>
       {count != null && (
         <span className={`text-[11.5px] tabular-nums ${active ? "text-canvas/65" : "text-ink-subtle"}`}>
-          {count.toLocaleString()}
+          {count.toLocaleString(uiLocale())}
         </span>
       )}
     </button>

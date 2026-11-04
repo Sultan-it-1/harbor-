@@ -8,6 +8,7 @@ import {
   checkForUpdate,
   useUpdate,
 } from "@/lib/updater/use-update";
+import { t } from "@/lib/i18n/translate";
 
 function mb(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -58,7 +59,7 @@ export function UpdateCard() {
           {u.status !== "installing" && u.status !== "downloading" && (
             <button
               onClick={closeUpdatePanel}
-              aria-label="Close"
+              aria-label={t("Close")}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-subtle transition-colors hover:bg-raised hover:text-ink"
             >
               <X size={16} strokeWidth={2.2} />
@@ -104,34 +105,34 @@ export function UpdateCard() {
         <div className="flex items-center justify-end gap-2 px-5 pb-4 pt-3">
           {u.status === "available" && (
             <>
-              <GhostButton onClick={dismissUpdate}>Later</GhostButton>
+              <GhostButton onClick={dismissUpdate}>{t("Later")}</GhostButton>
               <PrimaryButton onClick={() => void downloadUpdate()}>
-                <Download size={16} strokeWidth={2.2} /> Download
+                <Download size={16} strokeWidth={2.2} /> {t("Download")}
               </PrimaryButton>
             </>
           )}
           {u.status === "downloaded" && (
             <>
-              <GhostButton onClick={dismissUpdate}>Later</GhostButton>
+              <GhostButton onClick={dismissUpdate}>{t("Later")}</GhostButton>
               <PrimaryButton onClick={() => void installUpdate()}>
-                <RotateCw size={16} strokeWidth={2.2} /> Install & restart
+                <RotateCw size={16} strokeWidth={2.2} /> {t("Install & restart")}
               </PrimaryButton>
             </>
           )}
           {u.status === "installing" && (
-            <span className="text-[12px] text-ink-subtle">Harbor will restart automatically.</span>
+            <span className="text-[12px] text-ink-subtle">{t("Harbor will restart automatically.")}</span>
           )}
           {u.status === "error" && (
             <>
-              <GhostButton onClick={closeUpdatePanel}>Close</GhostButton>
+              <GhostButton onClick={closeUpdatePanel}>{t("Close")}</GhostButton>
               <PrimaryButton onClick={() => void checkForUpdate(true)}>
-                <RefreshCw size={16} strokeWidth={2.2} /> Try again
+                <RefreshCw size={16} strokeWidth={2.2} /> {t("Try again")}
               </PrimaryButton>
             </>
           )}
           {u.status === "downloading" && (
             <span className="flex items-center gap-1.5 text-[12px] text-ink-subtle">
-              <Check size={14} strokeWidth={2.4} className="text-accent" /> Keep using Harbor while it downloads
+              <Check size={14} strokeWidth={2.4} className="text-accent" /> {t("Keep using Harbor while it downloads")}
             </span>
           )}
         </div>

@@ -785,13 +785,13 @@ export function SettingsNav({
         {matches && (
           <div className="flex flex-col gap-1">
             {matches.length === 0 && (!optionMatches || optionMatches.length === 0) && (
-              <div className="px-3.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-subtle/80">
+              <div className="px-3.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-muted/80">
                 {t("No matches")}
               </div>
             )}
             {matches.length > 0 && (
               <>
-                <div className="px-3.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-subtle/80">
+                <div className="px-3.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-muted/80">
                   {matches.length === 1 ? t("{n} tab", { n: matches.length }) : t("{n} tabs", { n: matches.length })}
                 </div>
                 {matches.map(renderItem)}
@@ -799,7 +799,7 @@ export function SettingsNav({
             )}
             {optionMatches && optionMatches.length > 0 && (
               <>
-                <div className="px-3.5 pb-1.5 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-subtle/80">
+                <div className="px-3.5 pb-1.5 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-muted/80">
                   {optionMatches.length === 1 ? t("{n} option", { n: optionMatches.length }) : t("{n} options", { n: optionMatches.length })}
                 </div>
                 {optionMatches.map((o) => (
@@ -832,7 +832,7 @@ export function SettingsNav({
         {!matches && VISIBLE_NAV_GROUPS.map((group, gi) => (
           <div key={gi} className="flex flex-col gap-1">
             {group.heading && (
-              <div className="px-3.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-subtle/80">
+              <div className="px-3.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-muted/80">
                 {t(group.heading)}
               </div>
             )}
