@@ -15,6 +15,7 @@ import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { useInWatchlist } from "@/lib/watchlist";
 import { Poster, usePosterChain } from "./poster";
+import { WatchedMark } from "./watched-mark";
 
 function AwardDot({ name, year }: { name: string; year?: number }) {
   const win = findTopAward(name, year);
@@ -100,6 +101,7 @@ export const TopRankCard = memo(function TopRankCard({ meta, rank }: { meta: Met
         />
         {inWatchlist && <WatchlistDot />}
         <AwardDot name={meta.name} year={parseAwardYear(meta.releaseInfo)} />
+        <WatchedMark id={meta.id} altIds={altIds} />
       </div>
       <p className="absolute bottom-0 end-0 w-[63%] truncate text-[12px] text-ink-subtle">
         {meta.name}
@@ -156,6 +158,7 @@ export const AnimeRankCard = memo(function AnimeRankCard({ meta, rank }: { meta:
         />
         {inWatchlist && <WatchlistDot />}
         <AwardDot name={meta.name} year={parseAwardYear(meta.releaseInfo)} />
+        <WatchedMark id={meta.id} altIds={altIds} />
       </div>
       <p className="absolute bottom-0 end-0 w-[63%] truncate text-[12px] text-ink-subtle">
         {meta.name}

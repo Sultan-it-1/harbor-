@@ -608,6 +608,12 @@ export function LibraryPanel({
               </div>
             )}
             <ToggleRow
+              label={t("Show watched marks")}
+              sub={t("A small check on the posters of movies and shows you've finished, and on watched episodes. Follows Harbor's own history and your Stremio library, plus Trakt when it's connected.")}
+              value={settings.showWatchedMarks}
+              onChange={(v) => update({ showWatchedMarks: v })}
+            />
+            <ToggleRow
               label={t("Mark watched button")}
               sub={t("Show a button on the detail page to mark a title or episode as watched. Syncs to Trakt and Simkl if connected.")}
               value={settings.showWatchedButton}

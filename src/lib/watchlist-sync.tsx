@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { library } from "@/lib/stremio";
+import { stremioMovieWatched } from "@/lib/stremio-watched";
+import { setStremioWatchedMovies } from "@/lib/watched-marks";
 import { fetchWatchlist } from "@/lib/trakt/watchlist";
 import { useTrakt } from "@/lib/trakt/provider";
 import { fetchWatchlist as fetchSimklWatchlist } from "@/lib/simkl/watchlist";
@@ -26,6 +28,7 @@ export function WatchlistSync() {
     if (!authKey) {
       STORE.stremio = [];
       pushAggregate();
+      setStremioWatchedMovies([]);
       return;
     }
     let cancelled = false;
@@ -33,12 +36,15 @@ export function WatchlistSync() {
       .then((items) => {
         if (cancelled) return;
         const ids: string[] = [];
+        const watchedMovies: string[] = [];
         for (const it of items) {
           if (it.removed) continue;
           ids.push(it._id);
+          if (it.type === "movie" && stremioMovieWatched(it)) watchedMovies.push(it._id);
         }
         STORE.stremio = ids;
         pushAggregate();
+        setStremioWatchedMovies(watchedMovies);
       })
       .catch(() => {});
     return () => {

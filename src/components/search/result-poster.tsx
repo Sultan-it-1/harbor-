@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Poster } from "@/components/poster";
+import { WatchedMark } from "@/components/watched-mark";
 import { rpdbPoster } from "@/lib/providers/rpdb";
 import { useSettings } from "@/lib/settings";
 
@@ -29,6 +30,8 @@ export function ResultPoster({
       ratio="portrait"
       className={className}
       onError={() => setIdx((i) => i + 1)}
-    />
+    >
+      <WatchedMark id={id} size="sm" className="bottom-1 start-1" />
+    </Poster>
   );
 }

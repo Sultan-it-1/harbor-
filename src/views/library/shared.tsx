@@ -1,4 +1,5 @@
 import { Bookmark, Trash2 } from "lucide-react";
+import { WatchedMark } from "@/components/watched-mark";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Poster } from "@/components/poster";
 import { narrowMediaType, type Meta } from "@/lib/cinemeta";
@@ -384,6 +385,7 @@ export function WatchlistCard({ meta, onRemove }: { meta: Meta; onRemove?: () =>
           className="h-full w-full"
           onError={onPosterError}
         />
+        <WatchedMark id={display.id} />
         {inList && (
           <span className="absolute start-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-ink/80 text-canvas backdrop-blur-sm">
             <Bookmark size={12} strokeWidth={2.6} fill="currentColor" />

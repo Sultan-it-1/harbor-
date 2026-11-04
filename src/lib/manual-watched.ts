@@ -117,6 +117,24 @@ export function setManualWatchedMany(
   persist(on, off);
 }
 
+let countsAt = -1;
+let counts = new Map<string, number>();
+
+/** How many regular episodes (not specials) of each series are flagged watched. */
+export function watchedEpisodeCounts(): Map<string, number> {
+  if (countsAt === version) return counts;
+  const next = new Map<string, number>();
+  for (const k of watchedSet()) {
+    const parts = k.split("|");
+    if (parts.length < 3 || parts[parts.length - 2] === "0") continue;
+    const id = parts.slice(0, -2).join("|");
+    next.set(id, (next.get(id) ?? 0) + 1);
+  }
+  counts = next;
+  countsAt = version;
+  return next;
+}
+
 export function subscribeManualWatched(fn: () => void): () => void {
   subs.add(fn);
   return () => {

@@ -201,7 +201,7 @@ function EpisodeStripCard({
         <span className="absolute start-2 top-2 rounded-md bg-canvas/95 px-1.5 py-0.5 text-[11px] font-semibold text-ink transition-opacity group-hover:opacity-0">
           {ep.episodeNumber}
         </span>
-        {progress.watched && (
+        {progress.watched && settings.showWatchedMarks !== false && (
           <span className="absolute end-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/22 text-emerald-200 ring-1 ring-emerald-400/40 backdrop-blur-sm transition-opacity group-hover:opacity-0">
             <Check size={12} strokeWidth={3} />
           </span>

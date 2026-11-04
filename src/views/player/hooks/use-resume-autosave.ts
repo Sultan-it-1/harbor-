@@ -7,6 +7,7 @@ import { saveLocalCw } from "@/lib/local-cw";
 import { isManuallyWatched, setManualWatched } from "@/lib/manual-watched";
 import { savePlayback } from "@/lib/playback-history";
 import { saveResumeMs } from "@/lib/resume";
+import { markTitleWatched } from "@/lib/watched-marks";
 import type { PlayerSnapshot } from "@/lib/player/bridge";
 import { getPlaybackPosition, subscribePlaybackClock } from "@/lib/player/playback-clock";
 import { useSettings } from "@/lib/settings";
@@ -77,6 +78,15 @@ export function useResumeAutosave(params: {
       savePlayback(id, { ...s.streamRef, url: s.url, title: s.meta.name }, se, ep);
     } else {
       savePlayback(id, { title: s.meta.name, parsedTitle: s.meta.name }, se, ep);
+    }
+    // A movie watched to (nearly) the end counts as watched: the poster gets its check.
+    if (
+      s.meta.type === "movie" &&
+      typeof se !== "number" &&
+      sn.durationSec > 0 &&
+      pos / sn.durationSec >= WATCHED_RATIO
+    ) {
+      markTitleWatched(id);
     }
     if (
       s.meta.type === "series" &&

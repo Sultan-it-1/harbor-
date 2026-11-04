@@ -51,6 +51,7 @@ export const DEFAULT: Settings = {
   badgePlacement: "bottom",
   watchlistBadge: "topEnd",
   showWatchedButton: true,
+  showWatchedMarks: true,
   showPopcornBadge: false,
   episodeLayout: "list",
   episodeSort: "oldest",

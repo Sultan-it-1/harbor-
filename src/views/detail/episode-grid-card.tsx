@@ -81,7 +81,7 @@ export function EpisodeGridCard({
               <UpcomingBadge />
             </span>
           )}
-          <StatusTag watched={watched} minsLeft={minsLeft} runtime={g.runtime} t={t} />
+          <StatusTag watched={watched && settings.showWatchedMarks !== false} minsLeft={minsLeft} runtime={g.runtime} t={t} />
           {settings.showEpisodeRating && g.rating && g.rating > 0 && (
             <div className="pointer-events-none absolute bottom-2 start-2 z-[5] flex items-center gap-1.5 rounded-md bg-black/55 px-1.5 py-0.5 drop-shadow-md backdrop-blur-sm">
               <EpisodeRatingBadge value={g.rating} isImdb={!!g.ratingIsImdb} />

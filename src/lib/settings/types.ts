@@ -77,6 +77,8 @@ export type Settings = {
   badgePlacement: "top" | "bottom";
   watchlistBadge: "off" | "topStart" | "topEnd" | "bottomStart" | "bottomEnd";
   showWatchedButton: boolean;
+  /** A check on posters of movies / shows you've finished, and on watched episodes. */
+  showWatchedMarks: boolean;
   showPopcornBadge: boolean;
   episodeLayout: "list" | "strip" | "grid";
   episodeSort: "oldest" | "newest";

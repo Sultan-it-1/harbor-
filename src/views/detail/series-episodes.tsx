@@ -1,4 +1,5 @@
 import { SeasonDownloadButton } from "./season-download-button";
+import { recordSeriesTotal } from "@/lib/watched-marks";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { EpisodeJumper } from "@/components/episode-jumper";
 import { EpisodeWatchedMenu, type WatchedMenuTarget } from "@/components/episode-watched-menu";
@@ -109,6 +110,12 @@ export function SeriesEpisodes({
   }, [simklConnected, imdbId, meta.id]);
 
   const traktKey = imdbId ?? meta.id;
+
+  // Season sizes tell how many episodes the show has (used when Cinemeta's list isn't there).
+  useEffect(() => {
+    const total = seasons.filter((s) => s.seasonNumber >= 1).reduce((n, s) => n + (s.episodeCount || 0), 0);
+    recordSeriesTotal(meta.id, total, { onlyIfMissing: true });
+  }, [meta.id, seasons]);
 
   useEffect(() => {
     userPickedRef.current = false;

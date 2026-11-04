@@ -31,6 +31,7 @@ import { ImdbIcon } from "./icons/imdb-icon";
 import { MalLogo } from "./icons/mal-logo";
 import { Poster } from "./poster";
 import { RtBadge } from "./rt-badge";
+import { WatchedMark } from "./watched-mark";
 import mdblistLogo from "@/assets/addon-logos/mdblist.png";
 import letterboxdLogo from "@/assets/addon-logos/letterboxd.png";
 import traktLogo from "@/assets/trakt.svg";
@@ -281,6 +282,12 @@ export const PickCard = memo(function PickCard({
           badges={cardBadges}
           limit={settings.cardBadgeLimit}
           placement={settings.badgePlacement}
+        />
+        {/* Bottom-left unless the bookmark badge sits there (then just beside it). */}
+        <WatchedMark
+          id={meta.id}
+          altIds={altIds}
+          className={settings.watchlistBadge === "bottomStart" ? "bottom-1.5 start-9" : "bottom-1.5 start-1.5"}
         />
       </div>
       {!settings.hidePosterTitles && (

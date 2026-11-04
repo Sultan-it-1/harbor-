@@ -50,6 +50,7 @@ import { ProfilesProvider } from "@/lib/profiles";
 import { ProfileIdentitySync } from "@/lib/profile-identity-sync";
 import { ProfilePickerModal } from "@/components/profile-picker/picker-modal";
 import { WatchlistSync } from "@/lib/watchlist-sync";
+import { WatchedMarksSync } from "@/lib/watched-sync";
 import { ContextMenuProvider } from "@/lib/context-menu";
 import { TopRankModalProvider } from "@/lib/top-rank-modal";
 import { OnboardingProvider } from "@/lib/onboarding";
@@ -241,6 +242,7 @@ export function App() {
                       <AnilistAvatarSync />
                       <ThemeBackdrop />
                       <WatchlistSync />
+                      <WatchedMarksSync />
                       <Shell />
                       <Suspense fallback={null}>
                         <OnboardingModal />

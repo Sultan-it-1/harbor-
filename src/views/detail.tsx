@@ -33,6 +33,7 @@ import { useTogether } from "@/lib/together/provider";
 import { useTrakt } from "@/lib/trakt/provider";
 import { toggleWatchlist, useInWatchlist } from "@/lib/watchlist";
 import { markMovieWatched } from "@/lib/mark-watched";
+import { recordSeriesTotal, useIsWatched } from "@/lib/watched-marks";
 import { useIsFavorite, useMediaFavorites } from "@/lib/media-favorites";
 import { openUrl } from "@/lib/window";
 import { profileFromDetail, trackEvent } from "@/lib/discover";
@@ -173,6 +174,9 @@ export function DetailView({
   const [loading, setLoading] = useState(true);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [watchedMark, setWatchedMark] = useState(false);
+  // Already watched (Harbor's history, your Stremio library or Trakt): the button shows it.
+  const alreadyWatched = useIsWatched(meta.id, [detail?.imdbId]);
+  const isWatchedNow = watchedMark || alreadyWatched;
   const [layout, setLayout] = useState<DetailCustomization>(loadDetailCustomization);
   const [layoutEdit, setLayoutEdit] = useState(false);
   const [scores, setScores] = useState<OmdbScores | null>(null);
@@ -346,6 +350,16 @@ export function DetailView({
       cancelled = true;
     };
   }, [libraryItem?.state?.watched, cinemetaFull?.videos]);
+
+  // Learn how many episodes this show has aired, so its poster can tell when you've finished it.
+  useEffect(() => {
+    if (meta.type !== "series") return;
+    const vids = cinemetaFull?.videos;
+    if (!vids || vids.length === 0) return;
+    const now = Date.now();
+    const aired = vids.filter((v) => (v.season ?? 0) >= 1 && (!v.released || Date.parse(v.released) <= now)).length;
+    recordSeriesTotal(meta.id, aired);
+  }, [meta.id, meta.type, cinemetaFull?.videos]);
 
   useEffect(() => {
     if (!libraryItem?.state) return;
@@ -875,7 +889,7 @@ export function DetailView({
                     onTrailer={() => setTrailerOpen(true)}
                     canDownload={meta.type === "movie"}
                     showWatched={settings.showWatchedButton && meta.type === "movie"}
-                    watchedMark={watchedMark}
+                    watchedMark={isWatchedNow}
                     onWatched={() => {
                       setWatchedMark(true);
                       void markMovieWatched(
@@ -935,9 +949,9 @@ export function DetailView({
                           );
                         }}
                         aria-label={t("Mark watched")}
-                        title={watchedMark ? t("Marked watched") : t("Mark watched")}
+                        title={isWatchedNow ? t("Marked watched") : t("Mark watched")}
                         className={`group flex h-12 w-12 items-center justify-center rounded-full border transition-[transform,background-color,border-color] duration-200 active:scale-[0.94] ${
-                          watchedMark
+                          isWatchedNow
                             ? "border-accent/55 bg-accent/15 text-accent"
                             : "border-edge bg-canvas/80 text-ink hover:border-ink-subtle hover:bg-canvas/95"
                         }`}

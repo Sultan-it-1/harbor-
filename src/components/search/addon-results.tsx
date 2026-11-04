@@ -1,4 +1,5 @@
 import { Blocks, Star } from "lucide-react";
+import { WatchedMark } from "@/components/watched-mark";
 import type { AddonResultGroup } from "@/lib/search-addons";
 import type { Meta } from "@/lib/cinemeta";
 import { Poster } from "@/components/poster";
@@ -58,7 +59,9 @@ function AddonResultRow({ meta, onClose }: { meta: Meta; onClose: () => void }) 
       className="group flex items-center gap-4 rounded-2xl border border-transparent px-3 py-2.5 text-start transition-colors hover:border-edge-soft hover:bg-elevated/50 active:scale-[0.997]"
     >
       <div className="h-[96px] w-[64px] shrink-0 overflow-hidden rounded-xl shadow-[0_6px_16px_-8px_rgba(0,0,0,0.55)] ring-1 ring-edge-soft">
-        <Poster src={meta.poster} seed={meta.id} ratio="portrait" className="block h-full w-full" />
+        <Poster src={meta.poster} seed={meta.id} ratio="portrait" className="block h-full w-full">
+          <WatchedMark id={meta.id} size="sm" className="bottom-1 start-1" />
+        </Poster>
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-[16px] font-semibold text-ink">{meta.name}</span>
