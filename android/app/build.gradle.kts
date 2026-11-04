@@ -85,6 +85,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-exoplayer-dash:$media3")
     implementation("androidx.media3:media3-ui:$media3")
+    // Media buttons (headset, Bluetooth, car) for the native player.
+    implementation("androidx.media3:media3-session:$media3")
     // FFmpeg audio decoders (AC3, E-AC3, DTS, TrueHD, …) that most phones don't ship.
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1")
 

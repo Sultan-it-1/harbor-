@@ -84,6 +84,14 @@ class ExternalSubs(private val view: SubtitleView, private val positionMs: () ->
 
     fun clear() = set(null)
 
+    /** Paused video: no need to look up cues 25 times a second (call [refresh] after a seek). */
+    fun setRunning(on: Boolean) {
+        handler.removeCallbacks(ticker)
+        if (on && starts.isNotEmpty()) handler.post(ticker) else tick()
+    }
+
+    fun refresh() = tick()
+
     private fun tick() {
         if (starts.isEmpty()) return
         val pos = positionMs() ?: return
@@ -104,7 +112,17 @@ class ExternalSubs(private val view: SubtitleView, private val positionMs: () ->
                 else -> SubripParser()
             }
             val out = ArrayList<CuesWithTiming>()
-            parser.parse(bytes, SubtitleParser.OutputOptions.allCues()) { out.add(it) }
+            parser.parse(bytes, SubtitleParser.OutputOptions.allCues()) { c ->
+                // Arabic lines that start with a Latin word: keep their punctuation on the right side.
+                val fixed = c.cues.map { cue ->
+                    val t = cue.text
+                    if (t == null) cue else {
+                        val f = SubtitleBidi.fix(t)
+                        if (f === t) cue else cue.buildUpon().setText(f).build()
+                    }
+                }
+                out.add(CuesWithTiming(fixed, c.startTimeUs, c.durationUs))
+            }
             return out
         }
     }

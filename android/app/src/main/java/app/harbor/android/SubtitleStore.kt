@@ -1,6 +1,7 @@
 package app.harbor.android
 
 import android.content.Context
+import android.os.Environment
 import androidx.media3.common.MimeTypes
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -19,8 +20,12 @@ import java.util.zip.ZipInputStream
  * way: gzip/zip unpacking, legacy encodings (Arabic windows-1256 etc.) re-encoded as UTF-8,
  * and format sniffing (SRT / VTT / ASS) since addon URLs often have no file extension.
  */
-class SubtitleStore(private val dir: File) {
-    constructor(context: Context) : this(File(context.cacheDir, "subs"))
+class SubtitleStore(private val dir: File, private val fileRoots: List<File> = listOf(dir)) {
+    /** file: subtitles are only read from Harbor's own folders (saved downloads, this cache). */
+    constructor(context: Context) : this(
+        File(context.cacheDir, "subs"),
+        listOfNotNull(File(context.cacheDir, "subs"), context.getExternalFilesDir(Environment.DIRECTORY_MOVIES), context.filesDir),
+    )
     init {
         dir.mkdirs()
     }
@@ -33,7 +38,7 @@ class SubtitleStore(private val dir: File) {
 
     fun fetch(id: String, url: String, lang: String?, label: String?, userAgent: String): LocalSub? = try {
         val raw = unpack(download(url, userAgent))
-        val text = decode(raw, lang).trimStart('﻿')
+        val text = decodeText(raw, lang).trimStart('﻿')
         val head = text.trimStart()
         val (mime, ext) = when {
             head.startsWith("WEBVTT") -> MimeTypes.TEXT_VTT to "vtt"
@@ -48,13 +53,20 @@ class SubtitleStore(private val dir: File) {
             f.writeText(if (ext == "srt") text.replace("\r\n", "\n") else text, Charsets.UTF_8)
             LocalSub(id, f, mime, lang, label, url)
         }
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
+        // Includes OutOfMemoryError: a bad subtitle from a third-party server must never take the
+        // app down mid-film; the player just skips it.
         null
     }
 
     private fun download(url: String, userAgent: String): ByteArray {
-        // Offline: subtitles saved next to a downloaded video.
-        if (url.startsWith("file:")) return File(java.net.URI(url)).readBytes()
+        // Offline: subtitles saved next to a downloaded video — only from Harbor's own folders.
+        if (url.startsWith("file:")) {
+            val f = File(java.net.URI(url)).canonicalFile
+            if (fileRoots.none { root -> f.path.startsWith(root.canonicalPath + File.separator) }) error("file outside Harbor's folders")
+            if (f.length() > MAX_BYTES) error("subtitle too large")
+            return f.readBytes()
+        }
         var u = URL(url)
         repeat(6) {
             val c = u.openConnection() as HttpURLConnection
@@ -77,7 +89,7 @@ class SubtitleStore(private val dir: File) {
                     val n = s.read(buf)
                     if (n < 0) break
                     out.write(buf, 0, n)
-                    if (out.size() > 8 * 1024 * 1024) error("subtitle too large")
+                    if (out.size() > MAX_BYTES) error("subtitle too large")
                 }
                 out.toByteArray()
             }
@@ -87,27 +99,91 @@ class SubtitleStore(private val dir: File) {
         error("too many redirects")
     }
 
-    private fun unpack(b: ByteArray): ByteArray {
-        if (b.size > 2 && b[0] == 0x1f.toByte() && b[1] == 0x8b.toByte()) {
-            return GZIPInputStream(ByteArrayInputStream(b)).use { it.readBytes() }
-        }
-        if (b.size > 4 && b[0] == 'P'.code.toByte() && b[1] == 'K'.code.toByte()) {
-            ZipInputStream(ByteArrayInputStream(b)).use { z ->
-                while (true) {
-                    val e = z.nextEntry ?: break
-                    val n = e.name.lowercase()
-                    if (!e.isDirectory && (n.endsWith(".srt") || n.endsWith(".vtt") || n.endsWith(".ass") || n.endsWith(".ssa"))) {
-                        return z.readBytes()
+    companion object {
+        /** Largest subtitle we accept, downloaded or after unpacking (a real one is < 1 MB). */
+        const val MAX_BYTES = 8 * 1024 * 1024
+
+        /** gzip / zip unpacking with a size cap: a tiny archive must not inflate into gigabytes. */
+        fun unpack(b: ByteArray): ByteArray {
+            if (b.size > 2 && b[0] == 0x1f.toByte() && b[1] == 0x8b.toByte()) {
+                return GZIPInputStream(ByteArrayInputStream(b)).use { readCapped(it) }
+            }
+            if (b.size > 4 && b[0] == 'P'.code.toByte() && b[1] == 'K'.code.toByte()) {
+                ZipInputStream(ByteArrayInputStream(b)).use { z ->
+                    while (true) {
+                        val e = z.nextEntry ?: break
+                        val n = e.name.lowercase()
+                        if (!e.isDirectory && (n.endsWith(".srt") || n.endsWith(".vtt") || n.endsWith(".ass") || n.endsWith(".ssa"))) {
+                            return readCapped(z)
+                        }
                     }
                 }
             }
+            return b
         }
-        return b
-    }
 
-    private fun decode(b: ByteArray, lang: String?): String {
+        private fun readCapped(s: java.io.InputStream): ByteArray {
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(32 * 1024)
+            while (true) {
+                val n = s.read(buf)
+                if (n < 0) break
+                if (out.size() + n > MAX_BYTES) throw java.io.IOException("subtitle too large after unpacking")
+                out.write(buf, 0, n)
+            }
+            return out.toByteArray()
+        }
+
+        /** UTF-16 without a BOM: one byte of nearly every pair is zero for Latin/ASCII text. */
+        private fun utf16WithoutBom(b: ByteArray): Charset? {
+            if (b.size < 64) return null
+            var evenZero = 0
+            var oddZero = 0
+            val n = minOf(b.size, 4096) and 1.inv()
+            for (i in 0 until n step 2) {
+                if (b[i].toInt() == 0) evenZero++
+                if (b[i + 1].toInt() == 0) oddZero++
+            }
+            val pairs = n / 2
+            return when {
+                oddZero > pairs * 0.4 && evenZero < pairs * 0.05 -> Charsets.UTF_16LE
+                evenZero > pairs * 0.4 && oddZero < pairs * 0.05 -> Charsets.UTF_16BE
+                else -> null
+            }
+        }
+
+        /**
+         * No usable language tag: guess the legacy code page from the text itself. Each candidate
+         * is decoded and scored by how many letters land in its own script (Arabic for 1256,
+         * Cyrillic for 1251, Greek for 1253); mostly-ASCII text stays windows-1252.
+         */
+        fun guessCodePage(b: ByteArray): String {
+            var high = 0
+            for (x in b) if (x.toInt() and 0x80 != 0) high++
+            if (high < 16 || high < b.size / 50) return "windows-1252"
+            val candidates = listOf(
+                "windows-1256" to { c: Char -> c in '\u0600'..'\u06FF' },
+                "windows-1251" to { c: Char -> c in '\u0400'..'\u04FF' },
+                "windows-1253" to { c: Char -> c in '\u0370'..'\u03FF' },
+            )
+            var best = "windows-1252"
+            var bestScore = high / 3
+            for ((cs, inScript) in candidates) {
+                val text = String(b, Charset.forName(cs))
+                val score = text.count(inScript)
+                if (score > bestScore) {
+                    best = cs
+                    bestScore = score
+                }
+            }
+            return best
+        }
+
+        fun decodeText(b: ByteArray, lang: String?): String {
         if (b.size >= 2 && b[0] == 0xFF.toByte() && b[1] == 0xFE.toByte()) return String(b, Charsets.UTF_16LE)
         if (b.size >= 2 && b[0] == 0xFE.toByte() && b[1] == 0xFF.toByte()) return String(b, Charsets.UTF_16BE)
+        // Before UTF-8: zero bytes are valid UTF-8, so UTF-16 text would "decode" as UTF-8.
+        utf16WithoutBom(b)?.let { return String(b, it) }
         try {
             return Charsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
@@ -119,14 +195,17 @@ class SubtitleStore(private val dir: File) {
         }
         val l = (lang ?: "").lowercase()
         val cs = when {
-            l.startsWith("ar") || l.startsWith("fa") || l.startsWith("per") || l.startsWith("ur") -> "windows-1256"
+            l.startsWith("ar") || l.startsWith("fa") || l.startsWith("per") || l.startsWith("ur") ||
+                l.startsWith("ku") || l.startsWith("ps") || l.startsWith("pus") -> "windows-1256"
             l.startsWith("he") || l.startsWith("heb") -> "windows-1255"
             l.startsWith("ru") || l.startsWith("uk") || l.startsWith("bg") || l.startsWith("sr") -> "windows-1251"
             l.startsWith("el") || l.startsWith("gre") -> "windows-1253"
             l.startsWith("tr") -> "windows-1254"
             l.startsWith("pl") || l.startsWith("cs") || l.startsWith("cz") || l.startsWith("hu") || l.startsWith("ro") || l.startsWith("hr") || l.startsWith("sk") -> "windows-1250"
+            l.isBlank() || l == "und" || l == "unknown" || l == "mul" -> guessCodePage(b)
             else -> "windows-1252"
         }
         return String(b, Charset.forName(cs))
+        }
     }
 }

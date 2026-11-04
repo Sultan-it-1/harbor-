@@ -87,12 +87,16 @@ class SidePanel(private val ctx: Context, private val host: FrameLayout, title: 
         scrim.setOnClickListener { dismiss() }
 
         val metrics = ctx.resources.displayMetrics
+        // Right-to-left (Arabic): the panel sits at the left edge, so round the other corners and
+        // slide in from the left.
+        val rtl = ctx.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        val r = ctx.dp(22).toFloat()
         val width = minOf(ctx.dp(460), (metrics.widthPixels * 0.62f).toInt()).coerceAtLeast(minOf(ctx.dp(320), metrics.widthPixels))
         panel.orientation = LinearLayout.VERTICAL
         panel.isClickable = true // don't let taps fall through to the scrim
         panel.background = GradientDrawable().apply {
             setColor(HarborColors.PANEL)
-            cornerRadii = floatArrayOf(ctx.dp(22).toFloat(), ctx.dp(22).toFloat(), 0f, 0f, 0f, 0f, ctx.dp(22).toFloat(), ctx.dp(22).toFloat())
+            cornerRadii = if (rtl) floatArrayOf(0f, 0f, r, r, r, r, 0f, 0f) else floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)
         }
         panel.setPadding(ctx.dp(18), ctx.dp(14), ctx.dp(14), ctx.dp(10))
 
@@ -116,7 +120,8 @@ class SidePanel(private val ctx: Context, private val host: FrameLayout, title: 
         if (isOpen) return
         isOpen = true
         host.addView(scrim, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        panel.translationX = ctx.dp(80).toFloat()
+        val rtl = ctx.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        panel.translationX = (if (rtl) -1 else 1) * ctx.dp(80).toFloat()
         panel.alpha = 0f
         panel.animate().translationX(0f).alpha(1f).setDuration(180).start()
     }

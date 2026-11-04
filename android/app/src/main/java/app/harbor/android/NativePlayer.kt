@@ -1,16 +1,21 @@
 package app.harbor.android
 
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.os.Build
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Rational
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -35,9 +40,15 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
+import androidx.media3.session.MediaSession
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.media3.extractor.text.CuesWithTiming
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.DefaultTimeBar
@@ -76,9 +87,20 @@ class NativePlayer(
     private val ticker = object : Runnable {
         override fun run() {
             sendState()
-            handler.postDelayed(this, 1000)
+            val p = player ?: return
+            // Only while something moves: a paused video reports its state from the listeners.
+            if (p.isPlaying || p.playbackState == Player.STATE_BUFFERING || reconnecting) handler.postDelayed(this, 1000)
         }
     }
+
+    // ---- network recovery / media session -------------------------------------------------
+    private var reconnecting = false
+    private var reconnectSince = 0L
+    private var reconnectAttempts = 0
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+    private val reconnect = Runnable { tryReconnect() }
+    private var session: MediaSession? = null
+    private var prefAudioLangs: List<String> = emptyList()
 
     // ---- what's playing --------------------------------------------------------------------
     private var contentKey = ""
@@ -146,6 +168,11 @@ class NativePlayer(
 
     fun play(sourceJson: String) {
         val src = try { JSONObject(sourceJson) } catch (_: Exception) { return }
+        if (src.optString("url").isBlank()) {
+            // A broken payload from the page must not tear down what is playing.
+            emit(JSONObject().put("type", "error").put("code", "source").put("message", "no stream url").put("fatal", true).toString())
+            return
+        }
         val key = src.optString("contentKey", "")
         if (key.isNotEmpty() && key != contentKey) {
             // A different title/episode: forget subtitles from the previous one.
@@ -164,6 +191,7 @@ class NativePlayer(
         loadSaved()
         src.optString("title").takeIf { it.isNotBlank() }?.let { title = it }
         prefSubLangs = jsonStrings(src.optJSONArray("prefSubLangs")).ifEmpty { prefSubLangs }
+        prefAudioLangs = jsonStrings(src.optJSONArray("prefAudioLangs")).ifEmpty { prefAudioLangs }
         subStyle = SubStyle.load(activity) ?: SubStyle.fromHarbor(src.optJSONObject("subStyle"))
         if (pickingStream != null) {
             pickingStream = null
@@ -184,6 +212,8 @@ class NativePlayer(
     }
 
     private fun start(src: JSONObject, startMs: Long) {
+        // Parse the new source first: if it is broken, the old player is left alone.
+        val item = buildItem(src)
         releasePlayer()
         val ctx = activity
         val headers = HashMap<String, String>()
@@ -203,7 +233,7 @@ class NativePlayer(
             .setEnableDecoderFallback(true)
             .forceEnableMediaCodecAsynchronousQueueing()
         val p = ExoPlayer.Builder(ctx, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource).setLoadErrorHandlingPolicy(PatientLoadErrorPolicy()))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
                 true,
@@ -216,10 +246,24 @@ class NativePlayer(
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) emit(JSONObject().put("type", "ended").toString())
+                if (state == Player.STATE_READY) onRecovered()
+                updateKeepScreenOn()
+                restartTicker()
                 sendState()
             }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) = sendState()
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                updateKeepScreenOn()
+                ext?.setRunning(isPlaying)
+                restartTicker()
+                sendState()
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = updateKeepScreenOn()
+
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                ext?.refresh()
+            }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 matchRefreshToVideo()
                 updateChrome()
@@ -234,23 +278,210 @@ class NativePlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                emit(
-                    JSONObject()
-                        .put("type", "error")
-                        .put("code", errorCode(error))
-                        .put("message", error.errorCodeName + ": " + (error.message ?: ""))
-                        .toString(),
-                )
+                updateKeepScreenOn()
+                if (recoverFrom(error)) return
+                giveUp(error)
             }
         })
-        p.setMediaItem(buildItem(src), startMs.coerceAtLeast(0))
+        p.setMediaItem(item, startMs.coerceAtLeast(0))
         applyTextSelection(p)
         p.prepare()
         p.playWhenReady = true
         player = p
+        // Headset, Bluetooth and car buttons (play/pause, skip) reach the player.
+        session = try {
+            MediaSession.Builder(activity, p).setId("harbor-" + System.nanoTime()).build()
+        } catch (_: Exception) {
+            null
+        }
         show(p)
+        restartTicker()
+    }
+
+    // =========================================================================================
+    // Network recovery: mid-film trouble (tunnel, lift, Wi-Fi to mobile data, a CDN hiccup)
+    // shows "Reconnecting…" and prepares again at the same position once the network is back,
+    // instead of freezing silently. Dead links (403/404/410) and decoder errors go to the page.
+    // =========================================================================================
+
+    private fun isNetworkError(e: PlaybackException): Boolean = when (e.errorCode) {
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> true
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
+            val code = (e.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode ?: 0
+            code >= 500 || code == 429
+        }
+        else -> false
+    }
+
+    private fun recoverFrom(e: PlaybackException): Boolean {
+        val p = player ?: return false
+        if (e.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+            p.seekToDefaultPosition()
+            p.prepare()
+            return true
+        }
+        if (!isNetworkError(e)) return false
+        val now = System.currentTimeMillis()
+        if (!reconnecting) {
+            reconnecting = true
+            reconnectSince = now
+            reconnectAttempts = 0
+        }
+        if (now - reconnectSince > RECONNECT_BUDGET_MS) return false
+        reconnectAttempts++
+        flash(R.drawable.ic_refresh_cw, if (isOnline()) "جارٍ إعادة الاتصال…" else "بانتظار الإنترنت…", holdMs = RECONNECT_BUDGET_MS)
+        watchNetwork()
+        updateKeepScreenOn()
+        handler.removeCallbacks(reconnect)
+        handler.postDelayed(reconnect, minOf(reconnectAttempts * 2000L, 10_000L))
+        return true
+    }
+
+    private fun tryReconnect() {
+        val p = player ?: return
+        if (!reconnecting) return
+        if (!isOnline()) {
+            if (System.currentTimeMillis() - reconnectSince > RECONNECT_BUDGET_MS) giveUp(null)
+            else handler.postDelayed(reconnect, 3000)
+            return
+        }
+        // After an error the player keeps its position: prepare() retries from there.
+        p.prepare()
+        p.playWhenReady = true
+    }
+
+    private fun onRecovered() {
+        if (!reconnecting) return
+        reconnecting = false
+        reconnectAttempts = 0
+        handler.removeCallbacks(reconnect)
+        unwatchNetwork()
+        flash(R.drawable.ic_play, "رجع الاتصال", holdMs = 900)
+    }
+
+    /** Native gave up: tell the page (fatal) and show the user how to carry on, right here —
+     *  the page's own error screen is hidden under this view. */
+    private fun giveUp(error: PlaybackException?) {
+        val network = reconnecting || error == null || isNetworkError(error)
+        reconnecting = false
+        handler.removeCallbacks(reconnect)
+        unwatchNetwork()
+        updateKeepScreenOn()
+        emit(
+            JSONObject()
+                .put("type", "error")
+                .put("code", if (error != null) errorCode(error) else "network")
+                .put("message", if (error != null) error.errorCodeName + ": " + (error.message ?: "") else "network lost")
+                .put("fatal", true)
+                .toString(),
+        )
+        flash(
+            R.drawable.ic_refresh_cw,
+            if (network) "انقطع البث. اضغط ▶ للمحاولة مرة ثانية" else "تعذّر تشغيل هذا المصدر. اضغط ▶ للمحاولة أو اختر مصدراً آخر",
+            holdMs = 8000,
+        )
+        view?.showController()
+    }
+
+    private fun watchNetwork() {
+        if (netCallback != null) return
+        val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                handler.post {
+                    if (reconnecting) {
+                        handler.removeCallbacks(reconnect)
+                        handler.postDelayed(reconnect, 800)
+                    }
+                }
+            }
+        }
+        try {
+            cm.registerDefaultNetworkCallback(cb)
+            netCallback = cb
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unwatchNetwork() {
+        val cb = netCallback ?: return
+        netCallback = null
+        try {
+            (activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(cb)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** The screen stays on only while a video plays (or is about to): paused, ended or stopped,
+     *  the phone sleeps as usual. */
+    private fun updateKeepScreenOn() {
+        val p = player
+        view?.keepScreenOn = reconnecting ||
+            (p != null && p.playWhenReady && (p.playbackState == Player.STATE_READY || p.playbackState == Player.STATE_BUFFERING))
+    }
+
+    private fun restartTicker() {
         handler.removeCallbacks(ticker)
         handler.post(ticker)
+    }
+
+    // =========================================================================================
+    // Picture-in-picture
+    // =========================================================================================
+
+    /** Leaving the app (Home) while a video plays keeps it going in a small window. */
+    fun onUserLeaveHint() {
+        val p = player ?: return
+        if (!isShowing || !p.isPlaying || locked || Build.VERSION.SDK_INT < 26) return
+        if (!activity.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        val vs = p.videoSize
+        val ratio = if (vs.width > 0 && vs.height > 0) vs.width.toFloat() / vs.height else 16f / 9f
+        // Android only accepts ratios between 1:2.39 and 2.39:1.
+        val r = when {
+            ratio > 2.39f -> Rational(239, 100)
+            ratio < 1 / 2.39f -> Rational(100, 239)
+            vs.width > 0 && vs.height > 0 -> Rational(vs.width, vs.height)
+            else -> Rational(16, 9)
+        }
+        try {
+            activity.enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(r).build())
+        } catch (_: Exception) {
+        }
+    }
+
+    fun onPictureInPictureChanged(inPip: Boolean) {
+        val v = view ?: return
+        v.useController = !inPip
+        if (inPip) {
+            v.hideController()
+            panel?.dismiss()
+            listOfNotNull(topBar, nextButton, unlockButton, indicator).forEach { it.visibility = View.GONE }
+        } else {
+            updateChrome()
+        }
+    }
+
+    /** Fullscreen draws edge to edge: keep the controls clear of the camera cutout and of the
+     *  bottom gesture area (in landscape the cutout sits on the left or right edge). */
+    fun applyChromeInsets() {
+        val ins = ViewCompat.getRootWindowInsets(root) ?: return
+        val cut = ins.getInsets(WindowInsetsCompat.Type.displayCutout())
+        val gest = ins.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
+        val ctx = activity
+        val side = maxOf(cut.left, cut.right)
+        topBar?.setPadding(ctx.dp(20) + cut.left, ctx.dp(14) + cut.top, ctx.dp(20) + cut.right, ctx.dp(28))
+        view?.findViewById<View>(androidx.media3.ui.R.id.exo_controller)?.setPadding(cut.left, 0, cut.right, gest.bottom)
+        (nextButton?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            lp.marginEnd = ctx.dp(28) + side
+            lp.bottomMargin = ctx.dp(96) + gest.bottom
+            nextButton?.layoutParams = lp
+        }
+        (unlockButton?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            lp.marginStart = ctx.dp(32) + side
+            unlockButton?.layoutParams = lp
+        }
     }
 
     private fun jsonStrings(a: JSONArray?): List<String> {
@@ -279,6 +510,8 @@ class NativePlayer(
         updateChrome()
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         activity.setFullscreenMode(true)
+        root.post { applyChromeInsets() }
+        root.postDelayed({ applyChromeInsets() }, 600) // after the rotation to landscape
     }
 
     private fun createView(): PlayerView {
@@ -289,7 +522,7 @@ class NativePlayer(
         pv.setShowPreviousButton(false)
         pv.setShowFastForwardButton(true)
         pv.setShowRewindButton(true)
-        pv.keepScreenOn = true
+        pv.keepScreenOn = false // switched on while playing (updateKeepScreenOn)
         pv.resizeMode = resizeMode
         pv.controllerShowTimeoutMs = 3500
         root.addView(pv, FrameLayout.LayoutParams(MainActivity.MATCH, MainActivity.MATCH))
@@ -945,6 +1178,8 @@ class NativePlayer(
     private fun applyTextSelection(p: ExoPlayer) {
         val b = p.trackSelectionParameters.buildUpon()
         if (prefSubLangs.isNotEmpty()) b.setPreferredTextLanguages(*prefSubLangs.toTypedArray())
+        // Settings > Language > preferred audio (it used to be ignored by the native player).
+        if (prefAudioLangs.isNotEmpty()) b.setPreferredAudioLanguages(*prefAudioLangs.toTypedArray())
         b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, activeExtId != null || subsOff)
         p.trackSelectionParameters = b.build()
     }
@@ -1214,13 +1449,26 @@ class NativePlayer(
     }
 
     fun onHostPause() {
+        // In picture-in-picture the activity is paused but still on screen: keep playing.
+        if (Build.VERSION.SDK_INT >= 24 && activity.isInPictureInPictureMode) return
+        player?.pause()
+    }
+
+    /** The app went fully out of sight (also: the picture-in-picture window was closed). */
+    fun onHostStop() {
         player?.pause()
     }
 
     private fun releasePlayer() {
         handler.removeCallbacks(ticker)
+        handler.removeCallbacks(reconnect)
+        reconnecting = false
+        unwatchNetwork()
+        session?.release()
+        session = null
         player?.release()
         player = null
+        view?.keepScreenOn = false
     }
 
     private fun toast(msg: String) = Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -1263,5 +1511,25 @@ class NativePlayer(
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> "source"
         else -> "unknown"
+    }
+
+    private companion object {
+        /** How long a dropped stream keeps trying before the player gives up and says so. */
+        const val RECONNECT_BUDGET_MS = 120_000L
+    }
+}
+
+/**
+ * Network hiccups get more and slower retries before ExoPlayer reports an error (the default is
+ * three quick ones). A 4xx answer means the link itself is dead: no retries for that.
+ */
+@OptIn(UnstableApi::class)
+private class PatientLoadErrorPolicy : DefaultLoadErrorHandlingPolicy(6) {
+    override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+        val base = super.getRetryDelayMsFor(loadErrorInfo)
+        if (base == C.TIME_UNSET) return base
+        val e = loadErrorInfo.exception
+        if (e is HttpDataSource.InvalidResponseCodeException && e.responseCode in 400..499 && e.responseCode != 429) return C.TIME_UNSET
+        return minOf(loadErrorInfo.errorCount * 1500L, 8000L)
     }
 }

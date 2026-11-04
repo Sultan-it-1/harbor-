@@ -156,6 +156,7 @@ class MainActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = onBack()
         })
+        addOnPictureInPictureModeChangedListener { info -> player.onPictureInPictureChanged(info.isInPictureInPictureMode) }
 
         // Always a fresh page: the app restores its own state from storage. (Restoring the
         // WebView's saved state after Android killed the process could leave a black page, and a
@@ -296,6 +297,13 @@ class MainActivity : ComponentActivity() {
         // Language, font size and dark mode changes no longer recreate the activity (manifest
         // configChanges), so the page and a playing video survive them.
         webView.settings.textZoom = textZoomFor(newConfig)
+        if (player.isShowing) root.post { player.applyChromeInsets() }
+    }
+
+    /** Home pressed while a video plays: continue in picture-in-picture. */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        player.onUserLeaveHint()
     }
 
     /** Harbor's UI needs a modern WebView (CSS colour functions); an old one shows empty pages. */
@@ -503,6 +511,12 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         player.onHostPause()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Out of sight (incl. the picture-in-picture window being closed): pause the video.
+        player.onHostStop()
     }
 
     override fun onDestroy() {

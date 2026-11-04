@@ -71,6 +71,20 @@ function preferredSubLangs(): string[] {
   }
 }
 
+/** Settings > Language > preferred audio languages, as codes for the native player. */
+function preferredAudioLangs(): string[] {
+  try {
+    const raw = localStorage.getItem("harbor.settings");
+    const st = raw ? (JSON.parse(raw) as { preferredAudioLangs?: unknown }) : {};
+    const v = st.preferredAudioLangs;
+    // Not set yet: the defaults (src/lib/settings/defaults.ts).
+    const langs = Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x) : ["English", "Japanese"];
+    return langs.map(toLangCode);
+  } catch {
+    return [];
+  }
+}
+
 /** Harbor's subtitle look, used to seed the native player's style the first time. */
 function harborSubStyle(): Record<string, unknown> | null {
   try {
@@ -150,6 +164,13 @@ export function createAndroidBridge(): PlayerBridge {
       snap.rate = e.rate;
       snap.videoWidth = e.width;
       snap.videoHeight = e.height;
+      // Playing again after an error (the native player reconnected, or the user pressed play
+      // on its retry prompt): the error is over.
+      if (snap.status === "error" && (e.playing || (e.ready && e.playWhenReady))) {
+        snap.status = "playing";
+        snap.errorCode = null;
+        snap.errorMessage = null;
+      }
       if (snap.status !== "error") {
         snap.status = e.ended ? "ended" : e.playing ? "playing" : e.ready || !e.playWhenReady ? "paused" : "loading";
       }
@@ -201,6 +222,7 @@ export function createAndroidBridge(): PlayerBridge {
           startMs: Math.max(0, Math.round((src.startAtSec ?? 0) * 1000)),
           subtitles: initialSubs,
           prefSubLangs: preferredSubLangs(),
+          prefAudioLangs: preferredAudioLangs(),
           subStyle: harborSubStyle(),
           title,
           isLive: src.isLive === true,

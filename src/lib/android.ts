@@ -49,7 +49,7 @@ export type NativePlayerEvent =
       height: number;
     }
   | { type: "ended" }
-  | { type: "error"; code: string; message: string }
+  | { type: "error"; code: string; message: string; fatal?: boolean }
   | { type: "closed"; positionMs: number; durationMs: number }
   | { type: "requestStreams" }
   | { type: "pickStream"; key: string }
