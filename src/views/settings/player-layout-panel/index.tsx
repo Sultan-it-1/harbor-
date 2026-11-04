@@ -1,3 +1,4 @@
+import { androidSaveFile, isAndroidApp } from "@/lib/android";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { alertDialog, confirmDialog } from "@/lib/dialog";
 import {
@@ -288,6 +289,10 @@ export function PlayerLayoutPanel() {
     if (!json) return;
     const active = getActiveProfile(theme);
     const safeName = (active?.name ?? "layout").replace(/[^a-zA-Z0-9._-]+/g, "-");
+    if (isAndroidApp()) {
+      void androidSaveFile(`harbor-${theme}-${safeName}.json`, "application/json", json);
+      return;
+    }
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

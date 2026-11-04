@@ -60,6 +60,15 @@ export function PhoneTabBar() {
   }, [pending, view]);
   const shown = pending ?? view;
 
+  // The keyboard pushes the page up and the bar would sit right on top of it, covering the
+  // field being typed in: hide the bar while the keyboard is open (the shell reports it).
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  useEffect(() => {
+    const onIme = (e: Event) => setKeyboardUp(Boolean((e as CustomEvent<boolean>).detail));
+    window.addEventListener("harbor:ime", onIme);
+    return () => window.removeEventListener("harbor:ime", onIme);
+  }, []);
+
   // Back gesture closes the search / More sheet before leaving the screen.
   useEffect(() => {
     if (!searchOpen && !moreOpen) return;
@@ -132,6 +141,7 @@ export function PhoneTabBar() {
 
       <nav
         data-phone-tabbar
+        hidden={keyboardUp}
         className="fixed inset-x-0 bottom-0 z-[190] border-t border-edge-soft bg-canvas/95 backdrop-blur-xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >

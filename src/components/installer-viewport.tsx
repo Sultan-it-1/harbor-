@@ -205,6 +205,9 @@ function InstallerViewport({
   phaseRef.current = phase;
   const submitRef = useRef(submit);
   submitRef.current = submit;
+  // Only the addon's own setup page (this iframe) may hand over a manifest: messages from any
+  // other window (another frame, an ad inside the page, a popup) are ignored.
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
 
   // Android: the back gesture closes this screen and nothing else. It used to fall through to
   // the page underneath, which jumped to Home behind the setup screen, so the X then landed on
@@ -224,6 +227,8 @@ function InstallerViewport({
 
     const onMessage = (e: MessageEvent) => {
       if (isBusy()) return;
+      const frame = frameRef.current;
+      if (!frame || e.source !== frame.contentWindow) return;
       const data = e.data;
       if (!data) return;
       const candidate =
@@ -373,6 +378,7 @@ function InstallerViewport({
         )}
         {!framingRefused && (
           <iframe
+            ref={frameRef}
             key={reloadKey}
             src={url}
             title={title}

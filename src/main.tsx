@@ -7,6 +7,7 @@ import { ModalOverlayApp } from "@/views/modal-overlay-app";
 import { HdrOverlayApp } from "@/views/hdr-overlay-app";
 import { PipApp } from "@/views/pip";
 import "@/index.css";
+import { watchSecureScreens } from "@/lib/android-secure";
 
 function detectPipMode(): boolean {
   if (new URLSearchParams(window.location.search).get("pip") === "1") return true;
@@ -73,3 +74,5 @@ requestAnimationFrame(() => {
   boot.classList.add("gone");
   setTimeout(() => boot.remove(), 260);
 });
+
+watchSecureScreens();

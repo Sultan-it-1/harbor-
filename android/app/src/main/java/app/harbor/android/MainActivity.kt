@@ -5,15 +5,21 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.JsResult
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -22,13 +28,15 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.Toast
-import androidx.core.view.ViewCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONObject
+import java.security.SecureRandom
 
 /**
  * Hosts the Harbor web UI (bundled from the Vite build) in a WebView and plays video
@@ -39,7 +47,14 @@ import org.json.JSONObject
  *   window.HarborAndroid.fetch(id, requestJson)   -> window.__harborNativeFetchDone(id, responseJson)
  *   window.HarborAndroid.play(sourceJson) / command(json) / stop()
  *                                                 -> window.__harborNativeEvent(eventJson)
+ *   window.HarborAndroid.saveFile(id, name, mime, base64) -> window.__harborFileSaved(id, "1"|"0")
  *   native back button                            -> window.__harborAndroidBack(): boolean
+ *
+ * Bridge security: the Java object is injected as `__harborNative` into every frame (Android
+ * can't limit addJavascriptInterface to one frame), and each method wants a per-launch secret
+ * as its first argument. Only the app's own page learns it: WebAssets puts [bridgeScript] at
+ * the top of index.html, which wraps the raw object as `window.HarborAndroid` and adds the
+ * secret to every call. Third-party frames (addon setup pages, embeds) get nothing done.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var root: FrameLayout
@@ -48,14 +63,44 @@ class MainActivity : ComponentActivity() {
     private lateinit var fetcher: NativeFetch
     private lateinit var downloads: Downloads
     private lateinit var images: ImageCache
+    private lateinit var assets: WebAssets
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fullscreen = false
     private var lastBackAt = 0L
     private var pageLoaded = false
     private var pendingOpenDownloads = false
+    private var imeVisible = false
     /** A stremio:// link that opened the app: kept until the page asks for it (takeLink). */
     @Volatile private var pendingLink: String? = null
+    private val bridgeToken: String = newToken()
+
+    // <input type=file> (restore a backup, upload an avatar / theme / subtitle ...)
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val cb = fileChooserCallback
+        fileChooserCallback = null
+        cb?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
+    }
+
+    // Files the page saves (backup export, images): the user picks where they go.
+    private class PendingSave(val id: String, val bytes: ByteArray)
+    private var pendingSave: PendingSave? = null
+    private val saveDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val job = pendingSave ?: return@registerForActivityResult
+        pendingSave = null
+        val uri = r.data?.data
+        var ok = false
+        if (r.resultCode == RESULT_OK && uri != null) {
+            ok = try {
+                contentResolver.openOutputStream(uri, "wt")?.use { it.write(job.bytes) } != null
+            } catch (e: Exception) {
+                Log.w(TAG, "saving the file failed", e)
+                false
+            }
+        }
+        sendToJs("__harborFileSaved", job.id, if (ok) "1" else "0")
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,55 +122,81 @@ class MainActivity : ComponentActivity() {
                 val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
                 v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
             }
+            // The page hides its bottom tab bar while the keyboard is up (it would sit on top of it).
+            val imeNow = insets.isVisible(WindowInsetsCompat.Type.ime())
+            if (imeNow != imeVisible) {
+                imeVisible = imeNow
+                if (pageLoaded) {
+                    webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('harbor:ime',{detail:$imeNow}))", null)
+                }
+            }
             WindowInsetsCompat.CONSUMED
         }
-        webView = WebView(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
-            overScrollMode = View.OVER_SCROLL_NEVER
-            isHorizontalScrollBarEnabled = false
-        }
-        root.addView(webView, FrameLayout.LayoutParams(MATCH, MATCH))
         setContentView(root)
         RefreshRate.apply(this)
 
         fetcher = NativeFetch { id, result -> sendToJs("__harborNativeFetchDone", id, result) }
         downloads = Downloads.get(this)
-        player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
         DownloadService.createChannel(this)
         pendingOpenDownloads = intent?.getBooleanExtra(EXTRA_OPEN_DOWNLOADS, false) == true
         // Only a fresh launch: a recreated activity would otherwise replay the link that started it.
         if (savedInstanceState == null) captureLink(intent)
 
-        val assets = WebAssets(this)
+        assets = WebAssets(this, bridgeScript())
         images = ImageCache(this, minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels))
-        val ws = webView.settings
+        webView = buildWebView()
+        root.addView(webView, 0, FrameLayout.LayoutParams(MATCH, MATCH))
+        player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
+        val ua = webView.settings.userAgentString
+        fetcher.userAgent = ua
+        player.userAgent = ua
+        downloads.userAgent = ua
+        images.userAgent = ua
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = onBack()
+        })
+
+        // Always a fresh page: the app restores its own state from storage. (Restoring the
+        // WebView's saved state after Android killed the process could leave a black page, and a
+        // large saved state can overflow the activity's state bundle.)
+        webView.loadUrl(START_URL)
+        warnIfWebViewTooOld()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun buildWebView(): WebView {
+        val wv = WebView(this).apply {
+            setBackgroundColor(0xFF000000.toInt())
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isHorizontalScrollBarEnabled = false
+        }
+        val ws = wv.settings
         ws.javaScriptEnabled = true
         ws.domStorageEnabled = true
         ws.databaseEnabled = true
         ws.mediaPlaybackRequiresUserGesture = false
+        // Streams, logos and addon manifests are often plain http on the user's own network.
         ws.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         ws.allowFileAccess = false
+        ws.allowContentAccess = false
         ws.loadWithOverviewMode = true
         ws.useWideViewPort = true
         ws.setSupportMultipleWindows(false)
-        // Feel like an app, not a web page: no pinch zoom, and the phone's font-size setting
-        // doesn't blow the layout up (the UI has its own scale setting).
+        // App-like: no pinch zoom. Text follows the phone's font size, but only part of the way
+        // (the UI has its own scale setting and fixed-size controls).
         ws.setSupportZoom(false)
         ws.builtInZoomControls = false
         ws.displayZoomControls = false
-        ws.textZoom = 100
+        ws.textZoom = textZoomFor(resources.configuration)
         ws.userAgentString = ws.userAgentString + " HarborAndroid/" + BuildConfigInfo.versionName(this)
-        fetcher.userAgent = ws.userAgentString
-        player.userAgent = ws.userAgentString
-        downloads.userAgent = ws.userAgentString
-        images.userAgent = ws.userAgentString
 
         // The page keeps running when Harbor is in the background (season downloads and
         // subtitle searches happen there), so its renderer keeps the app's priority.
-        if (Build.VERSION.SDK_INT >= 26) webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+        if (Build.VERSION.SDK_INT >= 26) wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
 
-        webView.addJavascriptInterface(JsApi(), "HarborAndroid")
-        webView.webViewClient = object : WebViewClient() {
+        wv.addJavascriptInterface(JsApi(), BRIDGE_NAME)
+        wv.webViewClient = object : WebViewClient() {
             // The app's own files, then posters/backdrops from the phone's image cache.
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 assets.intercept(request) ?: images.intercept(request)
@@ -141,8 +212,17 @@ class MainActivity : ComponentActivity() {
                 openExternally(uri)
                 return true
             }
+
+            // The page's renderer crashed, or Android killed it to free memory. Returning false
+            // here takes the whole app down (and the download service with it): build a fresh
+            // WebView and load the page again instead.
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                Log.w(TAG, "WebView renderer gone (crashed=${Build.VERSION.SDK_INT >= 26 && detail.didCrash()}), reloading")
+                if (view === webView) root.post { replaceWebView() }
+                return true
+            }
         }
-        webView.webChromeClient = object : WebChromeClient() {
+        wv.webChromeClient = object : WebChromeClient() {
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                 hideCustomView()
                 customView = view
@@ -164,14 +244,79 @@ class MainActivity : ComponentActivity() {
                 showJsDialog(message, result, withCancel = false)
                 return true
             }
+
+            // <input type="file">: the system file picker (Android has no browser chooser here).
+            override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = callback
+                return try {
+                    val intent = params.createIntent()
+                    if (intent.type.isNullOrBlank() || intent.type?.contains('/') != true) intent.type = "*/*"
+                    if (params.mode == FileChooserParams.MODE_OPEN_MULTIPLE) intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    fileChooser.launch(intent)
+                    true
+                } catch (e: Exception) {
+                    Log.w(TAG, "no file picker", e)
+                    fileChooserCallback = null
+                    false
+                }
+            }
         }
+        return wv
+    }
 
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() = onBack()
-        })
+    /** A dead renderer's WebView can't be used again: swap in a new one under the player. */
+    private fun replaceWebView() {
+        if (isFinishing || isDestroyed) return
+        val old = webView
+        pageLoaded = false
+        val idx = root.indexOfChild(old).coerceAtLeast(0)
+        root.removeView(old)
+        try {
+            old.destroy()
+        } catch (_: Exception) {
+        }
+        webView = buildWebView()
+        root.addView(webView, idx, FrameLayout.LayoutParams(MATCH, MATCH))
+        webView.loadUrl(START_URL)
+    }
 
-        if (savedInstanceState != null) webView.restoreState(savedInstanceState)
-        else webView.loadUrl("https://${WebAssets.HOST}/index.html")
+    /** Runs before the page's own scripts in index.html (see the class comment). */
+    private fun bridgeScript(): String =
+        "(function(){var raw=window.$BRIDGE_NAME;if(!raw)return;var tok=${JSONObject.quote(bridgeToken)};" +
+            "var api=new Proxy({},{get:function(_,k){var f=raw[k];return typeof f==='function'?function(){" +
+            "return f.apply(raw,[tok].concat(Array.prototype.slice.call(arguments)))}:undefined}," +
+            "has:function(_,k){return typeof raw[k]==='function'}});" +
+            "Object.defineProperty(window,'HarborAndroid',{value:api,writable:false,configurable:false});})();"
+
+    private fun textZoomFor(c: Configuration): Int = (100 + (c.fontScale - 1f) * 50f).toInt().coerceIn(90, 115)
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Language, font size and dark mode changes no longer recreate the activity (manifest
+        // configChanges), so the page and a playing video survive them.
+        webView.settings.textZoom = textZoomFor(newConfig)
+    }
+
+    /** Harbor's UI needs a modern WebView (CSS colour functions); an old one shows empty pages. */
+    private fun warnIfWebViewTooOld() {
+        if (Build.VERSION.SDK_INT < 26) return
+        val pkg = try { WebView.getCurrentWebViewPackage() } catch (_: Exception) { null } ?: return
+        val major = pkg.versionName?.substringBefore('.')?.toIntOrNull() ?: return
+        if (major >= MIN_WEBVIEW_MAJOR) return
+        val ar = resources.configuration.locales[0]?.language == "ar"
+        try {
+            AlertDialog.Builder(this)
+                .setTitle(if (ar) "حدّث Android System WebView" else "Update Android System WebView")
+                .setMessage(
+                    if (ar) "يحتاج Harbor إصدار $MIN_WEBVIEW_MAJOR أو أحدث من WebView، وجوالك فيه $major. حدّثه من Google Play وإلا قد تظهر الصفحات فاضية."
+                    else "Harbor needs Android System WebView $MIN_WEBVIEW_MAJOR or newer (this phone has $major). Update it from Google Play, otherwise pages may show up empty.",
+                )
+                .setPositiveButton("Google Play") { _, _ -> openExternally(Uri.parse("market://details?id=${pkg.packageName}")) }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        } catch (_: Exception) {
+        }
     }
 
     private fun onBack() {
@@ -191,7 +336,8 @@ class MainActivity : ComponentActivity() {
                             moveTaskToBack(true)
                         } else {
                             lastBackAt = now
-                            Toast.makeText(this, "اسحب رجوع مرة ثانية للخروج", Toast.LENGTH_SHORT).show()
+                            val ar = resources.configuration.locales[0]?.language == "ar"
+                            Toast.makeText(this, if (ar) "اسحب رجوع مرة ثانية للخروج" else "Swipe back again to leave", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -297,15 +443,37 @@ class MainActivity : ComponentActivity() {
         ViewCompat.requestApplyInsets(root)
     }
 
+    /**
+     * Links the page can't show itself (other sites, external players, stremio:// installs).
+     * intent: links come from addon data, so they get what a browser allows: a VIEW of a public,
+     * browsable activity, without an explicit component, selector or URI grants.
+     */
     private fun openExternally(uri: Uri) {
+        val scheme = uri.scheme?.lowercase() ?: return
+        if (scheme in BLOCKED_SCHEMES) return
         try {
-            val intent = if (uri.scheme == "intent") {
-                Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)
+            val intent = if (scheme == "intent") {
+                Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    component = null
+                    selector = null
+                    flags = flags and URI_GRANT_FLAGS.inv()
+                }
             } else {
                 Intent(Intent.ACTION_VIEW, uri)
             }
+            if (intent.action != Intent.ACTION_VIEW) return
+            if (intent.data?.scheme?.lowercase() in BLOCKED_SCHEMES) return
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                // intent: links may name a web page to use when no app takes them.
+                val fallback = intent.getStringExtra("browser_fallback_url")?.let(Uri::parse)
+                if (fallback != null && fallback.scheme?.lowercase() in setOf("http", "https")) {
+                    startActivity(Intent(Intent.ACTION_VIEW, fallback).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }
         } catch (_: Exception) {
             // No app can handle it (e.g. vlc:// without VLC installed) — ignore.
         }
@@ -322,11 +490,6 @@ class MainActivity : ComponentActivity() {
             append(")")
         }
         webView.post { webView.evaluateJavascript(js, null) }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        webView.saveState(outState)
     }
 
     override fun onResume() {
@@ -348,84 +511,190 @@ class MainActivity : ComponentActivity() {
         DownloadService.keepAlive(this, false)
         player.stop(notify = false)
         fetcher.shutdown()
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.destroy()
         super.onDestroy()
     }
 
+    /**
+     * What the page can call. Every method takes the bridge token first (added by the wrapper in
+     * [bridgeScript]); calls without it do nothing. A failure inside a call never takes the app
+     * down: it is logged, and the page gets a neutral answer (or a player error event).
+     */
     inner class JsApi {
-        @JavascriptInterface
-        fun version(): String = BuildConfigInfo.versionName(this@MainActivity)
+        private fun ok(t: String?) = t != null && t == bridgeToken
+
+        private inline fun <T> guard(name: String, fallback: T, block: () -> T): T = try {
+            block()
+        } catch (e: Throwable) {
+            Log.e(TAG, "bridge call $name failed", e)
+            fallback
+        }
+
+        private fun onUi(name: String, block: () -> Unit) = runOnUiThread {
+            try {
+                block()
+            } catch (e: Throwable) {
+                Log.e(TAG, "bridge call $name failed", e)
+                if (name == "play") {
+                    sendToJs(
+                        "__harborNativeEvent",
+                        JSONObject().put("type", "error").put("code", "source").put("message", e.javaClass.simpleName + ": " + (e.message ?: "")).toString(),
+                    )
+                }
+            }
+        }
 
         @JavascriptInterface
-        fun fetch(id: String, requestJson: String) = fetcher.enqueue(id, requestJson)
+        fun version(t: String): String = if (ok(t)) BuildConfigInfo.versionName(this@MainActivity) else ""
 
         @JavascriptInterface
-        fun fetchCancel(id: String) = fetcher.cancel(id)
+        fun fetch(t: String, id: String, requestJson: String) {
+            if (ok(t)) guard("fetch", Unit) { fetcher.enqueue(id, requestJson) }
+        }
 
         @JavascriptInterface
-        fun play(sourceJson: String) = runOnUiThread { player.play(sourceJson) }
+        fun fetchCancel(t: String, id: String) {
+            if (ok(t)) guard("fetchCancel", Unit) { fetcher.cancel(id) }
+        }
 
         @JavascriptInterface
-        fun command(json: String) = runOnUiThread { player.command(json) }
+        fun play(t: String, sourceJson: String) {
+            if (ok(t)) onUi("play") { player.play(sourceJson) }
+        }
 
         @JavascriptInterface
-        fun stop() = runOnUiThread { player.stop(notify = false) }
+        fun command(t: String, json: String) {
+            if (ok(t)) onUi("command") { player.command(json) }
+        }
 
         @JavascriptInterface
-        fun openExternal(url: String) = runOnUiThread { openExternally(Uri.parse(url)) }
+        fun stop(t: String) {
+            if (ok(t)) onUi("stop") { player.stop(notify = false) }
+        }
+
+        @JavascriptInterface
+        fun openExternal(t: String, url: String) {
+            if (ok(t)) onUi("openExternal") { openExternally(Uri.parse(url)) }
+        }
+
+        /** Keeps screenshots and the Recents preview out of sensitive screens (PIN, sign-in). */
+        @JavascriptInterface
+        fun setSecure(t: String, on: Boolean) {
+            if (!ok(t)) return
+            onUi("setSecure") {
+                if (on) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+
+        /**
+         * Saves bytes made by the page (backup export, an image) to a file the user picks with the
+         * system "save as" screen. Answers through window.__harborFileSaved(id, "1"|"0").
+         */
+        @JavascriptInterface
+        fun saveFile(t: String, id: String, name: String, mime: String, base64: String): Boolean {
+            if (!ok(t)) return false
+            val bytes = try {
+                Base64.decode(base64, Base64.DEFAULT)
+            } catch (_: Exception) {
+                return false
+            }
+            onUi("saveFile") {
+                pendingSave?.let { sendToJs("__harborFileSaved", it.id, "0") }
+                pendingSave = PendingSave(id, bytes)
+                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = mime.ifBlank { "application/octet-stream" }
+                    putExtra(Intent.EXTRA_TITLE, name.ifBlank { "harbor" })
+                }
+                try {
+                    saveDocument.launch(intent)
+                } catch (e: Exception) {
+                    Log.w(TAG, "no save screen", e)
+                    pendingSave = null
+                    sendToJs("__harborFileSaved", id, "0")
+                }
+            }
+            return true
+        }
 
         // ---- downloads (see Downloads.kt) ----
         @JavascriptInterface
-        fun dlStart(json: String): String {
+        fun dlStart(t: String, json: String): String {
+            if (!ok(t)) return REFUSED
             runOnUiThread { askNotificationsOnce() }
-            return downloads.start(json)
+            return guard("dlStart", REFUSED) { downloads.start(json) }
         }
 
-        /** The page has background work (season queue, subtitle searches) — keep Harbor running. */
         /** The pending stremio:// link, once ("" when there is none). */
         @JavascriptInterface
-        fun takeLink(): String {
+        fun takeLink(t: String): String {
+            if (!ok(t)) return ""
             val l = pendingLink
             pendingLink = null
             return l ?: ""
         }
 
+        /** The page has background work (season queue, subtitle searches) — keep Harbor running. */
         @JavascriptInterface
-        fun dlKeepAlive(on: Boolean) = DownloadService.keepAlive(this@MainActivity, on)
+        fun dlKeepAlive(t: String, on: Boolean) {
+            if (ok(t)) guard("dlKeepAlive", Unit) { DownloadService.keepAlive(this@MainActivity, on) }
+        }
 
         @JavascriptInterface
-        fun bgAllowed(): Boolean = ignoringBatteryOptimizations()
+        fun bgAllowed(t: String): Boolean = ok(t) && guard("bgAllowed", false) { ignoringBatteryOptimizations() }
 
         @JavascriptInterface
-        fun bgRequest() = runOnUiThread { requestBackgroundRun() }
+        fun bgRequest(t: String) {
+            if (ok(t)) onUi("bgRequest") { requestBackgroundRun() }
+        }
 
         @JavascriptInterface
-        fun dlStatus(): String = downloads.status()
+        fun dlStatus(t: String): String = if (ok(t)) guard("dlStatus", "{}") { downloads.status() } else "{}"
 
         @JavascriptInterface
-        fun dlDelete(id: String): Boolean = downloads.delete(id)
+        fun dlDelete(t: String, id: String): Boolean = ok(t) && guard("dlDelete", false) { downloads.delete(id) }
 
         @JavascriptInterface
-        fun dlPause(id: String): Boolean = downloads.pause(id)
+        fun dlPause(t: String, id: String): Boolean = ok(t) && guard("dlPause", false) { downloads.pause(id) }
 
         /** Resume a paused download, or retry a failed one from where it got to. */
         @JavascriptInterface
-        fun dlResume(id: String): Boolean = downloads.resume(id)
+        fun dlResume(t: String, id: String): Boolean = ok(t) && guard("dlResume", false) { downloads.resume(id) }
 
         @JavascriptInterface
-        fun dlAddSubs(id: String, json: String): Boolean = downloads.addSubtitles(id, json)
+        fun dlAddSubs(t: String, id: String, json: String): Boolean = ok(t) && guard("dlAddSubs", false) { downloads.addSubtitles(id, json) }
 
         @JavascriptInterface
-        fun dlFiles(id: String): String = downloads.files(id)
+        fun dlFiles(t: String, id: String): String = if (ok(t)) guard("dlFiles", "{}") { downloads.files(id) } else "{}"
 
         @JavascriptInterface
-        fun dlStorage(): String = downloads.storage()
+        fun dlStorage(t: String): String = if (ok(t)) guard("dlStorage", "{}") { downloads.storage() } else "{}"
     }
 
     companion object {
+        private const val TAG = "Harbor"
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         const val EXTRA_OPEN_DOWNLOADS = "app.harbor.android.OPEN_DOWNLOADS"
+        private const val START_URL = "https://${WebAssets.HOST}/index.html"
+        /** The raw bridge object's name; the page only ever uses the wrapped window.HarborAndroid. */
+        private const val BRIDGE_NAME = "__harborNative"
+        private const val MIN_WEBVIEW_MAJOR = 111
+        private const val REFUSED = "{\"ok\":false,\"error\":\"refused\"}"
+        private val BLOCKED_SCHEMES = setOf("file", "content", "javascript", "data", "about", "blob", "android-app")
+        private const val URI_GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+            Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+
+        private fun newToken(): String {
+            val b = ByteArray(24)
+            SecureRandom().nextBytes(b)
+            return b.joinToString("") { "%02x".format(it) }
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { fetchTrailer, type Quality } from "@/lib/trailer";
+import { androidSaveFile, isAndroidApp } from "@/lib/android";
 
 const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -36,6 +37,7 @@ async function writeBytes(bytes: Uint8Array, filename: string, ext: string, mime
     await writeFile(path, bytes);
     return { saved: true, path };
   }
+  if (isAndroidApp()) return { saved: await androidSaveFile(filename, mime, bytes), path: null };
   return browserSave(bytes, filename, mime);
 }
 

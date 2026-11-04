@@ -1,3 +1,4 @@
+import { androidOpenExternal } from "@/lib/android";
 import { ArrowUpRight, ExternalLink, Loader2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -71,6 +72,7 @@ function EmbedViewport({
   }, [loaded]);
 
   const openExternally = () => {
+    if (androidOpenExternal(url)) return;
     try {
       window.open(url, "_blank", "noopener,noreferrer");
     } catch {

@@ -27,6 +27,10 @@ type HarborAndroidApi = {
   bgRequest?(): void;
   /** A stremio:// link that opened (or was sent to) the app, once; "" when there is none. */
   takeLink?(): string;
+  /** Keep screenshots and the Recents preview out of a sensitive screen (PIN, sign-in). */
+  setSecure?(on: boolean): void;
+  /** Ask where to save a file (system "save as" screen). Answer: window.__harborFileSaved(id, "1"|"0"). */
+  saveFile?(id: string, name: string, mime: string, base64: string): boolean;
 };
 
 export type NativePlayerEvent =
@@ -64,6 +68,7 @@ declare global {
     __harborAndroidBack?: () => boolean;
     /** Called by the shell when a link arrives while the page is running (see takeLink). */
     __harborDeepLinkCheck?: () => void;
+    __harborFileSaved?: (id: string, ok: string) => void;
   }
 }
 
@@ -191,6 +196,62 @@ export function androidFetch(url: string, init?: RequestInit & { timeoutMs?: num
     });
     api.fetch(id, JSON.stringify({ url, method: init?.method ?? "GET", headers, body, timeoutMs: init?.timeoutMs ?? 30000 }));
   });
+}
+
+// ---- saving files --------------------------------------------------------------------
+
+const pendingSaves = new Map<string, (ok: boolean) => void>();
+let saveSeq = 0;
+
+if (typeof window !== "undefined") {
+  window.__harborFileSaved = (id, ok) => {
+    const done = pendingSaves.get(id);
+    pendingSaves.delete(id);
+    done?.(ok === "1");
+  };
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+  }
+  return btoa(bin);
+}
+
+/** The Android app can't save `<a download>` blobs: this asks where to save the file and writes
+ *  it. Resolves true only once the file is really written (false if the user backs out). */
+export function androidSaveFile(name: string, mime: string, data: Uint8Array | string): Promise<boolean> {
+  const api = androidApi();
+  if (!api?.saveFile) return Promise.resolve(false);
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
+  const id = `s${++saveSeq}`;
+  return new Promise<boolean>((resolve) => {
+    pendingSaves.set(id, resolve);
+    let started = false;
+    try {
+      started = api.saveFile!(id, name, mime, bytesToBase64(bytes));
+    } catch (e) {
+      console.warn("[android] saveFile failed", e);
+    }
+    if (!started) {
+      pendingSaves.delete(id);
+      resolve(false);
+    }
+  });
+}
+
+/** Opens a link outside the app (browser, or the app that handles it). */
+export function androidOpenExternal(url: string): boolean {
+  const api = androidApi();
+  if (!api) return false;
+  try {
+    api.openExternal(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---- native player events -----------------------------------------------------------

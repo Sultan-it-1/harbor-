@@ -116,7 +116,7 @@ export function ParentalPinModal({
   };
 
   return (
-    <div role="dialog" aria-modal="true"
+    <div role="dialog" aria-modal="true" data-secure-screen
       className="pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center bg-black/72 backdrop-blur-md animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) mode.onCancel();

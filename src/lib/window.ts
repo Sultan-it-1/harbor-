@@ -1,3 +1,4 @@
+import { androidOpenExternal } from "@/lib/android";
 import { openUrl as tauriOpenUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
@@ -83,6 +84,8 @@ export function openUrl(url: string) {
     });
     return;
   }
+  // Android app: hand the link to Android (browser / the app that owns it) directly.
+  if (androidOpenExternal(url)) return;
   try {
     window.open(url, "_blank", "noopener,noreferrer");
   } catch {

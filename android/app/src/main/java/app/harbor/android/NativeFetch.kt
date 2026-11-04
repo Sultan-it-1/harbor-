@@ -22,15 +22,20 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
     private val tasks = ConcurrentHashMap<String, Future<*>>()
     private val conns = ConcurrentHashMap<String, HttpURLConnection>()
     private val cancelled = ConcurrentHashMap.newKeySet<String>()
+    private val started = ConcurrentHashMap.newKeySet<String>()
     @Volatile var userAgent: String = "Mozilla/5.0 (Linux; Android) HarborAndroid"
 
     fun enqueue(id: String, requestJson: String) {
         val f = pool.submit {
+            started.add(id)
             try {
+                // Cancelled while it waited in the queue: don't even start it.
+                if (cancelled.remove(id)) return@submit
                 val result = run(id, requestJson)
                 // The page gave up on it (cancel): nobody is waiting for the answer.
                 if (!cancelled.remove(id)) done(id, result)
             } finally {
+                started.remove(id)
                 tasks.remove(id)
                 conns.remove(id)
             }
@@ -39,16 +44,19 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
         if (f.isDone) tasks.remove(id)
     }
 
-    /** Drops a request that hasn't started, or breaks one that is running (frees its thread). */
+    /**
+     * Drops a request that hasn't started, or breaks one that is running (frees its thread).
+     * (Future.cancel(false) also "succeeds" on a running task without stopping it, so a running
+     * request is stopped by closing its connection.)
+     */
     fun cancel(id: String) {
         val f = tasks.remove(id) ?: return // already finished
-        if (f.cancel(false)) {
-            // Never started: nothing will clean up after it.
-            conns.remove(id)
-            return
-        }
         cancelled.add(id)
         conns.remove(id)?.let { try { it.disconnect() } catch (_: Exception) {} }
+        if (f.cancel(false) && !started.contains(id)) {
+            // Never started and never will: nothing else would clear the mark.
+            cancelled.remove(id)
+        }
     }
 
     fun shutdown() = pool.shutdownNow()
@@ -60,35 +68,49 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
             val method = req.optString("method", "GET").uppercase()
             val timeout = req.optInt("timeoutMs", 30_000)
             var url = URL(req.getString("url"))
+            if (url.protocol != "http" && url.protocol != "https") throw IllegalArgumentException("unsupported scheme ${url.protocol}")
             val headers = req.optJSONObject("headers")
-            val body = if (req.has("body") && !req.isNull("body")) req.getString("body") else null
+            var body = if (req.has("body") && !req.isNull("body")) req.getString("body") else null
+            var currentMethod = method
+            // Credentials are only sent to the host they were meant for (like fetch()).
+            val firstHost = url.host.lowercase()
 
             var conn: HttpURLConnection
             var redirects = 0
             while (true) {
+                if (cancelled.contains(id)) throw java.io.IOException("cancelled")
                 conn = url.openConnection() as HttpURLConnection
                 conns[id] = conn
                 conn.instanceFollowRedirects = false
                 conn.connectTimeout = timeout
                 conn.readTimeout = timeout
-                conn.requestMethod = method
+                conn.requestMethod = currentMethod
                 conn.setRequestProperty("User-Agent", userAgent)
+                val sameHost = url.host.lowercase() == firstHost
                 headers?.keys()?.forEach { k ->
                     // HttpURLConnection handles gzip itself only when it set the header.
-                    if (!k.equals("accept-encoding", true) && !k.equals("host", true) && !k.equals("content-length", true)) {
-                        conn.setRequestProperty(k, headers.getString(k))
-                    }
+                    if (k.equals("accept-encoding", true) || k.equals("host", true) || k.equals("content-length", true)) return@forEach
+                    if (!sameHost && (k.equals("authorization", true) || k.equals("cookie", true) || k.equals("proxy-authorization", true))) return@forEach
+                    conn.setRequestProperty(k, headers.getString(k))
                 }
-                if (body != null && method != "GET" && method != "HEAD") {
+                if (body != null && currentMethod != "GET" && currentMethod != "HEAD") {
                     conn.doOutput = true
-                    conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                    conn.outputStream.use { it.write(body!!.toByteArray(Charsets.UTF_8)) }
                 }
                 val code = conn.responseCode
                 if (code in 300..399 && code != 304 && redirects < 8) {
                     val loc = conn.getHeaderField("Location")
                     if (loc != null) {
-                        url = URL(url, loc)
+                        val next = URL(url, loc)
                         conn.disconnect()
+                        if (next.protocol != "http" && next.protocol != "https") break
+                        // 303, and 301/302 after a POST, continue as a GET without the body;
+                        // 307/308 repeat the request as it was.
+                        if (code == 303 || ((code == 301 || code == 302) && currentMethod == "POST")) {
+                            currentMethod = "GET"
+                            body = null
+                        }
+                        url = next
                         redirects++
                         continue
                     }
@@ -98,7 +120,7 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
 
             val status = conn.responseCode
             val stream: InputStream? = if (status >= 400) conn.errorStream else try { conn.inputStream } catch (_: Exception) { conn.errorStream }
-            val bytes = stream?.use { readAll(it) } ?: ByteArray(0)
+            val bytes = stream?.use { readAll(it, MAX_BODY_BYTES) } ?: ByteArray(0)
             val hdrs = JSONObject()
             conn.headerFields.forEach { (k, v) ->
                 if (k != null && v != null && !k.equals("content-encoding", true) && !k.equals("transfer-encoding", true) && !k.equals("content-length", true)) {
@@ -118,14 +140,21 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
         return out.toString()
     }
 
-    private fun readAll(s: InputStream): ByteArray {
+    /** Whole body, up to [max] bytes (the answer travels to the page as base64 text). */
+    private fun readAll(s: InputStream, max: Int): ByteArray {
         val buf = ByteArrayOutputStream()
         val chunk = ByteArray(64 * 1024)
         while (true) {
             val n = s.read(chunk)
             if (n < 0) break
+            if (buf.size() + n > max) throw java.io.IOException("response larger than ${max / (1024 * 1024)} MB")
             buf.write(chunk, 0, n)
         }
         return buf.toByteArray()
+    }
+
+    companion object {
+        /** Plenty for an 11k-channel IPTV list; a runaway answer must not exhaust memory. */
+        const val MAX_BODY_BYTES = 64 * 1024 * 1024
     }
 }

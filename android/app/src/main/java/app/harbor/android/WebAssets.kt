@@ -3,14 +3,19 @@ package app.harbor.android
 import android.content.Context
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import java.io.ByteArrayInputStream
 import java.io.FileNotFoundException
 
 /**
  * Serves the bundled web build (assets/www) at https://appassets.androidplatform.net/.
  * An https origin keeps localStorage, IndexedDB and secure-context APIs working, and
  * unknown extension-less paths fall back to index.html like the web server does.
+ *
+ * [headScript] is put at the very top of index.html, before any of the page's own scripts
+ * (MainActivity uses it to hand the bridge token to the app's page only). index.html is served
+ * without Access-Control-Allow-Origin, so no other origin can read that script.
  */
-class WebAssets(private val context: Context) {
+class WebAssets(private val context: Context, private val headScript: String) {
     fun intercept(request: WebResourceRequest): WebResourceResponse? {
         val url = request.url
         if (url.host != HOST) return null
@@ -23,18 +28,32 @@ class WebAssets(private val context: Context) {
     }
 
     private fun open(path: String): WebResourceResponse? = try {
-        val stream = context.assets.open("www/$path")
-        val mime = mimeFor(path)
-        WebResourceResponse(mime, if (mime.startsWith("text/") || mime.endsWith("javascript") || mime.endsWith("json")) "utf-8" else null, stream).apply {
-            responseHeaders = mapOf(
-                "Access-Control-Allow-Origin" to "*",
-                "Cache-Control" to if (path == "index.html") "no-cache" else "max-age=31536000",
-            )
-        }
+        if (path == "index.html") openIndex() else openAsset(path)
     } catch (_: FileNotFoundException) {
         null
     } catch (_: java.io.IOException) {
         null
+    }
+
+    private fun openIndex(): WebResourceResponse {
+        val html = context.assets.open("www/index.html").use { it.readBytes().toString(Charsets.UTF_8) }
+        val tag = "<script>$headScript</script>"
+        val at = html.indexOf("<head>", ignoreCase = true)
+        val out = if (at >= 0) html.substring(0, at + 6) + tag + html.substring(at + 6) else tag + html
+        return WebResourceResponse("text/html", "utf-8", ByteArrayInputStream(out.toByteArray(Charsets.UTF_8))).apply {
+            responseHeaders = mapOf("Cache-Control" to "no-cache")
+        }
+    }
+
+    private fun openAsset(path: String): WebResourceResponse {
+        val stream = context.assets.open("www/$path")
+        val mime = mimeFor(path)
+        return WebResourceResponse(mime, if (mime.startsWith("text/") || mime.endsWith("javascript") || mime.endsWith("json")) "utf-8" else null, stream).apply {
+            responseHeaders = mapOf(
+                "Access-Control-Allow-Origin" to "*",
+                "Cache-Control" to "max-age=31536000",
+            )
+        }
     }
 
     private fun notFound() = WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), "".byteInputStream())
