@@ -381,7 +381,14 @@ export function ViewProvider({ children }: { children: ReactNode }) {
     let lastModal: Element | null = null;
     window.__harborAndroidBack = () => {
       if (runAndroidBackHandlers()) return true;
-      const modal = document.querySelector('[role="dialog"], [aria-modal="true"]');
+      // Pop-ups and menus close on Escape; the back gesture sends one (dialogs, and menus such
+      // as the long-press/context menu, which used to be skipped).
+      // Only one that is actually on screen (some stay mounted while hidden).
+      const modal =
+        [...document.querySelectorAll('[role="dialog"], [aria-modal="true"], [role="menu"]')].find((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        }) ?? null;
       if (modal && modal !== lastModal) {
         lastModal = modal;
         (document.activeElement ?? document.body).dispatchEvent(

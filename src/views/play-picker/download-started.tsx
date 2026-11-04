@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import { Check } from "lucide-react";
 import { useEffect } from "react";
 import type { Meta } from "@/lib/cinemeta";
@@ -14,6 +15,7 @@ export function DownloadStarted({
   label?: string | null;
   onDone: () => void;
 }) {
+  useCloseOnAndroidBack(true, onDone);
   const backdrop = episode?.still || meta.background || meta.poster;
   useEffect(() => {
     const t = window.setTimeout(onDone, 1500);

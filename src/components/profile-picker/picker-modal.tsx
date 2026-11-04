@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import { Plus, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
@@ -8,6 +9,11 @@ import { ProfileTile } from "./profile-tile";
 
 export function ProfilePickerModal() {
   const { profiles, activeId, pickerOpen, pickerView, closePicker, setPickerView, selectProfile } = useProfiles();
+  // Android back: from adding/editing a profile back to the list, then close the picker.
+  useCloseOnAndroidBack(pickerOpen, () => {
+    if (pickerView.kind !== "list") setPickerView({ kind: "list" });
+    else closePicker();
+  });
   const t = useT();
 
   if (!pickerOpen) return null;

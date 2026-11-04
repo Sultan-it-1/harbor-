@@ -183,7 +183,7 @@ export function CinemaHero({
               key={i}
               onClick={() => setActive(i)}
               aria-label={t("Slide {n}", { n: i + 1 })}
-              className={`h-1.5 rounded-full transition-all duration-500 ${
+              className={`touch-hit h-1.5 rounded-full transition-all duration-500 ${
                 i === active ? "w-10 bg-ink" : "w-1.5 bg-ink-muted/55 hover:bg-ink-muted"
               }`}
             />

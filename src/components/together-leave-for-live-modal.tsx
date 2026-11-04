@@ -19,7 +19,7 @@ export function TogetherLeaveForLiveModal() {
   const name = pendingLiveSrc.title || "this channel";
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 px-6 animate-fade-in"
       onClick={cancelLeavePartyForLive}
     >

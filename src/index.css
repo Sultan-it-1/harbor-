@@ -1435,6 +1435,37 @@ html[data-phone] .phone-above-tabbar {
   }
 }
 
+/* Pages that were never laid out for the phone (genre, person, awards, service, collection…):
+   desktop side margins (48px each side) become 16px, and display titles of 52-110px a size that
+   fits a 360px screen. Phone-specific layouts use other classes and are unaffected. */
+html[data-phone] .px-12 {
+  padding-inline: 1rem;
+}
+html[data-phone] .-mx-12 {
+  margin-inline: -1rem;
+}
+html[data-phone] :is(.text-\[52px\], .text-\[56px\], .text-\[60px\], .text-\[64px\]) {
+  font-size: 2.25rem;
+}
+html[data-phone] :is(.text-\[68px\], .text-\[72px\], .text-\[80px\], .text-\[88px\], .text-\[110px\]) {
+  font-size: 2.5rem;
+}
+
+/* Tiny targets (carousel dots are 6px tall): a larger invisible touch area around them. */
+html[data-phone] .touch-hit {
+  position: relative;
+}
+html[data-phone] .touch-hit::before {
+  content: "";
+  position: absolute;
+  inset: -12px -6px;
+}
+
+/* Long-press menu on the phone: rows big enough for a finger. */
+html[data-phone] [data-context-menu] button {
+  min-height: 44px;
+}
+
 /* ---- Right-to-left ------------------------------------------------------------------- */
 /* Arabic letters join; letter-spacing (the tracking-* utilities on labels and headings) pulls
    them apart. Unlayered, so it wins over the utility layer. */

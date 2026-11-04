@@ -26,7 +26,7 @@ export function DayModal({
   }, [onClose]);
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       onClick={onClose}
       className="fixed inset-0 z-[140] flex animate-fade-in items-center justify-center bg-canvas/80 backdrop-blur-md"
     >

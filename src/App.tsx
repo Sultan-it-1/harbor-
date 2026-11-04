@@ -407,6 +407,7 @@ function Shell() {
     [preview, settings.theme],
   );
   const themeHasTopbar =
+    isPhoneLayout() ||
     layout === "sidebar" ||
     layout === "dracula" ||
     layout === "nord" ||

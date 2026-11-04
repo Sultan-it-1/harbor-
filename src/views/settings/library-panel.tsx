@@ -580,6 +580,9 @@ export function LibraryPanel({
               onChange={(v) => update({ showTraktBadge: v })}
               lockReason={!settings.mdblistKey ? t("Add an MDBList API key to unlock this.") : undefined}
             />
+            {/* There is no hover on a phone. */}
+            {!isPhoneLayout() && (
+              <>
             <ToggleRow
               label={t("Hover preview")}
               sub={t("Rest the cursor on a poster to peek at the rating, runtime, and story without opening it.")}
@@ -611,6 +614,8 @@ export function LibraryPanel({
                   ))}
                 </div>
               </div>
+            )}
+              </>
             )}
             <ToggleRow
               label={t("Show watched marks")}

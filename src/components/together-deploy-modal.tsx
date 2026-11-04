@@ -317,7 +317,7 @@ export function TogetherDeployModal({ onClose, inline = false }: { onClose: () =
   }
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       className="fixed inset-0 z-[60] flex items-center justify-center bg-canvas/70 backdrop-blur-md"
       onClick={onClose}
     >

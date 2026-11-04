@@ -220,7 +220,7 @@ export function RegionPicker({
       </button>
       {open && (
         <>
-          <div
+          <div role="dialog" aria-modal="true"
             className="fixed inset-0 z-20"
             onMouseDown={(e) => {
               e.stopPropagation();

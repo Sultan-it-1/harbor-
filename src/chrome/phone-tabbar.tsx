@@ -227,7 +227,7 @@ function Tab(props: { label: string; active: boolean; onClick: () => void; child
     <button
       onClick={props.onClick}
       aria-current={props.active ? "page" : undefined}
-      className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition-colors active:scale-95 ${
+      className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[11.5px] font-medium transition-colors active:scale-95 ${
         props.active ? "text-accent" : "text-ink-subtle"
       }`}
     >

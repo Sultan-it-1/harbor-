@@ -243,7 +243,7 @@ export function AnimeHero({
                   type="button"
                   onClick={() => setActive(i)}
                   aria-label={t("Slide {n}", { n: i + 1 })}
-                  className={`h-1.5 rounded-full transition-all duration-200 ${
+                  className={`touch-hit h-1.5 rounded-full transition-all duration-200 ${
                     i === active ? "w-10 bg-accent" : "w-6 bg-ink-subtle/35 hover:bg-ink-subtle/60"
                   }`}
                 />

@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link2, Loader2 } from "lucide-react";
 import { useT } from "@/lib/i18n";
@@ -26,6 +27,8 @@ const COL_MAX = 560;
 const COL_KEY = "harbor.guide.channel-col-px";
 
 function loadColPx(): number {
+  // Phone: a 200px channel column left ~160px of a 360px screen for the programmes.
+  if (isPhoneLayout()) return 104;
   try {
     const v = parseInt(localStorage.getItem(COL_KEY) ?? "", 10);
     if (Number.isFinite(v) && v >= COL_MIN && v <= COL_MAX) return v;

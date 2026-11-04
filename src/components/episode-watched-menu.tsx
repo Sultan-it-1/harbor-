@@ -5,6 +5,9 @@ import { setManualWatched, setManualWatchedMany, setManualWatchedUpTo } from "@/
 import { markEpisodesWatched, unmarkEpisodeWatched } from "@/lib/simkl/history";
 import { stremioIdToSimklTarget } from "@/lib/simkl/ids";
 import { useSimkl } from "@/lib/simkl/provider";
+import { isPhoneLayout } from "@/lib/platform";
+
+const PHONE = isPhoneLayout();
 
 export type WatchedMenuTarget = {
   x: number;
@@ -54,9 +57,13 @@ export function EpisodeWatchedMenu({
   return createPortal(
     <div
       role="menu"
-      style={{ left, top }}
+      data-context-menu
+      // Phone (long press on an episode): a sheet above the tab bar with finger-sized rows.
+      style={PHONE ? { bottom: "calc(60px + env(safe-area-inset-bottom) + 12px)" } : { left, top }}
       onMouseDown={(e) => e.stopPropagation()}
-      className="fixed z-[320] flex w-[224px] flex-col rounded-xl border border-edge bg-elevated p-1 shadow-[0_18px_50px_-15px_rgba(0,0,0,0.7)] animate-popover-in"
+      className={`fixed z-[320] flex flex-col rounded-xl border border-edge bg-elevated p-1 shadow-[0_18px_50px_-15px_rgba(0,0,0,0.7)] animate-popover-in ${
+        PHONE ? "inset-x-3" : "w-[224px]"
+      }`}
     >
       {target.watched ? (
         <Item

@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import type { Meta } from "@/lib/cinemeta";
 import { useView, type PlayEpisode } from "@/lib/view";
 import { openUrl } from "@/lib/window";
@@ -13,6 +14,7 @@ export function AutoExhaustedModal({
   triedCount: number;
   onBrowseManually: () => void;
 }) {
+  useCloseOnAndroidBack(true, onBrowseManually);
   const { goBack } = useView();
   const title = meta.name ?? "this title";
   const epSuffix = episode

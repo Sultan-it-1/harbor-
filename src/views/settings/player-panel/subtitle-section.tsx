@@ -552,7 +552,7 @@ function ConfirmDeleteFont({
   }, [onCancel]);
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       className="fixed inset-0 z-[140] flex items-center justify-center bg-black/65 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();

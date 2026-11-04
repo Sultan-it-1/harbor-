@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import { Check, Copy, ExternalLink, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n";
@@ -5,6 +6,7 @@ import { useTrakt } from "@/lib/trakt/provider";
 import { openUrl } from "@/lib/window";
 
 export function TraktDeviceModal({ onClose }: { onClose: () => void }) {
+  useCloseOnAndroidBack(true, onClose);
   const { connectState, beginConnect, cancelConnect } = useTrakt();
   const t = useT();
   const [copied, setCopied] = useState(false);

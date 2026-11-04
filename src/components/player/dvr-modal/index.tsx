@@ -45,7 +45,7 @@ export function DvrModal({
   if (!open) return null;
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/72 backdrop-blur-md animate-in fade-in duration-200"
     >

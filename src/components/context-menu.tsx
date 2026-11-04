@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Bookmark, BookmarkCheck, ClipboardPaste, Copy, Download, Info, ListChecks, ListPlus, Maximize, Navigation, RotateCcw, Star, UserPlus, Wallpaper } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useActiveAddon } from "@/lib/active-addon";
@@ -12,6 +13,8 @@ import { useIsFavorite, useMediaFavorites } from "@/lib/media-favorites";
 import { useInLocalWatchlist, useLocalWatchlist } from "@/lib/local-watchlist";
 import { clearTitleBackdrop, getTitleBackdrop, setTitleBackdrop } from "@/lib/title-backdrop";
 import { useT } from "@/lib/i18n";
+
+const PHONE = isPhoneLayout();
 
 const MENU_WIDTH = 220;
 const MENU_HEIGHT = 120;
@@ -84,6 +87,9 @@ export function ContextMenu() {
     const handler = (e: MouseEvent) => {
       if (e.defaultPrevented) return;
       if (topKind === "settings") {
+        // Phone: keep Android's own copy/paste bar on text fields (clipboard reading, which the
+        // app's Paste item needs, isn't granted to the WebView).
+        if (PHONE) return;
         const el = isEditableTarget(e.target) ? e.target : null;
         if (!el) return;
         e.preventDefault();
@@ -388,8 +394,13 @@ export function ContextMenu() {
     <div
       ref={ref}
       role="menu"
-      style={{ left, top, width: MENU_WIDTH }}
-      className="fixed z-[145] flex flex-col rounded-xl border border-edge bg-elevated p-1 shadow-[0_18px_50px_-15px_rgba(0,0,0,0.7)] animate-popover-in"
+      data-context-menu
+      // Phone (opened by a long press): a sheet above the tab bar with finger-sized rows, instead
+      // of a small desktop menu at the pointer that slid under the tab bar.
+      style={PHONE ? { bottom: "calc(60px + env(safe-area-inset-bottom) + 12px)" } : { left, top, width: MENU_WIDTH }}
+      className={`fixed flex flex-col rounded-xl border border-edge bg-elevated p-1 shadow-[0_18px_50px_-15px_rgba(0,0,0,0.7)] animate-popover-in ${
+        PHONE ? "inset-x-3 z-[195] max-h-[60vh] overflow-y-auto" : "z-[145]"
+      }`}
     >
       {items}
     </div>

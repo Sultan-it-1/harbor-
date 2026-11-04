@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import { Check, Copy, ExternalLink, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n";
@@ -5,6 +6,7 @@ import { useSimkl } from "@/lib/simkl/provider";
 import { openUrl } from "@/lib/window";
 
 export function SimklDeviceModal({ onClose }: { onClose: () => void }) {
+  useCloseOnAndroidBack(true, onClose);
   const { connectState, beginConnect, cancelConnect } = useSimkl();
   const t = useT();
   const [copied, setCopied] = useState(false);

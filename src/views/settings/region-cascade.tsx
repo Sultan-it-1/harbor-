@@ -112,7 +112,7 @@ function LocaleConfirm({
     return () => window.removeEventListener("keydown", onKey);
   }, [onDismiss]);
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       className="fixed inset-0 z-[200] flex items-center justify-center bg-canvas/70 p-6 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onDismiss}
     >

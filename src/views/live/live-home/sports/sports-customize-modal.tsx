@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import { useState } from "react";
 import { X, Check, Settings2 } from "lucide-react";
 import { useT, useUiLanguage } from "@/lib/i18n";
@@ -10,6 +11,7 @@ interface SportsCustomizeModalProps {
 }
 
 export function SportsCustomizeModal({ selected, onSave, onClose }: SportsCustomizeModalProps) {
+  useCloseOnAndroidBack(true, onClose);
   const t = useT();
   useUiLanguage();
   const [draft, setDraft] = useState<Set<string>>(new Set(selected));

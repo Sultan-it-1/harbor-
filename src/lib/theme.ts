@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import auroraPreview from "@/assets/theme-previews/aurora.png";
 import crunchPreview from "@/assets/theme-previews/crunchy.png";
 import draculaPreview from "@/assets/theme-previews/dracula.png";
@@ -544,7 +545,10 @@ export function applyTheme(theme: ThemeSettings): void {
   const layout: ThemeLayout = preset?.layout ?? "sidebar";
   const cardStyle: ThemeCardStyle = preset?.cardStyle ?? "flat";
   const buttonStyle: ThemeButtonStyle = preset?.buttonStyle ?? "flat";
-  root.dataset.themeLayout = layout;
+  // Phone: the app has one layout (tab bar + top bar with Back and Downloads). A theme's desktop
+  // layout (Royal, Noir, Aurora, MinUI, Velvet, Stremio…) used to remove that top bar and force
+  // desktop spacing; on the phone themes change colours, fonts and cards only.
+  root.dataset.themeLayout = isPhoneLayout() ? "sidebar" : layout;
   root.dataset.themeCard = cardStyle;
   root.dataset.themeButton = buttonStyle;
   root.dataset.themeBokeh = preset?.bokeh ? "on" : "off";

@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { AlertCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ActiveBanner } from "./custom-themes-section/active-banner";
@@ -163,7 +164,8 @@ export function CustomThemesSection() {
           setImportedNotice(null);
           setLibraryOpen(true);
         }}
-        onOpenStudio={() => setStudioOpen(true)}
+        // The theme studio is a code editor with a file tree: a desktop tool, not offered on the phone.
+        onOpenStudio={isPhoneLayout() ? undefined : () => setStudioOpen(true)}
         onImport={pickImportFile}
         libraryCount={entries.length}
         importedNotice={importedNotice}

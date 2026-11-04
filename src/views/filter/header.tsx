@@ -97,7 +97,7 @@ function GenreSwitcher({
         </span>
       </button>
       {open && (
-        <div className="absolute start-0 top-[calc(100%+12px)] z-30 grid max-h-[420px] w-[440px] grid-cols-2 gap-1 overflow-y-auto rounded-2xl border border-edge bg-surface/98 p-1.5 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+        <div className="absolute start-0 top-[calc(100%+12px)] z-30 grid max-h-[420px] w-[440px] max-w-[calc(100vw-2rem)] grid-cols-2 gap-1 overflow-y-auto rounded-2xl border border-edge bg-surface/98 p-1.5 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.55)] backdrop-blur-xl">
           {names.map((name) => {
             const isActive = name === activeName;
             return (

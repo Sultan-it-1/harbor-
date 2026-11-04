@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import { Radio, Users, X } from "lucide-react";
 import { useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
@@ -15,6 +16,7 @@ export function P2pConfirmModal({
   onConfirm: (remember: boolean) => void;
   onCancel: () => void;
 }) {
+  useCloseOnAndroidBack(true, onCancel);
   const [remember, setRemember] = useState(false);
   const backdrop = meta.background || meta.poster;
   const title = stream.parsedTitle || stream.title || stream.name || "This source";

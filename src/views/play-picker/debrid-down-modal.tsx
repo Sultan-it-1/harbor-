@@ -1,3 +1,4 @@
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import type { Meta } from "@/lib/cinemeta";
 
 export function DebridDownModal({
@@ -9,6 +10,7 @@ export function DebridDownModal({
   onTryAgain: () => void;
   onBack: () => void;
 }) {
+  useCloseOnAndroidBack(true, onBack);
   const backdrop = meta.background || meta.poster;
   return (
     <main className="fixed inset-0 z-[120] overflow-hidden bg-black">

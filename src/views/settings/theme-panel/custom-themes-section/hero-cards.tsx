@@ -10,7 +10,8 @@ export function HeroCards({
   importedNotice,
 }: {
   onOpenLibrary: () => void;
-  onOpenStudio: () => void;
+  /** Absent on the phone: the studio is a desktop tool. */
+  onOpenStudio?: () => void;
   onImport: () => void;
   libraryCount: number;
   importedNotice?: string | null;
@@ -26,13 +27,15 @@ export function HeroCards({
         accent
         badge={importedNotice}
       />
-      <HeroCard
-        icon={<Palette size={28} strokeWidth={2} />}
-        title="Build a Theme"
-        body="Pick a layout, set colors and fonts. No code needed."
-        cta="Open studio"
-        onClick={onOpenStudio}
-      />
+      {onOpenStudio && (
+        <HeroCard
+          icon={<Palette size={28} strokeWidth={2} />}
+          title="Build a Theme"
+          body="Pick a layout, set colors and fonts. No code needed."
+          cta="Open studio"
+          onClick={onOpenStudio}
+        />
+      )}
       <HeroCard
         icon={<FileDown size={28} strokeWidth={2} />}
         title="Import a Theme"

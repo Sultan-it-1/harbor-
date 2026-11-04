@@ -28,7 +28,7 @@ export function CastErrorModal({
   if (!error) return null;
 
   return (
-    <div className="pointer-events-auto fixed inset-0 z-50 flex animate-[harbor-cast-err-in_180ms_ease-out] items-center justify-center bg-canvas/85 backdrop-blur-md">
+    <div role="dialog" aria-modal="true" className="pointer-events-auto fixed inset-0 z-50 flex animate-[harbor-cast-err-in_180ms_ease-out] items-center justify-center bg-canvas/85 backdrop-blur-md">
       <div
         className="relative mx-6 w-full max-w-[440px] rounded-[20px] border border-edge bg-elevated p-7 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.9)]"
         onClick={(e) => e.stopPropagation()}
