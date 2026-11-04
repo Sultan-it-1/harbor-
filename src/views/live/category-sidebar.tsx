@@ -12,6 +12,7 @@ export function CategorySidebar({
   groupLogos,
   favoritesCount = 0,
   sourceId,
+  className = "w-[220px] shrink-0 border-e border-s border-edge-soft/40 bg-surface/45",
 }: {
   groups: string[];
   active: string | null;
@@ -20,6 +21,7 @@ export function CategorySidebar({
   groupLogos: Map<string, string | null>;
   favoritesCount?: number;
   sourceId: string;
+  className?: string;
 }) {
   const t = useT();
   const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
@@ -80,7 +82,7 @@ export function CategorySidebar({
     <aside
       role="listbox"
       aria-label={t("Channel categories")}
-      className="flex w-[220px] shrink-0 flex-col border-e border-s border-edge-soft/40 bg-surface/45"
+      className={`flex flex-col ${className}`}
       onKeyDown={handleKey}
     >
       <div className="border-b border-edge-soft/40 px-3 py-2">

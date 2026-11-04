@@ -163,7 +163,16 @@ export function PhoneTabBar() {
           >
             {(a) => <LibraryIcon active={a} />}
           </Tab>
-          <Tab label={t("More")} active={moreOpen || moreActive} onClick={() => setMoreOpen((o) => !o)}>
+          <Tab
+            label={t("More")}
+            active={moreOpen || moreActive}
+            onClick={() => {
+              // From Search the sheet has to open at once: it used to open underneath the search
+              // page (which sits above it), so More looked dead while Search was showing.
+              setMoreOpen(searchOpen ? true : !moreOpen);
+              setSearchOpen(false);
+            }}
+          >
             {(a) => <MoreHorizontal size={22} strokeWidth={a ? 2.4 : 1.8} />}
           </Tab>
         </div>

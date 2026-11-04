@@ -5,7 +5,7 @@ import { installFromUrl } from "@/lib/addon-store";
 import { isAdultText } from "@/lib/addons-store/adult-filter";
 import { pushActivityHint } from "@/lib/discord/activity-hint";
 import { clearPendingDeepLink } from "@/lib/deep-link";
-import { androidApi, androidFetch } from "@/lib/android";
+import { androidApi, androidFetch, pushAndroidBackHandler } from "@/lib/android";
 import { blocksFraming } from "@/lib/frame-policy";
 import { isLinuxDesktop, isPhoneLayout, isWeb } from "@/lib/platform";
 import { openUrl } from "@/lib/window";
@@ -205,6 +205,18 @@ function InstallerViewport({
   phaseRef.current = phase;
   const submitRef = useRef(submit);
   submitRef.current = submit;
+
+  // Android: the back gesture closes this screen and nothing else. It used to fall through to
+  // the page underneath, which jumped to Home behind the setup screen, so the X then landed on
+  // Home and a second back left the app. (While an install is running, back just waits.)
+  useEffect(
+    () =>
+      pushAndroidBackHandler(() => {
+        if (phaseRef.current.kind !== "installing") onClose();
+        return true;
+      }),
+    [onClose],
+  );
 
   useEffect(() => {
     const isBusy = () =>

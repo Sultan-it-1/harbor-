@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { ListFilter, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlaylistMutations } from "./live/hooks/use-playlist-mutations";
 import { useLiveActions } from "./live/hooks/use-live-actions";
@@ -10,6 +10,7 @@ import { FAVORITES_GROUP_KEY, useFavorites } from "@/lib/iptv/favorites";
 import { clearPlaylistCache, getCachedPlaylist } from "@/lib/iptv/store";
 import { pushActivityHint } from "@/lib/discord/activity-hint";
 import type { IptvChannel, IptvPlaylistSource } from "@/lib/iptv/types";
+import { CategoryDrawer } from "./live/category-drawer";
 import { CategorySidebar } from "./live/category-sidebar";
 import { ChannelGrid, EmptyResult, ErrorBlock } from "./live/channel-grid";
 import { GridSkeleton, GuideSkeleton } from "./live/skeletons";
@@ -25,11 +26,15 @@ import { useXtreamEpgFallback } from "./live/hooks/use-xtream-epg-fallback";
 import { useIptvPlaylist } from "./live/hooks/use-iptv-playlist";
 import { MultiviewView } from "./multiview";
 import { ViewModeToggle, type ViewMode } from "./live/view-mode-toggle";
-import { isWindowsDesktop } from "@/lib/platform";
+import { isPhoneLayout, isWindowsDesktop } from "@/lib/platform";
 
 const ACTIVE_KEY = "harbor.iptv.active";
 const MODE_KEY = "harbor.iptv.viewMode";
 const EMPTY_CHANNELS: IptvChannel[] = [];
+
+// Android app: the 220px categories column left half of a phone for the channels (the header and
+// the list ran off the screen), so there it is a drawer opened from a button next to the search.
+const PHONE = isPhoneLayout();
 
 function readActiveId(): string | null {
   try {
@@ -135,6 +140,11 @@ export function LiveView({ active }: { active: boolean }) {
     setGroup(favoritesCountRef.current > 0 ? FAVORITES_GROUP_KEY : null);
     setQuery("");
   }, [activeId]);
+  const [catsOpen, setCatsOpen] = useState(false);
+  const closeCats = useCallback(() => setCatsOpen(false), []);
+  useEffect(() => {
+    setCatsOpen(false);
+  }, [activeId, mode]);
 
   const region = settings.region || "US";
   const preferredLanguages = settings.preferredLanguages.length > 0
@@ -225,6 +235,11 @@ export function LiveView({ active }: { active: boolean }) {
     return pushActivityHint({ details: "Browsing the TV guide", state: "Live TV" });
   }, [active, mode]);
 
+  const hasCategories =
+    !!playlist && sortedGroups.length > 0 && mode !== "multiview" && mode !== "home" && state.kind !== "error";
+  const catsLabel =
+    group === null ? t("Categories") : group === FAVORITES_GROUP_KEY ? t("Favorites") : group;
+
   if (sources.length === 0) {
     return (
       <main data-rail-flush className="relative flex min-h-0 flex-1 flex-col overflow-y-auto pt-20">
@@ -235,7 +250,7 @@ export function LiveView({ active }: { active: boolean }) {
 
   return (
     <main data-rail-flush className={`relative flex min-h-0 flex-1 ${immersive ? "pt-0" : "pt-20"}`}>
-      {playlist && sortedGroups.length > 0 && mode !== "multiview" && mode !== "home" && state.kind !== "error" && (
+      {hasCategories && !PHONE && (
         <CategorySidebar
           groups={sortedGroups}
           active={group}
@@ -246,10 +261,22 @@ export function LiveView({ active }: { active: boolean }) {
           sourceId={activeId ?? ""}
         />
       )}
+      {hasCategories && PHONE && catsOpen && (
+        <CategoryDrawer
+          groups={sortedGroups}
+          active={group}
+          onSelect={setGroup}
+          onClose={closeCats}
+          counts={counts}
+          groupLogos={groupLogos}
+          favoritesCount={favorites.count}
+          sourceId={activeId ?? ""}
+        />
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
         {!immersive && (
         <header
-          className="relative z-[40] flex shrink-0 flex-wrap items-center gap-2.5 border-b border-edge-soft/40 bg-surface px-6 py-2.5"
+          className={`relative z-[40] flex shrink-0 flex-wrap items-center gap-2.5 border-b border-edge-soft/40 bg-surface py-2.5 ${PHONE ? "px-4" : "px-6"}`}
         >
           <SourcePicker
             sources={managedSources}
@@ -280,24 +307,39 @@ export function LiveView({ active }: { active: boolean }) {
               {t("Pick channels into the grid below. Audio follows the highlighted tile.")}
             </div>
           ) : (
-            <div className="flex h-11 flex-1 min-w-[220px] items-center gap-2.5 rounded-xl border border-edge-soft/55 bg-elevated px-3.5">
-              <Search size={15} strokeWidth={2} className="text-ink-subtle" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  if (e.target.value && mode === "home") setMode("grid");
-                }}
-                placeholder={t("Search {n} channels", { n: playlist?.channels.length ?? 0 })}
-                className="flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink-subtle focus:outline-none"
-              />
-              {query && (
+            <div className="flex min-w-[220px] flex-1 items-center gap-2">
+              <div className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-edge-soft/55 bg-elevated px-3.5">
+                <Search size={15} strokeWidth={2} className="shrink-0 text-ink-subtle" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    if (e.target.value && mode === "home") setMode("grid");
+                  }}
+                  placeholder={t("Search {n} channels", { n: playlist?.channels.length ?? 0 })}
+                  className="min-w-0 flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink-subtle focus:outline-none"
+                />
+                {query && (
+                  <button
+                    onClick={() => setQuery("")}
+                    className="shrink-0 text-[12.5px] font-medium text-ink-subtle transition-colors hover:text-ink"
+                  >
+                    {t("Clear")}
+                  </button>
+                )}
+              </div>
+              {PHONE && hasCategories && (
                 <button
-                  onClick={() => setQuery("")}
-                  className="text-[12.5px] font-medium text-ink-subtle transition-colors hover:text-ink"
+                  type="button"
+                  onClick={() => setCatsOpen(true)}
+                  aria-label={t("Categories")}
+                  className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border bg-elevated px-3 text-[13px] font-medium transition-colors active:bg-raised ${
+                    group === null ? "border-edge-soft/55 text-ink-muted" : "border-accent/60 text-ink"
+                  }`}
                 >
-                  {t("Clear")}
+                  <ListFilter size={15} strokeWidth={2} className="shrink-0" />
+                  <span dir="auto" className="max-w-[92px] truncate">{catsLabel}</span>
                 </button>
               )}
             </div>
@@ -323,7 +365,7 @@ export function LiveView({ active }: { active: boolean }) {
             />
           </div>
         ) : (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 pt-5">
+        <div ref={scrollRef} className={`flex-1 overflow-y-auto pt-5 ${PHONE ? "px-4" : "px-6"}`}>
           {state.kind === "error" ? (
             <ErrorBlock
               message={state.message}
