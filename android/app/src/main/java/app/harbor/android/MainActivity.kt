@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
     private var pageLoaded = false
     private var pendingOpenDownloads = false
     private var imeVisible = false
+    private var webPaused = false
     /** A stremio:// link that opened the app: kept until the page asks for it (takeLink). */
     @Volatile private var pendingLink: String? = null
     private val bridgeToken: String = newToken()
@@ -518,6 +519,29 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         // Out of sight (incl. the picture-in-picture window being closed): pause the video.
         player.onHostStop()
+        // Nothing for the page to do in the background (no season queue or subtitle search
+        // running there): stop its timers and rendering until the app is back. Downloads carry on
+        // in the service either way.
+        if (!player.isShowing && System.currentTimeMillis() > DownloadService.keepAliveUntil) {
+            webView.onPause()
+            webView.pauseTimers()
+            webPaused = true
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (webPaused) {
+            webView.resumeTimers()
+            webView.onResume()
+            webPaused = false
+        }
+    }
+
+    /** Android is short of memory: the page drops pages it keeps mounted and its caches. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (pageLoaded) webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('harbor:trim-memory',{detail:$level}))", null)
     }
 
     override fun onDestroy() {

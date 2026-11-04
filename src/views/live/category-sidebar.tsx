@@ -220,7 +220,7 @@ function CategoryItem({
   const showLogo = logoUrl && !errored;
   const hasActions = !!groupName && !!sourceId;
   return (
-    <div className="group/cat relative">
+    <div className="group/cat relative [contain-intrinsic-size:auto_52px] [content-visibility:auto]">
       <button
         data-cat-idx={idx}
         role="option"

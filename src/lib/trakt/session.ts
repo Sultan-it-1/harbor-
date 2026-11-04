@@ -1,5 +1,6 @@
 import { REFRESH_THRESHOLD_SEC } from "./config";
 import type { TraktSession } from "./types";
+import { setItemWithRecovery } from "@/lib/storage-recovery";
 
 const STORAGE_KEY = "harbor.trakt.session.v1";
 
@@ -48,7 +49,8 @@ function read(): TraktSession | null {
 
 function write(session: TraktSession | null): void {
   try {
-    if (session) localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    // A full quota prunes caches first, and says so on screen if even that fails.
+    if (session) setItemWithRecovery(STORAGE_KEY, JSON.stringify(session));
     else localStorage.removeItem(STORAGE_KEY);
   } catch {
     return;

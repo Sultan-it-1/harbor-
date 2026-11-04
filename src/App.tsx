@@ -41,6 +41,7 @@ import { TogetherInviteToast } from "@/components/together-invite-toast";
 import { TogetherSummonToast } from "@/components/together-summon-toast";
 import { TogetherParticipantLeftToast } from "@/components/together-participant-left-toast";
 import { AnilistSyncToast } from "@/components/anilist/anilist-sync-toast";
+import { StorageFullToast } from "@/components/storage-full-toast";
 import { AnilistAvatarSync } from "@/components/anilist/anilist-avatar-sync";
 import { TogetherLeaveForLiveModal } from "@/components/together-leave-for-live-modal";
 import { ThemeBackdrop } from "@/components/theme-backdrop";
@@ -141,6 +142,23 @@ function useViewPreloader() {
       typeof win.requestIdleCallback === "function"
         ? win.requestIdleCallback(cb, { timeout: 2500 })
         : window.setTimeout(cb, 1200);
+    if (isPhoneLayout()) {
+      // Phone: only what the tab bar and a tap on a poster open next, one chunk per idle slot.
+      // All 19 at once held a mid-range phone's main thread for over a second after start-up.
+      const queue = [importDetail, importPlayPicker, importDiscover, importLibrary, importMovies, importShows];
+      const next = () => {
+        if (cancelled) return;
+        const load = queue.shift();
+        if (!load) return;
+        void load()
+          .catch(() => {})
+          .finally(() => schedule(next));
+      };
+      schedule(next);
+      return () => {
+        cancelled = true;
+      };
+    }
     schedule(() => {
       if (cancelled) return;
       void importDetail();
@@ -170,7 +188,9 @@ function useViewPreloader() {
 }
 
 const KEEP_ALIVE_MS = 1500;
-const IDLE_EVICT_MS = 60 * 1000;
+// Pages you left stay mounted for a quick way back, then are dropped. The phone has less memory
+// (16.8k DOM nodes after 8 pages in the audit): 25 s there.
+const IDLE_EVICT_MS = isPhoneLayout() ? 25 * 1000 : 60 * 1000;
 const PRESSURE_EVICT_MS = 1500;
 const UI_SCALE_MIN = 0.8;
 const UI_SCALE_MAX = 1.6;
@@ -256,6 +276,7 @@ export function App() {
                       <TogetherSummonToast />
                       <TogetherParticipantLeftToast />
                       <AnilistSyncToast />
+                      <StorageFullToast />
                       <TogetherLeaveForLiveModal />
                       <TogetherLocationPublisher />
                       <DiscordPresence />

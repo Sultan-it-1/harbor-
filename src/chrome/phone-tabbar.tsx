@@ -155,10 +155,12 @@ export function PhoneTabBar() {
         </div>
       )}
 
+      {/* Solid, no backdrop blur: the bar never leaves the screen and a blur behind it is
+          redrawn on every scrolled frame. */}
       <nav
         data-phone-tabbar
         hidden={keyboardUp}
-        className="fixed inset-x-0 bottom-0 z-[190] border-t border-edge-soft bg-canvas/95 backdrop-blur-xl"
+        className="fixed inset-x-0 bottom-0 z-[190] border-t border-edge-soft bg-canvas/[0.98]"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="mx-auto flex max-w-xl items-stretch justify-around" style={{ height: PHONE_TABBAR_H }}>

@@ -148,6 +148,8 @@ const chrome: Record<string, string> = {
   "No tabs selected": "لم يتم تحديد أي تبويبات",
   "Profiles": "البروفايلات",
   "Your Stremio session has ended (signed out elsewhere, or the password changed). Sign in again to see your library.": "انتهت جلسة Stremio (سُجّل الخروج من مكان آخر أو تغيّرت كلمة المرور). سجّل الدخول مرة ثانية لترى مكتبتك.",
+  "Storage is full": "مساحة التخزين ممتلئة",
+  "Harbor couldn't save a change (a sign-in or a setting), even after clearing its caches. Free some space on the phone, then try again.": "ما قدر Harbor يحفظ تغيير (تسجيل دخول أو إعداد) حتى بعد ما مسح الكاش. فضّ مساحة في الجوال وجرّب مرة ثانية.",
 };
 
 export default chrome;

@@ -136,7 +136,25 @@ export function startMaintenance(): () => void {
   };
   document.addEventListener("visibilitychange", onVisibility);
 
+  // Android app: the system says memory is short (onTrimMemory: RUNNING_LOW and up, or the UI
+  // went out of sight): act as under memory pressure for a while — pages that were kept mounted
+  // are dropped sooner and the caches are trimmed.
+  let trimTimer: number | null = null;
+  const onTrim = (e: Event) => {
+    const level = Number((e as CustomEvent<number>).detail) || 0;
+    if (level < 10) return;
+    setPressure(true);
+    if (trimTimer != null) window.clearTimeout(trimTimer);
+    trimTimer = window.setTimeout(() => {
+      trimTimer = null;
+      setPressure(false);
+    }, 30_000);
+  };
+  window.addEventListener("harbor:trim-memory", onTrim);
+
   return () => {
+    window.removeEventListener("harbor:trim-memory", onTrim);
+    if (trimTimer != null) window.clearTimeout(trimTimer);
     started = false;
     window.clearInterval(interval);
     window.clearInterval(pressureInterval);

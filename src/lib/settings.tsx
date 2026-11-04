@@ -5,6 +5,7 @@ import { effectiveTmdbLanguage, setTmdbLanguage } from "@/lib/providers/tmdb/tmd
 import { setPosterBaseUrl } from "@/lib/providers/rpdb";
 import { setMdblistBatchKey } from "@/lib/providers/mdblist-batch";
 import { setUiLanguage } from "@/lib/i18n";
+import { setItemWithRecovery } from "@/lib/storage-recovery";
 import { STORAGE_KEY } from "./settings/defaults";
 import { loadStoredSettings } from "./settings/load";
 import { readSettingsFile, writeSettingsFile } from "./settings/file-store";
@@ -76,16 +77,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       void _drop;
       const settingsToSave = { ...settings, theme: themeRest };
       const json = JSON.stringify(settingsToSave);
-      localStorage.setItem(STORAGE_KEY, json);
       window.clearTimeout(fileTimerRef.current);
       fileTimerRef.current = window.setTimeout(() => void writeSettingsFile(json), 600);
-    } catch (e) {
-      if (e instanceof DOMException && (e.name === "QuotaExceededError" || e.code === 22)) {
+      // Caches are pruned first if the quota is full; only then is the avatar (the one big
+      // field) dropped, and the user told if even that is not enough.
+      if (!setItemWithRecovery(STORAGE_KEY, json) && settings.harborAvatar != null) {
         console.warn("[settings] localStorage quota exceeded, dropping avatar");
-        if (settings.harborAvatar != null) {
-          setSettings((s) => ({ ...s, harborAvatar: null }));
-        }
+        setSettings((s) => ({ ...s, harborAvatar: null }));
       }
+    } catch {
+      /* not a quota error: nothing to recover */
     }
   }, [settings]);
 

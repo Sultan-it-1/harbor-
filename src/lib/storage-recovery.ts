@@ -51,6 +51,13 @@ export function setItemWithRecovery(key: string, value: string): boolean {
     }
   }
   console.warn(`[storage] giving up on "${key}" after pruning every known cache`);
+  // Say so on screen: a sign-in or setting that only lives in memory is lost when Android ends
+  // the app (StorageFullToast).
+  try {
+    window.dispatchEvent(new CustomEvent("harbor:storage-full", { detail: key }));
+  } catch {
+    /* no window (tests) */
+  }
   return false;
 }
 

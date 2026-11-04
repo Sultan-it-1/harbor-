@@ -1,5 +1,5 @@
 import { ListFilter, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { usePlaylistMutations } from "./live/hooks/use-playlist-mutations";
 import { useLiveActions } from "./live/hooks/use-live-actions";
 import { confirmDialog } from "@/lib/dialog";
@@ -122,6 +122,9 @@ export function LiveView({ active }: { active: boolean }) {
     () => (favoritesCountRef.current > 0 ? FAVORITES_GROUP_KEY : null),
   );
   const [query, setQuery] = useState("");
+  // The box shows each key at once; filtering thousands of channels follows at low priority
+  // (100-200 ms a key on a slow phone with 11k channels when it ran in the same render).
+  const listQuery = useDeferredValue(query);
   const [mode, setModeState] = useState<ViewMode>(() => readMode());
   const setMode = useCallback((m: ViewMode) => {
     setModeState(m);
@@ -206,7 +209,7 @@ export function LiveView({ active }: { active: boolean }) {
     preferredLanguages,
     mode,
     group,
-    query,
+    query: listQuery,
     favorites,
     allPlaylists,
     allSources,
@@ -416,7 +419,7 @@ export function LiveView({ active }: { active: boolean }) {
                     onInfo={(meta) => openMeta(meta, { liveContext: true })}
                     epg={epg}
                     nowMs={nowMs}
-                    resetKey={`${activeId}|${group ?? ""}|${query}`}
+                    resetKey={`${activeId}|${group ?? ""}|${listQuery}`}
                   />
                 </div>
               )}
@@ -427,7 +430,7 @@ export function LiveView({ active }: { active: boolean }) {
                   nowMs={nowMs}
                   onPlay={handlePlay}
                   onPlayCatchup={handlePlayCatchup}
-                  resetKey={`${activeId}|${group ?? ""}|${query}`}
+                  resetKey={`${activeId}|${group ?? ""}|${listQuery}`}
                 />
               )}
             </>

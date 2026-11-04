@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import type { HiddenTabs } from "./lockable-tabs";
+import { setItemWithRecovery } from "./storage-recovery";
 import type { ContentFilters } from "./settings";
 
 export const PROFILE_COLORS = [
@@ -170,7 +171,8 @@ function readState(): ProfilesState {
 
 function writeState(state: ProfilesState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // A full quota prunes caches first, and says so on screen if even that fails.
+    setItemWithRecovery(STORAGE_KEY, JSON.stringify(state));
   } catch {
     return;
   }

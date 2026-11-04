@@ -16,7 +16,7 @@ import {
   type XtreamCreds,
 } from "../xtream";
 import { fetchXtreamVodAndSeries } from "../xtream-vod";
-import type { ProviderShape } from "./detect";
+import { detectProviderShape, type ProviderShape } from "./detect";
 
 const MIDDLEWARE_CANDIDATES = ["/iptv/m3u", "/m3u", "/playlist.m3u", "/get.php?type=m3u_plus"];
 
@@ -41,6 +41,16 @@ async function loadXtream(src: IptvPlaylistSource, creds: XtreamCreds): Promise<
   }
   void hydrateXtreamVod(src, creds, live);
   return shapePlaylist(src, live);
+}
+
+/**
+ * A playlist shown from the copy saved on the device holds live channels only (VOD and series
+ * are fetched after each load): fetch them now, as a network load does.
+ */
+export function resumeVodHydration(src: IptvPlaylistSource, playlist: IptvPlaylist): void {
+  const shape = detectProviderShape(src);
+  if (shape.kind !== "xtream") return;
+  void hydrateXtreamVod(src, shape.creds, playlist.channels);
 }
 
 async function hydrateXtreamVod(

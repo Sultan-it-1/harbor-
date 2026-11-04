@@ -1,11 +1,42 @@
 import { androidFetch, isAndroidApp } from "@/lib/android";
+import { idbDelete, idbGet, idbSet } from "@/lib/idb-kv";
 import { filterChannelsForDisplay } from "./divider-filter";
-import { loadFromShape } from "./ingest/load";
+import { loadFromShape, resumeVodHydration } from "./ingest/load";
 import { detectProviderShape } from "./ingest/detect";
 import type { IptvChannel, IptvPlaylist, IptvPlaylistSource } from "./types";
 import { clearSeriesInfoCache } from "./xtream-vod";
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+// The last list fetched for each playlist is kept on the device (IndexedDB), so a cold start
+// shows Live at once instead of downloading and parsing megabytes first; a copy older than
+// CACHE_TTL_MS is shown and refreshed behind it. Without a network the saved list still shows.
+const SNAPSHOT_PREFIX = "iptv.playlist.";
+const SNAPSHOT_MAX_CHANNELS = 150_000;
+
+type Snapshot = { sig: string; playlist: IptvPlaylist };
+
+/** Ties a saved list to the source as it was: a changed URL or login makes it stale. */
+function sourceSig(src: IptvPlaylistSource): string {
+  const raw = [src.url, src.kind ?? "", src.xtream?.server ?? "", src.xtream?.username ?? "", src.xtream?.password ?? ""].join("\u0001");
+  let h = 0x811c9dc5;
+  for (let i = 0; i < raw.length; i++) {
+    h ^= raw.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36) + ":" + raw.length;
+}
+
+async function readSnapshot(src: IptvPlaylistSource): Promise<IptvPlaylist | null> {
+  const snap = await idbGet<Snapshot>(SNAPSHOT_PREFIX + src.id);
+  if (!snap || snap.sig !== sourceSig(src) || !snap.playlist || !Array.isArray(snap.playlist.channels)) return null;
+  return { ...snap.playlist, name: src.name, epgUrl: src.epgUrl ?? null };
+}
+
+function writeSnapshot(src: IptvPlaylistSource, playlist: IptvPlaylist): void {
+  if (playlist.channels.length === 0 || playlist.channels.length > SNAPSHOT_MAX_CHANNELS) return;
+  const snap: Snapshot = { sig: sourceSig(src), playlist };
+  void idbSet(SNAPSHOT_PREFIX + src.id, snap);
+}
 
 const cache = new Map<string, IptvPlaylist>();
 const inflight = new Map<string, Promise<IptvPlaylist>>();
@@ -39,6 +70,7 @@ export function clearPlaylistCache(id?: string) {
     vodHydrated.delete(id);
     inflight.delete(id);
     clearSeriesInfoCache(id);
+    void idbDelete(SNAPSHOT_PREFIX + id);
   } else {
     cache.clear();
     vodHydrated.clear();
@@ -58,18 +90,41 @@ export async function loadPlaylist(
   }
   const pending = inflight.get(src.id);
   if (pending && !opts?.force) return pending;
-  const promise = loadFromShape(src, detectProviderShape(src));
+  let fromSnapshot = false;
+  const promise = (async () => {
+    if (!opts?.force && !existing) {
+      const saved = await readSnapshot(src);
+      if (saved) {
+        fromSnapshot = true;
+        return saved;
+      }
+    }
+    const fresh = await loadFromShape(src, detectProviderShape(src));
+    writeSnapshot(src, fresh);
+    return fresh;
+  })();
   inflight.set(src.id, promise);
+  let result: IptvPlaylist;
   try {
-    const result = await promise;
+    result = await promise;
     if (inflight.get(src.id) === promise) {
       cache.set(src.id, result);
       notify();
     }
-    return result;
   } finally {
     if (inflight.get(src.id) === promise) inflight.delete(src.id);
   }
+  if (fromSnapshot && cache.get(src.id) === result) {
+    if (Date.now() - result.fetchedAt >= CACHE_TTL_MS) {
+      // Old copy: fetch the current list behind it (it replaces this one when it arrives, VOD
+      // included). A failure (offline) keeps the saved one on screen.
+      void loadPlaylist(src, { force: true }).catch(() => {});
+    } else {
+      // Recent copy: an Xtream source's VOD and series are still fetched, as a network load does.
+      resumeVodHydration(src, result);
+    }
+  }
+  return result;
 }
 
 export function markVodHydrated(id: string): boolean {
@@ -100,6 +155,10 @@ export async function fetchM3uText(url: string): Promise<string> {
   }
   if (!res.ok) {
     throw new Error(httpErrorMessage(res.status, res.statusText));
+  }
+  const declared = Number(res.headers.get("content-length") ?? "");
+  if (declared > PARSE_LIMIT_BYTES) {
+    throw new Error(`Playlist is too large (${(declared / 1024 / 1024).toFixed(1)} MB). 80 MB limit.`);
   }
   let text: string;
   try {

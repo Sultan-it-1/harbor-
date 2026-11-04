@@ -10,6 +10,7 @@ import {
 } from "react";
 import { stremioSourceProfileId, useProfiles, type Profile } from "./profiles";
 import { getUser, login as apiLogin, type User } from "./stremio";
+import { setItemWithRecovery } from "./storage-recovery";
 
 type Session = { authKey: string; user: User };
 type AuthValue = {
@@ -40,7 +41,8 @@ function readProfileSession(id: string): Session | null {
 
 function writeProfileSession(id: string, session: Session | null): void {
   try {
-    if (session) localStorage.setItem(profileAuthKey(id), JSON.stringify(session));
+    // A full quota prunes caches first, and says so on screen if even that fails.
+    if (session) setItemWithRecovery(profileAuthKey(id), JSON.stringify(session));
     else localStorage.removeItem(profileAuthKey(id));
   } catch {
     return;
