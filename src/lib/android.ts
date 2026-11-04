@@ -20,6 +20,11 @@ type HarborAndroidApi = {
   dlAddSubs?(id: string, json: string): boolean;
   dlFiles?(id: string): string;
   dlStorage?(): string;
+  /** A fresh link for an expired download (keeps what was downloaded). */
+  dlRelink?(id: string, url: string, headersJson: string): boolean;
+  /** Downloads only on Wi-Fi (default on) or also on mobile data. */
+  dlSetWifiOnly?(on: boolean): void;
+  dlWifiOnly?(): boolean;
   /** Background work in the page (season queue, subtitle searches): keep the app running. */
   dlKeepAlive?(on: boolean): void;
   /** Whether Harbor may run in the background without battery limits, and the system prompt for it. */

@@ -144,8 +144,12 @@ class DownloadService : Service() {
         stopSelf()
     }
 
-    /** Android 15+: a data-sync service may run 6 hours a day; the downloads carry on without it. */
-    override fun onTimeout(startId: Int, fgsType: Int) = shutdown()
+    /** Android 15+: a data-sync service may run 6 hours a day. Without it Android may stop the
+     *  downloads at any time, so say so instead of letting them stall unnoticed. */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (Downloads.get(this).hasPendingWork()) notifyPaused(this)
+        shutdown()
+    }
 
     override fun onDestroy() {
         stopping = true
@@ -170,6 +174,34 @@ class DownloadService : Service() {
                 .putExtra(MainActivity.EXTRA_OPEN_DOWNLOADS, true)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             return PendingIntent.getActivity(ctx, 1, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+
+        private const val PAUSED_NOTIFICATION_ID = 4102
+
+        /** "Downloads paused — tap to continue": after Android's daily background limit, or a
+         *  reboot, unfinished downloads only go on once Harbor is opened again. */
+        fun notifyPaused(ctx: Context) {
+            createChannel(ctx)
+            val n = NotificationCompat.Builder(ctx, CHANNEL)
+                .setSmallIcon(R.drawable.ic_download)
+                .setColor(HarborColors.ACCENT)
+                .setContentTitle("توقفت التحميلات مؤقتاً")
+                .setContentText("اضغط لمتابعة التحميلات من حيث وقفت")
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(openDownloads(ctx))
+                .build()
+            try {
+                NotificationManagerCompat.from(ctx).notify(PAUSED_NOTIFICATION_ID, n)
+            } catch (_: SecurityException) {
+            }
+        }
+
+        fun clearPausedNotice(ctx: Context) {
+            try {
+                NotificationManagerCompat.from(ctx).cancel(PAUSED_NOTIFICATION_ID)
+            } catch (_: Exception) {
+            }
         }
 
         /** "Download finished" / "Download failed" for one title (tapping opens Downloads). */

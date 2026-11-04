@@ -4,8 +4,11 @@ import {
   nativeBgAllowed,
   nativeBgRequest,
   nativeFiles,
+  nativeSetWifiOnly,
   nativeStorage,
+  nativeWifiOnly,
 } from "@/lib/download/android-downloads";
+import { useT } from "@/lib/i18n";
 import { stopSeasonDownload, useRunningSeasonJobs } from "@/lib/download/season-download";
 import {
   BatteryCharging,
@@ -17,6 +20,7 @@ import {
   Play,
   RotateCw,
   Trash2,
+  Wifi,
   X,
 } from "lucide-react";
 import { Poster } from "@/components/poster";
@@ -47,14 +51,56 @@ function fmtSpeed(bps: number): string {
   return `${(bps / 1024).toFixed(0)} KB/s`;
 }
 
-function fmtEta(d: DownloadItem): string {
+type TFn = ReturnType<typeof useT>;
+
+function fmtEta(d: DownloadItem, t: TFn): string {
   if (d.bytesPerSec <= 0 || d.totalBytes == null) return "";
   const remain = d.totalBytes - d.receivedBytes;
   if (remain <= 0) return "";
   const secs = remain / d.bytesPerSec;
-  if (secs >= 3600) return `${Math.round(secs / 3600)}h left`;
-  if (secs >= 60) return `${Math.round(secs / 60)}m left`;
-  return `${Math.round(secs)}s left`;
+  if (secs >= 3600) return t("{n}h left", { n: Math.round(secs / 3600) });
+  if (secs >= 60) return t("{n}m left", { n: Math.round(secs / 60) });
+  return t("{n}s left", { n: Math.round(secs) });
+}
+
+/** Android: the app's downloader reports codes (Downloads.kt); shown in the app's language. */
+function noteText(d: DownloadItem, t: TFn): string | null {
+  switch (d.code) {
+    case "queued":
+      return t("Queued");
+    case "waiting_network":
+      return t("Waiting for internet");
+    case "waiting_wifi":
+      return t("Waiting for Wi-Fi");
+    case "retry_in":
+      return t("Retrying in {n}s", { n: d.sec ?? 0 });
+    case "paused":
+      return t("Paused");
+    case "relinking":
+      return t("Getting a fresh link…");
+  }
+  return d.note ? t(d.note) : null;
+}
+
+function errorText(d: DownloadItem, t: TFn): string {
+  const http = d.http ?? 0;
+  switch (d.code) {
+    case "expired":
+      return t("The link expired (HTTP {code}). Tap retry for a fresh one.", { code: http });
+    case "refused":
+      return t("The server refused the download (HTTP {code}). Tap retry for a fresh link.", { code: http });
+    case "http_error":
+      return t("The server refused the download (HTTP {code})", { code: http });
+    case "no_space":
+      return t("Not enough storage on the phone");
+    case "not_media":
+      return t("This link isn't a video file (a web page or a streaming playlist). Try another source.");
+    case "keeps_failing":
+      return t("Keeps failing. Tap retry.");
+    case "save_failed":
+      return t("Couldn't save the file");
+  }
+  return t("Failed: {error}", { error: d.error ? t(d.error) : t("Download failed") });
 }
 
 type DownloadGroup =
@@ -99,6 +145,7 @@ function buildGroups(items: DownloadItem[]): DownloadGroup[] {
 const ANDROID = androidDownloadsAvailable();
 
 function StorageLine({ items }: { items: DownloadItem[] }) {
+  const t = useT();
   const [info, setInfo] = useState<{ free?: number; used?: number }>({});
   const doneCount = items.filter((d) => d.status === "done").length;
   useEffect(() => {
@@ -107,7 +154,7 @@ function StorageLine({ items }: { items: DownloadItem[] }) {
   if (info.free == null || info.free < 0) return null;
   return (
     <p className="mb-5 text-[12.5px] text-ink-subtle">
-      {["Stored in the app", (info.used ?? 0) > 0 ? `${fmtBytes(info.used ?? 0)} used` : null, `${fmtBytes(info.free)} free on this phone`]
+      {[t("Stored in the app"), (info.used ?? 0) > 0 ? t("{size} used", { size: fmtBytes(info.used ?? 0) }) : null, t("{size} free on this phone", { size: fmtBytes(info.free) })]
         .filter(Boolean)
         .join(" · ")}
     </p>
@@ -118,7 +165,49 @@ function StorageLine({ items }: { items: DownloadItem[] }) {
  * Android: downloads run in the background, but battery savers (especially on Xiaomi, Samsung,
  * Huawei…) can still stop them. Offers the system "let it run in the background" prompt.
  */
+/**
+ * Android: downloads use Wi-Fi only unless mobile data is allowed here (one tap on a season
+ * download used to be able to use up a monthly data plan).
+ */
+function WifiOnlyCard({ waiting }: { waiting: boolean }) {
+  const t = useT();
+  const [wifiOnly, setWifiOnly] = useState<boolean | null>(() => nativeWifiOnly());
+  if (wifiOnly == null) return null;
+  const toggle = () => {
+    nativeSetWifiOnly(!wifiOnly);
+    setWifiOnly(!wifiOnly);
+  };
+  return (
+    <div
+      className={`mb-5 flex items-center gap-3 rounded-2xl border px-4 py-3 ${
+        waiting && wifiOnly ? "border-accent/25 bg-accent/10" : "border-edge-soft bg-elevated/30"
+      }`}
+    >
+      <Wifi size={18} className="shrink-0 text-accent" strokeWidth={2} />
+      <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-muted">
+        {wifiOnly
+          ? waiting
+            ? t("Waiting for Wi-Fi. Downloads don't use mobile data unless you allow it.")
+            : t("Downloads use Wi-Fi only.")
+          : t("Downloads also use mobile data.")}
+      </p>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={!wifiOnly}
+        onClick={toggle}
+        className={`h-9 shrink-0 rounded-lg px-3 text-[12.5px] font-semibold ${
+          wifiOnly ? "bg-accent text-canvas" : "bg-ink/10 text-ink"
+        }`}
+      >
+        {wifiOnly ? t("Use mobile data") : t("Wi-Fi only")}
+      </button>
+    </div>
+  );
+}
+
 function BackgroundRunCard({ busy }: { busy: boolean }) {
+  const t = useT();
   const [allowed, setAllowed] = useState<boolean | null>(() => nativeBgAllowed());
   useEffect(() => {
     const recheck = () => setAllowed(nativeBgAllowed());
@@ -134,14 +223,14 @@ function BackgroundRunCard({ busy }: { busy: boolean }) {
     <div className="mb-5 flex items-center gap-3 rounded-2xl border border-accent/25 bg-accent/10 px-4 py-3">
       <BatteryCharging size={20} className="shrink-0 text-accent" strokeWidth={2} />
       <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-muted">
-        Downloads keep going when you leave the app. If your phone still stops them, let Harbor run without battery limits.
+        {t("Downloads keep going when you leave the app. If your phone still stops them, let Harbor run without battery limits.")}
       </p>
       <button
         type="button"
         onClick={() => nativeBgRequest()}
         className="h-9 shrink-0 rounded-lg bg-accent px-3 text-[12.5px] font-semibold text-canvas"
       >
-        Allow
+        {t("Allow")}
       </button>
     </div>
   );
@@ -149,6 +238,7 @@ function BackgroundRunCard({ busy }: { busy: boolean }) {
 
 /** "Download season" queues still looking for sources for the next episodes. */
 function SeasonJobs() {
+  const t = useT();
   const jobs = useRunningSeasonJobs();
   if (jobs.length === 0) return null;
   return (
@@ -157,9 +247,13 @@ function SeasonJobs() {
         <div key={j.key} className="flex items-center gap-3 rounded-2xl border border-edge-soft bg-elevated/40 px-4 py-2.5">
           <Loader2 size={16} className="shrink-0 animate-spin text-ink-subtle" />
           <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-muted">
-            {`Finding sources · ${j.title}${j.season != null ? ` S${j.season}` : ""} · ${Math.min(j.progress.done + 1, j.progress.total)}/${j.progress.total}`}
+            {t("Finding sources · {title} · {n}/{total}", {
+              title: `${j.title}${j.season != null ? ` S${j.season}` : ""}`,
+              n: Math.min(j.progress.done + 1, j.progress.total),
+              total: j.progress.total,
+            })}
           </span>
-          <RowBtn label="Stop" onClick={() => stopSeasonDownload(j.key)}>
+          <RowBtn label={t("Stop")} onClick={() => stopSeasonDownload(j.key)}>
             <X size={16} strokeWidth={2.2} />
           </RowBtn>
         </div>
@@ -169,6 +263,7 @@ function SeasonJobs() {
 }
 
 export function DownloadsView() {
+  const t = useT();
   const items = useDownloads();
   const seasonJobs = useRunningSeasonJobs();
   const active = items.filter((d) => d.status === "downloading").length;
@@ -186,14 +281,14 @@ export function DownloadsView() {
     <main className="flex-1 overflow-y-auto bg-canvas px-5 pb-24 pt-24 sm:px-8 lg:px-12 lg:pt-28">
       <div className="mx-auto w-full max-w-3xl">
         <header className="mb-8">
-          <h1 className="text-[28px] font-semibold tracking-tight text-ink">Downloads</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink">{t("Downloads")}</h1>
           <p className="mt-1.5 text-[13.5px] text-ink-subtle">
             {items.length === 0
-              ? "Saved movies and episodes for offline watching"
+              ? t("Saved movies and episodes for offline watching")
               : [
-                  `${items.length} item${items.length === 1 ? "" : "s"}`,
-                  active > 0 ? `${active} downloading` : null,
-                  savedBytes > 0 ? `${fmtBytes(savedBytes)} saved` : null,
+                  items.length === 1 ? t("1 item") : t("{count} items", { count: items.length }),
+                  active > 0 ? t("{count} downloading", { count: active }) : null,
+                  savedBytes > 0 ? t("{size} saved", { size: fmtBytes(savedBytes) }) : null,
                 ]
                   .filter(Boolean)
                   .join("  ·  ")}
@@ -201,6 +296,7 @@ export function DownloadsView() {
         </header>
 
         {ANDROID ? <StorageLine items={items} /> : <DownloadDirBar />}
+        {ANDROID && <WifiOnlyCard waiting={items.some((d) => d.code === "waiting_wifi")} />}
         {ANDROID && <BackgroundRunCard busy={active > 0 || seasonJobs.length > 0} />}
         <SeasonJobs />
 
@@ -225,17 +321,18 @@ export function DownloadsView() {
 }
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-[20px] border border-dashed border-edge-soft bg-elevated/30 px-8 py-20 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-elevated text-ink-subtle">
         <DownloadIcon size={26} strokeWidth={1.8} />
       </div>
       <div className="flex flex-col gap-1.5">
-        <p className="text-[15px] font-semibold text-ink">No downloads yet</p>
+        <p className="text-[15px] font-semibold text-ink">{t("No downloads yet")}</p>
         <p className="max-w-[340px] text-[13.5px] leading-relaxed text-ink-muted">
           {ANDROID
-            ? "Open any movie or show and tap the download button (or Download season on a show). It saves in the app with its subtitles for offline watching."
-            : "Open any movie or show, hover an episode, and click the download icon. Pick the exact source you want and it saves here for offline watching."}
+            ? t("Open any movie or show and tap the download button (or Download season on a show). It saves in the app with its subtitles for offline watching.")
+            : t("Open any movie or show, hover an episode, and click the download icon. Pick the exact source you want and it saves here for offline watching.")}
         </p>
       </div>
     </div>
@@ -243,6 +340,7 @@ function EmptyState() {
 }
 
 function ShowGroup({ group }: { group: Extract<DownloadGroup, { kind: "show" }> }) {
+  const t = useT();
   const episodes = useMemo(
     () =>
       [...group.items].sort(
@@ -263,7 +361,7 @@ function ShowGroup({ group }: { group: Extract<DownloadGroup, { kind: "show" }> 
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-[14px] font-semibold text-ink">{group.title}</span>
           <span className="text-[11.5px] text-ink-subtle">
-            {episodes.length} episode{episodes.length === 1 ? "" : "s"}
+            {episodes.length === 1 ? t("1 episode") : t("{count} episodes", { count: episodes.length })}
             {totalBytes > 0 ? `  ·  ${fmtBytes(totalBytes)}` : ""}
           </span>
         </div>
@@ -278,14 +376,15 @@ function ShowGroup({ group }: { group: Extract<DownloadGroup, { kind: "show" }> 
 }
 
 function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolean }) {
+  const t = useT();
   const { openPlayer } = useView();
   const pct = Math.round(d.ratio * 100);
   const downloading = d.status === "downloading";
   const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => {
     if (!confirmDelete) return;
-    const t = window.setTimeout(() => setConfirmDelete(false), 3500);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setConfirmDelete(false), 3500);
+    return () => window.clearTimeout(timer);
   }, [confirmDelete]);
   const playLocal = () => {
     // Android: the saved file + the subtitles saved next to it.
@@ -336,9 +435,9 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
                   {fmtBytes(d.receivedBytes)} / {fmtBytes(d.totalBytes)}
                 </span>
               )}
-              {d.note && <span className="text-amber-300/85">· {d.note}</span>}
+              {noteText(d, t) && <span className="text-amber-300/85">· {noteText(d, t)}</span>}
               {fmtSpeed(d.bytesPerSec) && <span>· {fmtSpeed(d.bytesPerSec)}</span>}
-              {fmtEta(d) && <span className="text-ink-subtle">· {fmtEta(d)}</span>}
+              {fmtEta(d, t) && <span className="text-ink-subtle">· {fmtEta(d, t)}</span>}
               {ANDROID && <SubsInfo d={d} />}
             </div>
           </>
@@ -348,16 +447,16 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
               <>
                 <Check size={13} className="text-accent" strokeWidth={2.6} />
                 <span className="text-ink-muted">
-                  Saved{d.streamLabel ? ` · ${d.streamLabel}` : ""}
+                  {t("Saved")}{d.streamLabel ? ` · ${d.streamLabel}` : ""}
                   {d.totalBytes ? ` · ${fmtBytes(d.totalBytes)}` : ""}
                 </span>
               </>
             )}
             {d.status === "done" && ANDROID && <SubsInfo d={d} />}
-            {d.status === "error" && <span className="text-danger">Failed: {d.error ?? "download error"}</span>}
-            {d.status === "canceled" && <span className="text-ink-subtle">Canceled</span>}
+            {d.status === "error" && <span className="text-danger">{errorText(d, t)}</span>}
+            {d.status === "canceled" && <span className="text-ink-subtle">{t("Canceled")}</span>}
             {d.status === "interrupted" && (
-              <span className="text-amber-300/85">Interrupted: re-download to finish</span>
+              <span className="text-amber-300/85">{t("Interrupted: re-download to finish")}</span>
             )}
           </span>
         )}
@@ -367,32 +466,32 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
           <>
             {ANDROID &&
               (d.paused ? (
-                <RowBtn label="Resume download" onClick={() => resumeDownload(d.id)}>
+                <RowBtn label={t("Resume download")} onClick={() => resumeDownload(d.id)}>
                   <Play size={16} strokeWidth={2.2} fill="currentColor" />
                 </RowBtn>
               ) : (
-                <RowBtn label="Pause download" onClick={() => pauseDownload(d.id)}>
+                <RowBtn label={t("Pause download")} onClick={() => pauseDownload(d.id)}>
                   <Pause size={16} strokeWidth={2.2} fill="currentColor" />
                 </RowBtn>
               ))}
-            <RowBtn label="Cancel download" onClick={() => cancelDownload(d.id)}>
+            <RowBtn label={t("Cancel download")} onClick={() => cancelDownload(d.id)}>
               <X size={16} strokeWidth={2.2} />
             </RowBtn>
           </>
         ) : (
           <>
             {ANDROID && d.status === "error" && d.retryable !== false && (
-              <RowBtn label="Retry download" onClick={() => resumeDownload(d.id)}>
+              <RowBtn label={t("Retry download")} onClick={() => resumeDownload(d.id)}>
                 <RotateCw size={16} strokeWidth={2.2} />
               </RowBtn>
             )}
             {d.status === "done" && (
               <>
-                <RowBtn label="Play" onClick={playLocal}>
+                <RowBtn label={t("Play")} onClick={playLocal}>
                   <Play size={16} strokeWidth={2.2} fill="currentColor" />
                 </RowBtn>
                 {!ANDROID && (
-                  <RowBtn label="Show in folder" onClick={() => void revealDownload(d.id)}>
+                  <RowBtn label={t("Show in folder")} onClick={() => void revealDownload(d.id)}>
                     <FolderOpen size={16} strokeWidth={2} />
                   </RowBtn>
                 )}
@@ -404,10 +503,10 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
                 onClick={() => removeDownload(d.id)}
                 className="h-9 rounded-lg bg-danger/90 px-3 text-[12.5px] font-semibold text-white"
               >
-                Delete
+                {t("Delete")}
               </button>
             ) : (
-              <RowBtn label="Delete download and file" onClick={() => setConfirmDelete(true)}>
+              <RowBtn label={t("Delete download and file")} onClick={() => setConfirmDelete(true)}>
                 <Trash2 size={16} strokeWidth={2} />
               </RowBtn>
             )}
@@ -420,16 +519,17 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
 
 /** Android: how many subtitles are saved with the video, with a retry when there are none. */
 function SubsInfo({ d }: { d: DownloadItem }) {
-  if (d.subsState === "searching") return <span className="text-ink-subtle">· finding subtitles…</span>;
+  const t = useT();
+  if (d.subsState === "searching") return <span className="text-ink-subtle">· {t("finding subtitles…")}</span>;
   const n = d.subsCount ?? 0;
-  if (n > 0) return <span className="text-ink-subtle">· {n === 1 ? "1 subtitle" : `${n} subtitles`}</span>;
+  if (n > 0) return <span className="text-ink-subtle">· {n === 1 ? t("1 subtitle") : t("{count} subtitles", { count: n })}</span>;
   return (
     <button
       type="button"
       onClick={() => fetchDownloadSubtitles(d.id)}
       className="ms-1 rounded-md bg-accent/15 px-2 py-0.5 text-[11.5px] font-semibold text-accent"
     >
-      Get subtitles
+      {t("Get subtitles")}
     </button>
   );
 }

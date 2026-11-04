@@ -34,7 +34,7 @@ class HttpTransfer(
         fun freeSpace(): Long = Long.MAX_VALUE
     }
 
-    enum class Problem { NETWORK, SERVER, REFUSED, SPACE, OTHER }
+    enum class Problem { NETWORK, SERVER, REFUSED, SPACE, NOT_MEDIA, OTHER }
 
     sealed class Result {
         object Done : Result()
@@ -57,12 +57,23 @@ class HttpTransfer(
         }
     }
 
+    /** Next to the .part: the host and ETag/Last-Modified of the file it holds (for If-Range). */
+    private val validatorFile = File(part.path + ".validator")
+
+    private fun savedValidator(host: String): String? = try {
+        val lines = validatorFile.readLines()
+        if (lines.size >= 2 && lines[0] == host) lines[1].takeIf { it.isNotBlank() } else null
+    } catch (_: Exception) {
+        null
+    }
+
     fun run(): Result {
         var target = URL(url)
         var redirects = 0
         var restarted = false
         val startBytes = if (part.exists()) part.length() else 0L
         var offset = startBytes
+        if (offset == 0L) validatorFile.delete()
         while (true) {
             if (listener.shouldStop()) return Result.Stopped
             val c: HttpURLConnection
@@ -80,7 +91,12 @@ class HttpTransfer(
                     }
                 }
                 c.setRequestProperty("Accept-Encoding", "identity")
-                if (offset > 0) c.setRequestProperty("Range", "bytes=$offset-")
+                if (offset > 0) {
+                    c.setRequestProperty("Range", "bytes=$offset-")
+                    // If the file on the server changed since the .part was started, the server
+                    // sends the whole new file (200) instead of splicing two files together.
+                    savedValidator(target.host)?.let { c.setRequestProperty("If-Range", it) }
+                }
                 code = c.responseCode
             } catch (e: IOException) {
                 conn = null
@@ -137,6 +153,19 @@ class HttpTransfer(
                 }
                 offset = 0 // 200: the server ignored the range
             }
+            // A web page, an API error or a playlist is not a video: a captive Wi-Fi portal or a
+            // proxy answering "200 OK" with HTML used to be saved and reported as finished.
+            notMediaType(c.contentType)?.let { why ->
+                c.disconnect()
+                return Result.Fail(Problem.NOT_MEDIA, why, code)
+            }
+            if (!resume) {
+                val v = c.getHeaderField("ETag")?.takeIf { !it.startsWith("W/") } ?: c.getHeaderField("Last-Modified")
+                try {
+                    if (v != null) validatorFile.writeText(target.host + "\n" + v) else validatorFile.delete()
+                } catch (_: Exception) {
+                }
+            }
             val length = c.getHeaderFieldLong("Content-Length", -1L)
             val total = when {
                 range != null && range.total > 0 -> range.total
@@ -155,11 +184,21 @@ class HttpTransfer(
                     c.inputStream.use { input ->
                         val buf = ByteArray(BUFFER_BYTES)
                         var sinceSync = 0L
+                        var sniffed = resume
                         listener.onProgress(got)
                         while (true) {
                             if (listener.shouldStop()) return Result.Stopped
                             val n = input.read(buf)
                             if (n < 0) break
+                            if (!sniffed) {
+                                sniffed = true
+                                notMediaBytes(buf, n)?.let { why ->
+                                    out.close()
+                                    part.delete()
+                                    validatorFile.delete()
+                                    return Result.Fail(Problem.NOT_MEDIA, why, code)
+                                }
+                            }
                             out.write(buf, 0, n)
                             got += n
                             sinceSync += n
@@ -183,6 +222,7 @@ class HttpTransfer(
                 conn = null
             }
             if (total > 0 && got < total) return Result.Retry(Problem.NETWORK, "connection closed early", got > startBytes)
+            validatorFile.delete()
             return Result.Done
         }
     }
@@ -209,6 +249,32 @@ class HttpTransfer(
             }
             UNSATISFIED_RX.find(v)?.let { m -> return ContentRange(-1, -1, m.groupValues[1].toLong()) }
             return null
+        }
+
+        /** Why a Content-Type can't be a video file, or null when it can. */
+        fun notMediaType(contentType: String?): String? {
+            val t = contentType?.substringBefore(';')?.trim()?.lowercase() ?: return null
+            return when {
+                t == "text/html" || t == "application/xhtml+xml" -> "the server sent a web page"
+                t == "application/json" || t.endsWith("+json") -> "the server sent an error message"
+                t.contains("mpegurl") -> "the link is a streaming playlist (HLS), not a file"
+                t == "application/dash+xml" -> "the link is a streaming playlist (DASH), not a file"
+                else -> null
+            }
+        }
+
+        /** Why the first bytes can't be a video file (HTML, JSON, a playlist), or null. */
+        fun notMediaBytes(b: ByteArray, n: Int): String? {
+            var i = 0
+            while (i < n && i < 64 && (b[i] == ' '.code.toByte() || b[i] == '\n'.code.toByte() || b[i] == '\r'.code.toByte() || b[i] == '\t'.code.toByte() || b[i] == 0xEF.toByte() || b[i] == 0xBB.toByte() || b[i] == 0xBF.toByte())) i++
+            val head = String(b, i, minOf(n - i, 64).coerceAtLeast(0), Charsets.ISO_8859_1).lowercase()
+            return when {
+                head.startsWith("<!doctype html") || head.startsWith("<html") || head.startsWith("<head") || head.startsWith("<body") -> "the server sent a web page"
+                head.startsWith("#extm3u") -> "the link is a streaming playlist (HLS), not a file"
+                head.startsWith("<?xml") && head.contains("mpd") -> "the link is a streaming playlist (DASH), not a file"
+                head.startsWith("{\"") || head.startsWith("{ \"") || head.startsWith("[{") -> "the server sent an error message"
+                else -> null
+            }
         }
 
         fun isNoSpace(e: IOException): Boolean {

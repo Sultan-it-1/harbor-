@@ -51,8 +51,8 @@ class Downloads private constructor(private val ctx: Context) {
 
     private class Task(
         val id: String,
-        val url: String,
-        val headers: Map<String, String>,
+        var url: String,
+        var headers: Map<String, String>,
         val ua: String,
         val file: String,
         val title: String,
@@ -61,8 +61,11 @@ class Downloads private constructor(private val ctx: Context) {
     ) {
         var total = -1L
         @Volatile var received = 0L
-        /** Why it failed (shown on the Downloads page). */
+        /** Why it failed (shown on the Downloads page): English text, and a code + HTTP status
+         *  the page translates. */
         var reason: String? = null
+        var code: String? = null
+        var http = 0
         /** While waiting: for the network, or for the next retry at retryAt. */
         var waitingFor: String? = null
         var retryAt = 0L
@@ -76,9 +79,9 @@ class Downloads private constructor(private val ctx: Context) {
 
     private fun root(): File? = ctx.getExternalFilesDir(Environment.DIRECTORY_MOVIES)?.let { File(it, "Harbor") }
 
-    private fun dirFor(id: String): File? = root()?.let { File(it, safe(id)) }
-
-    private fun safe(s: String) = s.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
+    /** Only plain ids get a folder: "", "." and ".." (and anything else odd) would point at
+     *  the Harbor folder itself or its parent, and delete would wipe every download. */
+    private fun dirFor(id: String): File? = if (validId(id)) root()?.let { File(it, id) } else null
 
     // =========================================================================================
     // Page bridge (MainActivity.JsApi)
@@ -90,9 +93,19 @@ class Downloads private constructor(private val ctx: Context) {
         try {
             val j = JSONObject(json)
             val id = j.getString("id")
+            if (!validId(id)) return out.put("ok", false).put("error", "invalid id").toString()
+            synchronized(lock) {
+                val old = tasks[id]
+                // Started twice (a double tap, or delete + download again at once): one transfer per
+                // id. While the old one runs, this start is a no-op; its worker would otherwise
+                // delete the folder (with the new .part) when it ends.
+                if (old != null && (old.worker != null || old.state == RUNNING || old.state == QUEUED || old.state == WAITING)) {
+                    return out.put("ok", true).put("already", true).toString()
+                }
+            }
             val dir = dirFor(id) ?: return out.put("ok", false).put("error", "storage unavailable").toString()
             dir.mkdirs()
-            val fileName = safe(j.optString("fileName").ifBlank { "video.mp4" })
+            val fileName = safeFileName(j.optString("fileName").ifBlank { "video.mp4" })
             var ua = userAgent
             val headers = HashMap<String, String>()
             j.optJSONObject("headers")?.let { h ->
@@ -149,6 +162,51 @@ class Downloads private constructor(private val ctx: Context) {
         return true
     }
 
+    /**
+     * A fresh link for a download whose link expired (debrid/CDN links are time-limited and
+     * sometimes tied to the network they were made on). Keeps the .part and carries on from it.
+     */
+    fun relink(id: String, url: String, headersJson: String?): Boolean {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+        synchronized(lock) {
+            val t = tasks[id] ?: return false
+            if (t.state == DONE || t.state == RUNNING || t.worker != null) return false
+            t.url = url
+            headersJson?.takeIf { it.isNotBlank() }?.let { hj ->
+                val h = HashMap<String, String>()
+                try {
+                    val o = JSONObject(hj)
+                    o.keys().forEach { k -> if (!k.equals("user-agent", true)) h[k] = o.optString(k) }
+                    t.headers = h
+                } catch (_: Exception) {
+                }
+            }
+            t.state = QUEUED
+            t.attempts = 0
+            t.retryAt = 0
+            t.waitingFor = null
+            t.reason = null
+            t.code = null
+            t.http = 0
+            persist(t)
+        }
+        pump()
+        return true
+    }
+
+    /** Download only on Wi-Fi (or any unmetered network). On by default. */
+    var wifiOnly: Boolean
+        get() = prefs.getBoolean(PREF_WIFI_ONLY, true)
+        set(v) {
+            prefs.edit().putBoolean(PREF_WIFI_ONLY, v).apply()
+            pump()
+        }
+
+    /** Unfinished downloads (for the "downloads paused" notice). */
+    fun hasPendingWork(): Boolean = synchronized(lock) {
+        tasks.values.any { it.state == QUEUED || it.state == RUNNING || it.state == WAITING }
+    }
+
     /** Cancel and/or delete for good: the video, its subtitles and the folder. */
     fun delete(id: String): Boolean {
         val t = synchronized(lock) { tasks.remove(id) }
@@ -185,16 +243,37 @@ class Downloads private constructor(private val ctx: Context) {
                         })
                         .put("received", t.received)
                         .put("total", if (t.total > 0) t.total else JSONObject.NULL)
-                        .put("reason", noteFor(t, now)),
+                        .put("reason", noteFor(t, now))
+                        .put("code", codeFor(t))
+                        .put("title", t.title)
+                        .put("http", t.http)
+                        .put("sec", if (t.state == WAITING && t.waitingFor == WAIT_RETRY) ((t.retryAt - now + 999) / 1000).coerceAtLeast(1) else 0),
                 )
             }
         }
         return out.toString()
     }
 
+    /** What the page shows, as a code it translates (the English note stays as a fallback). */
+    private fun codeFor(t: Task): String = when (t.state) {
+        QUEUED -> "queued"
+        WAITING -> when (t.waitingFor) {
+            WAIT_NETWORK -> "waiting_network"
+            WAIT_WIFI -> "waiting_wifi"
+            else -> "retry_in"
+        }
+        PAUSED -> "paused"
+        ERROR -> t.code ?: "failed"
+        else -> ""
+    }
+
     private fun noteFor(t: Task, now: Long): String = when (t.state) {
         QUEUED -> "Queued"
-        WAITING -> if (t.waitingFor == WAIT_NETWORK) "Waiting for internet" else "Retrying in ${((t.retryAt - now + 999) / 1000).coerceAtLeast(1)}s"
+        WAITING -> when (t.waitingFor) {
+            WAIT_NETWORK -> "Waiting for internet"
+            WAIT_WIFI -> "Waiting for Wi-Fi"
+            else -> "Retrying in ${((t.retryAt - now + 999) / 1000).coerceAtLeast(1)}s"
+        }
         PAUSED -> "Paused"
         ERROR -> t.reason ?: "Download failed"
         else -> ""
@@ -219,6 +298,7 @@ class Downloads private constructor(private val ctx: Context) {
         val note = when {
             active.isEmpty() || running > 0 -> null
             active.any { it.state == WAITING && it.waitingFor == WAIT_NETWORK } -> "بانتظار الإنترنت"
+            active.any { it.state == WAITING && it.waitingFor == WAIT_WIFI } -> "بانتظار الواي فاي"
             active.any { it.state == WAITING } -> "يعيد المحاولة بعد شوي…"
             else -> "في الانتظار"
         }
@@ -234,17 +314,18 @@ class Downloads private constructor(private val ctx: Context) {
         var active: Boolean
         synchronized(lock) {
             val now = System.currentTimeMillis()
-            val online = isOnline()
+            val net = network()
+            val online = net == NET_OK
             var running = tasks.values.count { it.state == RUNNING }
             for (t in tasks.values) {
                 if (t.state == WAITING) {
-                    val ready = if (t.waitingFor == WAIT_NETWORK) online else now >= t.retryAt
+                    val ready = if (t.waitingFor == WAIT_NETWORK || t.waitingFor == WAIT_WIFI) online else now >= t.retryAt
                     if (ready) t.state = QUEUED
                 }
                 if (t.state != QUEUED) continue
                 if (!online) {
                     t.state = WAITING
-                    t.waitingFor = WAIT_NETWORK
+                    t.waitingFor = if (net == NET_METERED) WAIT_WIFI else WAIT_NETWORK
                     continue
                 }
                 if (running >= MAX_PARALLEL) continue
@@ -262,7 +343,7 @@ class Downloads private constructor(private val ctx: Context) {
         if (waiting.isEmpty()) return
         // Retries at their time; network waits are re-checked now and then in case the
         // "network is back" callback doesn't come.
-        val next = waiting.minOf { if (it.waitingFor == WAIT_NETWORK) now + 30_000 else it.retryAt }
+        val next = waiting.minOf { if (it.waitingFor == WAIT_NETWORK || it.waitingFor == WAIT_WIFI) now + 30_000 else it.retryAt }
         wake?.cancel(false)
         wake = scheduler.schedule({ pump() }, (next - now).coerceAtLeast(300), TimeUnit.MILLISECONDS)
     }
@@ -273,6 +354,8 @@ class Downloads private constructor(private val ctx: Context) {
         t.stop = false
         t.waitingFor = null
         t.reason = null
+        t.code = null
+        t.http = 0
         persist(t)
         t.worker = Thread({ runTask(t) }, "harbor-download").apply {
             isDaemon = true
@@ -316,7 +399,9 @@ class Downloads private constructor(private val ctx: Context) {
         synchronized(lock) {
             t.worker = null
             if (tasks[t.id] !== t) {
-                dir?.deleteRecursively() // deleted while it was running
+                // Deleted while it was running: remove its folder. (Replaced by a new download of
+                // the same id: the folder now belongs to that one, leave it.)
+                if (tasks[t.id] == null) dir?.deleteRecursively()
                 return
             }
             when {
@@ -335,21 +420,25 @@ class Downloads private constructor(private val ctx: Context) {
                     } else {
                         t.state = ERROR
                         t.reason = "Couldn't save the file"
+                        t.code = "save_failed"
                         finished = false
                     }
                 }
                 result == HttpTransfer.Result.Stopped -> t.state = QUEUED
                 result is HttpTransfer.Result.Retry -> {
                     if (result.madeProgress) t.attempts = 0
+                    val net = network()
                     when {
-                        // Offline: wait for the network; that isn't a failed attempt.
-                        !isOnline() -> {
+                        // Offline (or only mobile data with Wi-Fi only on): wait for the network;
+                        // that isn't a failed attempt.
+                        net != NET_OK -> {
                             t.state = WAITING
-                            t.waitingFor = WAIT_NETWORK
+                            t.waitingFor = if (net == NET_METERED) WAIT_WIFI else WAIT_NETWORK
                         }
                         ++t.attempts > MAX_ATTEMPTS -> {
                             t.state = ERROR
                             t.reason = "Keeps failing (${result.detail}). Tap retry."
+                            t.code = "keeps_failing"
                             finished = false
                         }
                         else -> {
@@ -369,6 +458,8 @@ class Downloads private constructor(private val ctx: Context) {
                     } else {
                         t.state = ERROR
                         t.reason = failText(result)
+                        t.code = failCode(result)
+                        t.http = result.httpCode
                         finished = false
                     }
                 }
@@ -381,28 +472,47 @@ class Downloads private constructor(private val ctx: Context) {
 
     private fun backoffMs(attempt: Int): Long = BACKOFF_MS[(attempt - 1).coerceIn(0, BACKOFF_MS.size - 1)]
 
+    private fun failCode(f: HttpTransfer.Result.Fail): String = when {
+        f.problem == HttpTransfer.Problem.SPACE -> "no_space"
+        f.problem == HttpTransfer.Problem.NOT_MEDIA -> "not_media"
+        f.httpCode == 404 || f.httpCode == 410 -> "expired"
+        f.httpCode == 401 || f.httpCode == 403 -> "refused"
+        f.httpCode > 0 -> "http_error"
+        else -> "failed"
+    }
+
     private fun failText(f: HttpTransfer.Result.Fail): String = when {
         f.problem == HttpTransfer.Problem.SPACE -> "Not enough storage on the phone"
-        f.httpCode == 404 || f.httpCode == 410 -> "The link has expired (HTTP ${f.httpCode}). Delete it and download it again."
+        f.problem == HttpTransfer.Problem.NOT_MEDIA -> "This link isn't a video file (${f.detail})"
+        f.httpCode == 404 || f.httpCode == 410 -> "The link has expired (HTTP ${f.httpCode}). Tap retry for a fresh link."
         f.httpCode == 401 || f.httpCode == 403 -> "The server refused the download (HTTP ${f.httpCode}). The link may have expired."
         f.httpCode > 0 -> "The server refused the download (HTTP ${f.httpCode})"
         else -> "Download failed (${f.detail})"
     }
 
-    private fun isOnline(): Boolean = try {
+    /** NET_OK, NET_NONE (no working internet: also a Wi-Fi without internet) or NET_METERED
+     *  (only mobile data while "Wi-Fi only" is on). */
+    private fun network(): Int = try {
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+        when {
+            caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) -> NET_NONE
+            !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) -> NET_NONE
+            wifiOnly && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) -> NET_METERED
+            else -> NET_OK
+        }
     } catch (_: Exception) {
-        true
+        NET_OK
     }
 
     private fun watchNetwork() {
         try {
             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val later = { scheduler.schedule({ pump() }, 1500, TimeUnit.MILLISECONDS); Unit }
             cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) {
-                    scheduler.schedule({ pump() }, 1500, TimeUnit.MILLISECONDS)
-                }
+                override fun onAvailable(network: Network) = later()
+                override fun onLost(network: Network) = later()
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = later()
             })
         } catch (_: Exception) {
         }
@@ -442,6 +552,8 @@ class Downloads private constructor(private val ctx: Context) {
             .put("at", t.createdAt)
             .put("headers", JSONObject(t.headers as Map<*, *>))
         t.reason?.let { j.put("reason", it) }
+        t.code?.let { j.put("code", it) }
+        if (t.http > 0) j.put("http", t.http)
         if (t.legacyDm >= 0) j.put("dm", t.legacyDm)
         prefs.edit().putString(t.id, j.toString()).apply()
     }
@@ -455,6 +567,8 @@ class Downloads private constructor(private val ctx: Context) {
         ).apply {
             total = j.optLong("total", -1)
             reason = j.optString("reason").takeIf { it.isNotBlank() }
+            code = j.optString("code").takeIf { it.isNotBlank() }
+            http = j.optInt("http", 0)
             legacyDm = j.optLong("dm", -1)
         }
     }
@@ -464,7 +578,7 @@ class Downloads private constructor(private val ctx: Context) {
         val restored = ArrayList<Task>()
         val legacy = ArrayList<Pair<String, JSONObject>>()
         for ((key, value) in prefs.all) {
-            if (key.startsWith("ua:")) continue
+            if (key.startsWith("ua:") || key.startsWith("pref:")) continue
             val j = (value as? String)?.let { try { JSONObject(it) } catch (_: Exception) { null } } ?: continue
             if (j.optInt("v", 1) < 2) {
                 legacy.add(key to j)
@@ -666,7 +780,38 @@ class Downloads private constructor(private val ctx: Context) {
         private const val DONE = "done"
         private const val ERROR = "error"
         private const val WAIT_NETWORK = "network"
+        private const val WAIT_WIFI = "wifi"
         private const val WAIT_RETRY = "retry"
+        private const val NET_OK = 0
+        private const val NET_NONE = 1
+        private const val NET_METERED = 2
+        private const val PREF_WIFI_ONLY = "pref:wifiOnly"
+        private val ID_RX = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+
+        fun validId(id: String) = ID_RX.matches(id) && !id.contains("..")
+
+        /** Safe on any filesystem, any script kept; long names lose the middle, not the extension. */
+        fun safeFileName(name: String): String {
+            val clean = name.replace(Regex("[^\\p{L}\\p{N}._ ()\\[\\]-]"), "_").trim().trimStart('.').ifBlank { "video.mp4" }
+            val dot = clean.lastIndexOf('.')
+            val ext = if (dot > 0 && clean.length - dot <= 6) clean.substring(dot) else ""
+            val stem = if (ext.isEmpty()) clean else clean.substring(0, dot)
+            return stem.take(MAX_NAME - ext.length).ifBlank { "video" } + ext
+        }
+
+        private const val MAX_NAME = 80
+
+        /** Unfinished downloads straight from storage (no engine start), for the boot notice. */
+        fun pendingAtBoot(ctx: Context): Int {
+            val prefs = ctx.getSharedPreferences("harbor.downloads", Context.MODE_PRIVATE)
+            return prefs.all.count { (k, v) ->
+                if (k.startsWith("ua:") || k.startsWith("pref:")) false
+                else {
+                    val state = (v as? String)?.let { try { JSONObject(it).optString("state") } catch (_: Exception) { null } }
+                    state == QUEUED || state == RUNNING || state == WAITING
+                }
+            }
+        }
         private const val PART = ".part"
         private const val MAX_PARALLEL = 2
         private const val MAX_ATTEMPTS = 12

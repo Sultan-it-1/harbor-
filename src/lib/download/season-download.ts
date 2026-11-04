@@ -15,6 +15,10 @@ import type { PlayEpisode } from "@/lib/view";
 import { loadPickerAddons } from "@/views/play-picker/use-addons";
 import { buildPipelineInput } from "@/views/play-picker/use-pipeline-result";
 import { activeDownloadFor, beginBackgroundJob, endBackgroundJob, enqueueDownload } from "./downloads-store";
+import { isAndroidApp } from "@/lib/android";
+import { readActiveStremioAuthKey } from "@/lib/auth";
+import { buildDebridClients } from "@/lib/debrid/registry";
+import { loadStoredSettings } from "@/lib/settings/load";
 
 export type SeasonDownloadProgress = {
   total: number;
@@ -106,6 +110,7 @@ export async function downloadSeason(opts: {
             rawUrl: r.data.url,
             headers: r.data.headers,
             subtitles: r.data.subtitles,
+            source: s,
           });
           ok = true;
           break;
@@ -157,12 +162,52 @@ export function seasonJobKey(metaId: string, episodes: PlayEpisode[]): string {
   return `${metaId}|s${episodes[0]?.season ?? ""}`;
 }
 
+// Android: the queue lives in the page, which goes away when the app is swiped out of Recents.
+// The episodes still to do are kept in storage and picked up on the next start.
+const SAVED_JOBS_KEY = "harbor.seasonJobs";
+type SavedJob = { key: string; meta: Meta; episodes: PlayEpisode[] };
+
+function readSavedJobs(): SavedJob[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVED_JOBS_KEY) ?? "[]") as unknown;
+    return Array.isArray(v) ? (v as SavedJob[]).filter((j) => j && typeof j.key === "string" && Array.isArray(j.episodes)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveJob(key: string, meta: Meta, episodes: PlayEpisode[] | null) {
+  if (!isAndroidApp()) return;
+  try {
+    const rest = readSavedJobs().filter((j) => j.key !== key);
+    if (episodes && episodes.length > 0) {
+      const slim = { id: meta.id, type: meta.type, name: meta.name, poster: meta.poster, behaviorHints: meta.behaviorHints, releaseInfo: meta.releaseInfo } as Meta;
+      rest.push({ key, meta: slim, episodes });
+    }
+    localStorage.setItem(SAVED_JOBS_KEY, JSON.stringify(rest));
+  } catch {
+    /* storage full: the queue just won't survive a restart */
+  }
+}
+
+/** On start (Android): carry on with season queues the app was closed in the middle of. */
+export function resumeSavedSeasonJobs(): void {
+  const saved = readSavedJobs();
+  if (saved.length === 0) return;
+  const settings = loadStoredSettings();
+  const debrids = buildDebridClients({ rdKey: settings.rdKey, tbKey: settings.tbKey, adKey: settings.adKey, pmKey: settings.pmKey, dlKey: settings.dlKey });
+  for (const j of saved) {
+    startSeasonDownload(j.key, { meta: j.meta, episodes: j.episodes, authKey: readActiveStremioAuthKey(), settings, debrids });
+  }
+}
+
 export function startSeasonDownload(
   key: string,
   opts: Omit<Parameters<typeof downloadSeason>[0], "signal" | "onProgress">,
 ): void {
   const cur = jobs.get(key);
   if (cur && !cur.progress.finished) return;
+  saveJob(key, opts.meta, opts.episodes);
   const ac = new AbortController();
   const job: SeasonJob = {
     key,
@@ -180,11 +225,16 @@ export function startSeasonDownload(
     signal: ac.signal,
     onProgress: (p) => {
       job.progress = p;
+      // Episodes handled so far (queued, skipped or failed) are done; keep the rest.
+      saveJob(key, opts.meta, opts.episodes.slice(p.done));
       notifyJobs();
     },
   })
     .catch((e: unknown) => console.warn("[season-download] stopped", e))
     .finally(() => {
+      // Stopped by the user or finished: nothing to pick up later. (If the app is closed, this
+      // never runs and the saved rest stays.)
+      saveJob(key, opts.meta, null);
       job.progress = { ...job.progress, current: null, finished: true };
       endBackgroundJob(bgKey);
       notifyJobs();

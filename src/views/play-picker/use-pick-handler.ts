@@ -178,6 +178,7 @@ export function usePickHandler({
           rawUrl: r.data.url,
           headers: r.data.headers,
           subtitles: r.data.subtitles,
+          source: stream,
         });
         opened = true;
         setResolving(null);

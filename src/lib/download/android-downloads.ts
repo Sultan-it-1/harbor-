@@ -15,6 +15,12 @@ export type NativeStatus = {
   received?: number;
   total?: number | null;
   reason?: string;
+  /** What the note/error says, as a code the page translates (Downloads.kt codeFor/failCode). */
+  code?: string;
+  http?: number;
+  /** "retry_in": seconds until the next try. */
+  sec?: number;
+  title?: string;
   /** Subtitles saved next to the video so far. */
   subs?: number;
 };
@@ -52,6 +58,25 @@ export function nativeStatus(): Record<string, NativeStatus> {
 
 export function nativeDelete(id: string): void {
   androidApi()?.dlDelete?.(id);
+}
+
+export function nativeRelink(id: string, url: string, headers?: Record<string, string>): boolean {
+  return androidApi()?.dlRelink?.(id, url, JSON.stringify(headers ?? {})) === true;
+}
+
+/** null on shells without the setting. */
+export function nativeWifiOnly(): boolean | null {
+  const api = androidApi();
+  if (!api?.dlWifiOnly) return null;
+  try {
+    return api.dlWifiOnly();
+  } catch {
+    return null;
+  }
+}
+
+export function nativeSetWifiOnly(on: boolean): void {
+  androidApi()?.dlSetWifiOnly?.(on);
 }
 
 export function nativePause(id: string): boolean {

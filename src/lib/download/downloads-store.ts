@@ -15,6 +15,7 @@ import {
   nativePause,
   nativeResume,
   nativeStart,
+  nativeRelink,
   nativeStatus,
 } from "./android-downloads";
 
@@ -48,6 +49,14 @@ export type DownloadItem = {
   /** Android: subtitles saved with the video, and whether a search is still running. */
   subsCount?: number;
   subsState?: "searching" | "done" | null;
+  /** Android: the note/error as a code + parameters the Downloads page translates. */
+  code?: string | null;
+  http?: number;
+  sec?: number;
+  /** The stream it came from, so an expired link can be resolved again (debrid links expire). */
+  source?: unknown;
+  /** A fresh link was already fetched once on its own for the current failure. */
+  autoRelinked?: boolean;
 };
 
 type EnqueueArgs = {
@@ -60,6 +69,8 @@ type EnqueueArgs = {
   headers?: Record<string, string>;
   /** Subtitles that came with the stream itself. */
   subtitles?: { url: string; lang?: string }[];
+  /** The picked stream (re-resolved when its link expires). */
+  source?: unknown;
 };
 
 const items = new Map<string, DownloadItem>();
@@ -104,12 +115,24 @@ export function endBackgroundJob(key: string): void {
   syncKeepAlive();
 }
 
-function persist() {
+// Written when something that matters changes (status, error, a new or removed item), and at
+// most every 30 s for progress alone: rewriting the whole list every second wore the flash and
+// the battery during long downloads.
+let lastPersistSig = "";
+let lastPersistAt = 0;
+function persist(force = false) {
+  const sig = [...items.values()].map((d) => `${d.id}:${d.status}:${d.paused ? 1 : 0}:${d.error ?? ""}:${d.subsCount ?? 0}:${d.totalBytes ?? ""}`).join("|");
+  const now = Date.now();
+  if (!force && sig === lastPersistSig && now - lastPersistAt < 30_000) return;
   try {
     const durable = [...items.values()].map((d) => ({ ...d, bytesPerSec: 0 }));
     localStorage.setItem(PERSIST_KEY, JSON.stringify(durable));
-  } catch {
-    /* ignore */
+    lastPersistSig = sig;
+    lastPersistAt = now;
+  } catch (e) {
+    // Storage full: the list stays in memory, and Android's own downloads are re-listed from
+    // the app on the next start (see pollAndroid), so nothing becomes impossible to delete.
+    console.warn("[downloads] couldn't save the downloads list", e);
   }
 }
 
@@ -151,9 +174,36 @@ hydrate();
 
 let pollTimer: number | null = null;
 
+let pollTick = 0;
 function pollAndroid() {
+  // In the background only every 5 s: nothing is on screen, the app's downloader keeps going.
+  if (typeof document !== "undefined" && document.visibilityState === "hidden" && pollTick++ % 5 !== 0) return;
   const st = nativeStatus();
   const now = Date.now();
+  // Downloads the app has but this list lost (e.g. storage was full when it was saved): list
+  // them again so they can be seen, played and deleted.
+  for (const [id, n] of Object.entries(st)) {
+    if (items.has(id) || !n || n.status === "missing") continue;
+    items.set(id, {
+      id,
+      metaId: "",
+      title: n.title || "Download",
+      subtitle: null,
+      poster: null,
+      season: null,
+      episode: null,
+      streamLabel: null,
+      url: "",
+      path: `android:${id}`,
+      status: n.status === "done" ? "done" : n.status === "error" ? "error" : "downloading",
+      receivedBytes: n.received ?? 0,
+      totalBytes: n.total ?? null,
+      ratio: n.total ? Math.min(1, (n.received ?? 0) / n.total) : 0,
+      bytesPerSec: 0,
+      error: n.status === "error" ? n.reason ?? null : null,
+      startedAt: now,
+    });
+  }
   let active = 0;
   let changed = false;
   const set = (d: DownloadItem, next: Partial<DownloadItem>) => {
@@ -188,7 +238,15 @@ function pollAndroid() {
     }
     if (n.status === "error") {
       if (cur.status === "downloading" || cur.status === "error") {
-        set(cur, { status: "error", error: n.reason || "Download failed", bytesPerSec: 0, note: null, paused: false, receivedBytes: received, totalBytes: total ?? null, ratio: total ? Math.min(1, received / total) : 0 });
+        set(cur, { status: "error", error: n.reason || "Download failed", code: n.code ?? null, http: n.http ?? 0, bytesPerSec: 0, note: null, paused: false, receivedBytes: received, totalBytes: total ?? null, ratio: total ? Math.min(1, received / total) : 0 });
+        // An expired or refused link: fetch a fresh one once, on its own (season downloads
+        // resolve every episode up front, so later links often expire before their turn).
+        const after = items.get(cur.id);
+        if (after && !after.autoRelinked && (n.code === "expired" || n.code === "refused") && after.source) {
+          items.set(cur.id, { ...after, autoRelinked: true });
+          changed = true;
+          void relinkDownload(cur.id);
+        }
       }
       continue;
     }
@@ -209,6 +267,8 @@ function pollAndroid() {
       ratio: total ? Math.min(1, received / total) : 0,
       bytesPerSec: n.status === "downloading" ? bps : 0,
       note: n.status === "downloading" ? null : n.reason || "Waiting…",
+      code: n.status === "downloading" ? null : n.code ?? null,
+      sec: n.sec ?? 0,
       paused: n.status === "paused",
     });
   }
@@ -275,16 +335,55 @@ export function pauseDownload(id: string): void {
   patch(id, { paused: true, note: "Paused", bytesPerSec: 0 });
 }
 
+/** Android: get a fresh link for a download whose link expired, and carry on from what is
+ *  already downloaded. False when that isn't possible (no source kept, nothing found). */
+export async function relinkDownload(id: string): Promise<boolean> {
+  const d = items.get(id);
+  if (!ANDROID || !d?.source) return false;
+  try {
+    const [{ resolveStream }, { buildDebridClients }, { loadStoredSettings }] = await Promise.all([
+      import("@/lib/streams/resolve"),
+      import("@/lib/debrid/registry"),
+      import("@/lib/settings/load"),
+    ]);
+    const st = loadStoredSettings();
+    const debrids = buildDebridClients({ rdKey: st.rdKey, tbKey: st.tbKey, adKey: st.adKey, pmKey: st.pmKey, dlKey: st.dlKey });
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 45_000);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await resolveStream(d.source as any, debrids, ac.signal, true).finally(() => window.clearTimeout(timer));
+    if (!r.ok || !nativeRelink(id, r.data.url, r.data.headers)) return false;
+    patch(id, { status: "downloading", paused: false, error: null, code: "queued", note: "Queued", retryable: true });
+    ensureAndroidPolling();
+    return true;
+  } catch (e) {
+    console.warn("[downloads] couldn't get a fresh link", e);
+    return false;
+  }
+}
+
 /** Android: carry on with a paused download, or retry a failed one from where it stopped. */
 export function resumeDownload(id: string): void {
   if (!ANDROID) return;
+  const d = items.get(id);
+  // An expired or refused link: retrying the same URL can't work, ask the source again.
+  if (d && d.status === "error" && (d.code === "expired" || d.code === "refused") && d.source) {
+    patch(id, { note: "Getting a fresh link…", code: "relinking", error: null, status: "downloading", autoRelinked: true });
+    void relinkDownload(id).then((ok) => {
+      if (ok) return;
+      if (!nativeResume(id)) patch(id, { status: "error", retryable: false, code: d.code, error: d.error });
+      else patch(id, { status: "downloading", paused: false, error: null, note: "Queued", retryable: true });
+      ensureAndroidPolling();
+    });
+    return;
+  }
   if (!nativeResume(id)) {
     // Nothing to resume from (lost, or no link any more): the error text says what to do.
     patch(id, { retryable: false });
     refreshDownloads();
     return;
   }
-  patch(id, { status: "downloading", paused: false, error: null, note: "Queued", retryable: true });
+  patch(id, { status: "downloading", paused: false, error: null, note: "Queued", code: "queued", retryable: true, autoRelinked: false });
   ensureAndroidPolling();
 }
 
@@ -394,6 +493,7 @@ export async function enqueueDownload(args: EnqueueArgs): Promise<string> {
     streamLabel: streamLabel ?? null,
     url,
     path,
+    source: ANDROID ? args.source : undefined,
     status: "downloading",
     receivedBytes: 0,
     totalBytes: null,

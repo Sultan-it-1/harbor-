@@ -504,6 +504,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (!player.isShowing) RefreshRate.apply(this)
         downloads.kick()
+        DownloadService.clearPausedNotice(this)
         // e.g. back from the battery dialog: let the page re-check what it shows.
         if (pageLoaded) webView.evaluateJavascript("window.dispatchEvent(new Event('harbor:resume'))", null)
     }
@@ -687,6 +688,20 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun dlStorage(t: String): String = if (ok(t)) guard("dlStorage", "{}") { downloads.storage() } else "{}"
+
+        /** A fresh link for an expired download; keeps what was already downloaded. */
+        @JavascriptInterface
+        fun dlRelink(t: String, id: String, url: String, headersJson: String): Boolean =
+            ok(t) && guard("dlRelink", false) { downloads.relink(id, url, headersJson) }
+
+        /** Downloads only on Wi-Fi (default) or also on mobile data. */
+        @JavascriptInterface
+        fun dlSetWifiOnly(t: String, on: Boolean) {
+            if (ok(t)) guard("dlSetWifiOnly", Unit) { downloads.wifiOnly = on }
+        }
+
+        @JavascriptInterface
+        fun dlWifiOnly(t: String): Boolean = ok(t) && guard("dlWifiOnly", true) { downloads.wifiOnly }
     }
 
     companion object {

@@ -411,6 +411,14 @@ function Shell() {
   useViewPreloader();
 
   useEffect(() => startMaintenance(), []);
+  // Android: season download queues cut short by the app closing carry on, after start-up.
+  useEffect(() => {
+    if (!isPhoneLayout()) return;
+    const t = window.setTimeout(() => {
+      void import("@/lib/download/season-download").then((m) => m.resumeSavedSeasonJobs()).catch(() => {});
+    }, 8000);
+    return () => window.clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     uiScaleRef.current = settings.uiScale;
