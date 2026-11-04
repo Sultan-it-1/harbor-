@@ -1412,3 +1412,32 @@ html[data-phone] [role="dialog"],
 html[data-phone] [aria-modal="true"] {
   max-width: 100vw;
 }
+
+/* Floating things that sit at the bottom of the screen (back-to-top, toasts, the Customize bar)
+   go above the phone tab bar instead of under it (the bar is 60px, PHONE_TABBAR_H). */
+html[data-phone] .phone-above-tabbar {
+  bottom: calc(60px + env(safe-area-inset-bottom) + 12px) !important;
+}
+
+/* ---- Touch screens ------------------------------------------------------------------ */
+/* Tailwind puts every hover: variant inside @media (hover: hover), so on a phone a control
+   styled "opacity-0 group-hover:opacity-100" stays invisible yet still takes taps. Show such
+   controls on touch screens. Hover-only extras (row scroll arrows, decorative overlays) opt out
+   with data-hover-only; they then stay hidden and stop catching taps. */
+@media (hover: none) {
+  :is(button, a, [role="button"]).opacity-0[class*="group-hover"]:not([data-hover-only]),
+  .opacity-0[class*="group-hover"]:has(:is(button, a, [role="button"])):not([data-hover-only]) {
+    opacity: 1;
+  }
+  [data-hover-only],
+  [data-hover-only] * {
+    pointer-events: none !important;
+  }
+}
+
+/* ---- Right-to-left ------------------------------------------------------------------- */
+/* Arabic letters join; letter-spacing (the tracking-* utilities on labels and headings) pulls
+   them apart. Unlayered, so it wins over the utility layer. */
+html[dir="rtl"] * {
+  letter-spacing: normal;
+}

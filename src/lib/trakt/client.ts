@@ -45,7 +45,15 @@ async function refreshAccessToken(): Promise<TraktSession | null> {
     }),
   });
   if (!res.ok) {
-    setSession(null);
+    // Only a refused refresh token ends the session (400/401, "invalid_grant"). A 5xx, a rate
+    // limit (429) or a proxy page is temporary: keep the session and try again on the next call,
+    // instead of silently signing the user out.
+    let refused = res.status === 401;
+    if (res.status === 400) {
+      const body = await res.text().catch(() => "");
+      refused = !body || /invalid_grant|invalid_request|unauthorized_client/i.test(body);
+    }
+    if (refused) setSession(null);
     return null;
   }
   const data = (await res.json()) as {

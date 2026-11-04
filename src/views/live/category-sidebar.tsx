@@ -3,6 +3,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import { FAVORITES_GROUP_KEY } from "@/lib/iptv/favorites";
 import { toggleGroupHidden, toggleGroupPin, useGroupPrefs } from "@/lib/iptv/group-order";
+import { isPhoneLayout } from "@/lib/platform";
+
+// Phone: there is no hover, so the pin/hide buttons are always shown (see index.css) and the
+// row keeps room for them instead of drawing them over the channel count.
+const PHONE = isPhoneLayout();
 
 export function CategorySidebar({
   groups,
@@ -224,7 +229,7 @@ function CategoryItem({
         onClick={onClick}
         className={`flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors duration-150 ${
           active ? "bg-elevated text-ink" : "text-ink-muted hover:bg-elevated/65 hover:text-ink"
-        }`}
+        } ${PHONE && hasActions ? "pe-[84px]" : ""}`}
       >
         <span
           className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md ${
@@ -253,7 +258,7 @@ function CategoryItem({
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold tabular-nums transition-opacity ${
             active ? "bg-canvas text-ink-muted" : "bg-canvas/55 text-ink-subtle"
-          } ${hasActions ? "group-hover/cat:opacity-0" : ""}`}
+          } ${hasActions && !PHONE ? "group-hover/cat:opacity-0" : ""}`}
         >
           {count.toLocaleString()}
         </span>
@@ -268,7 +273,7 @@ function CategoryItem({
             }}
             title={pinned ? t("Unpin from top") : t("Pin category to top")}
             aria-label={pinned ? t("Unpin category") : t("Pin category to top")}
-            className={`flex h-6 w-6 items-center justify-center rounded-md ${
+            className={`flex ${PHONE ? "h-8 w-8" : "h-6 w-6"} items-center justify-center rounded-md ${
               pinned ? "bg-accent text-canvas" : "bg-canvas/90 text-ink-muted hover:text-ink"
             }`}
           >
@@ -282,7 +287,7 @@ function CategoryItem({
             }}
             title={t("Hide category")}
             aria-label={t("Hide category")}
-            className="flex h-6 w-6 items-center justify-center rounded-md bg-canvas/90 text-ink-muted hover:text-ink"
+            className={`flex ${PHONE ? "h-8 w-8" : "h-6 w-6"} items-center justify-center rounded-md bg-canvas/90 text-ink-muted hover:text-ink`}
           >
             <EyeOff size={12} strokeWidth={2.2} />
           </button>

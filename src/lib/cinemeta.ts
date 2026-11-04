@@ -54,10 +54,17 @@ export function isAddonNativeMeta(meta: Meta): boolean {
 }
 
 async function catalog(path: string): Promise<Meta[]> {
-  const res = await fetch(`${CINEMETA}/catalog/${path}.json`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.metas ?? [];
+  // Offline, or a captive portal / proxy answering with an HTML page: an empty row, not an
+  // unhandled rejection ("Unexpected token '<'").
+  try {
+    const res = await fetch(`${CINEMETA}/catalog/${path}.json`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json?.metas) ? json.metas : [];
+  } catch (e) {
+    console.warn("[cinemeta] catalog failed", path, e);
+    return [];
+  }
 }
 
 function cinemetaTopPath(type: "movie" | "series", genre?: string, skip = 0): string {
@@ -74,8 +81,13 @@ export const topSeries = (genre?: string, skip = 0) =>
   catalog(cinemetaTopPath("series", genre, skip));
 
 export async function meta(type: "movie" | "series", id: string): Promise<Meta | null> {
-  const res = await fetch(`${CINEMETA}/meta/${type}/${id}.json`);
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.meta ?? null;
+  try {
+    const res = await fetch(`${CINEMETA}/meta/${type}/${id}.json`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.meta ?? null;
+  } catch (e) {
+    console.warn("[cinemeta] meta failed", type, id, e);
+    return null;
+  }
 }

@@ -85,6 +85,8 @@ const settings: Record<string, string> = {
     "يخفي تفاصيل الحلقات المعرّضة للحرق في قوائم الحلقات حتى تشاهدها.",
   "Blur episode artwork, titles, and descriptions for episodes you have not watched yet, on both shows and anime. Hover an episode to peek.":
     "تمويه صور الحلقات وعناوينها وأوصافها للحلقات التي لم تشاهدها بعد، في المسلسلات والأنمي معًا. مرّر فوق حلقة لإلقاء نظرة.",
+  "Blur episode artwork, titles, and descriptions for episodes you have not watched yet, on both shows and anime. Press and hold an episode to peek.":
+    "تمويه صور الحلقات وعناوينها وأوصافها للحلقات التي لم تشاهدها بعد، في المسلسلات والأنمي معًا. اضغط مطوّلًا على حلقة لإلقاء نظرة.",
   "Leave the episode you are up to clear and only blur the ones after it.":
     "اترك الحلقة التي وصلت إليها واضحة وموّه فقط ما بعدها.",
   "Keep the next episode visible": "إبقاء الحلقة التالية ظاهرة",

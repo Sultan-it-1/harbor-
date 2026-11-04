@@ -13,6 +13,10 @@ import { useHasNewEpisode } from "@/lib/new-episodes";
 import { Tooltip } from "@/views/detail/tooltip";
 import { useSettings } from "@/lib/settings";
 import { useView, type PlayEpisode } from "@/lib/view";
+import { isPhoneLayout } from "@/lib/platform";
+import { useTapToConfirm } from "@/views/addons/use-tap-to-confirm";
+
+const PHONE = isPhoneLayout();
 
 type Props = {
   item: LibraryItem;
@@ -27,6 +31,7 @@ export const ContinueCard = memo(function ContinueCard({ item, watched = false, 
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const { open: openContextMenu } = useContextMenu();
+  const confirmDismiss = useTapToConfirm();
   useSnapshotVersion();
   const newEpisode = useHasNewEpisode(item);
   const snapshot = readSnapshot(item._id);
@@ -297,14 +302,30 @@ export const ContinueCard = memo(function ContinueCard({ item, watched = false, 
           type="button"
           onClick={(e) => {
             e.stopPropagation();
+            // Phone: the ✕ is always visible there, so a stray tap must not remove the title.
+            // The first tap asks, a second tap within a few seconds removes it.
+            if (PHONE && !confirmDismiss.armed) {
+              confirmDismiss.arm();
+              return;
+            }
+            confirmDismiss.disarm();
             onDismiss(item);
           }}
-          aria-label={t("Remove from Continue Watching")}
-          className="group/x absolute end-0.5 top-0.5 z-10 flex h-11 w-11 items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100"
+          aria-label={confirmDismiss.armed ? t("Tap again to remove") : t("Remove from Continue Watching")}
+          className={`group/x absolute end-0.5 top-0.5 z-10 flex h-11 items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 ${
+            confirmDismiss.armed ? "w-auto opacity-100" : "w-11"
+          }`}
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-canvas/85 text-ink-muted ring-1 ring-white/12 backdrop-blur-sm transition-colors group-hover/x:bg-canvas group-hover/x:text-ink">
-            <X size={20} strokeWidth={2.4} />
-          </span>
+          {confirmDismiss.armed ? (
+            <span className="flex h-9 items-center gap-1.5 rounded-full bg-danger px-3 text-[12.5px] font-semibold text-white shadow-[0_6px_18px_-6px_rgba(0,0,0,0.6)]">
+              <X size={15} strokeWidth={2.6} />
+              {t("Tap again to remove")}
+            </span>
+          ) : (
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-canvas/85 text-ink-muted ring-1 ring-white/12 backdrop-blur-sm transition-colors group-hover/x:bg-canvas group-hover/x:text-ink">
+              <X size={20} strokeWidth={2.4} />
+            </span>
+          )}
         </button>
       )}
     </div>

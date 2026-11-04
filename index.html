@@ -36,10 +36,6 @@
       }
     </script>
     <title>Harbor</title>
-    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
-    <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://image.tmdb.org" />
     <link rel="preconnect" href="https://images.metahub.space" />
     <link rel="preconnect" href="https://api.themoviedb.org" crossorigin />
@@ -47,47 +43,29 @@
     <link rel="preconnect" href="https://api.strem.io" crossorigin />
     <link rel="dns-prefetch" href="https://www.omdbapi.com" />
     <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
-    <link
-      href="https://api.fontshare.com/v2/css?f[]=sentient@400,500,600,700,401,501,601,701&f[]=switzer@400,500,600,700&f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@400,500,700,800&display=swap"
-      rel="stylesheet"
-    />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Fonts ship with the app (scripts/fetch-web-fonts.mjs): no CDN can hold up the first paint. -->
+    <link rel="stylesheet" href="/fonts/fonts.css" />
     <script>
-      window.onerror = function(message, source, lineno, colno, error) {
-        var errDiv = document.createElement('div');
-        errDiv.style.position = 'fixed';
-        errDiv.style.top = '0';
-        errDiv.style.left = '0';
-        errDiv.style.width = '100%';
-        errDiv.style.backgroundColor = '#8b0000';
-        errDiv.style.color = 'white';
-        errDiv.style.zIndex = '999999';
-        errDiv.style.padding = '15px';
-        errDiv.style.fontFamily = 'monospace';
-        errDiv.style.fontSize = '12px';
-        errDiv.style.wordBreak = 'break-all';
-        errDiv.innerHTML = '<strong>JS Error:</strong> ' + message + ' <br>at ' + source + ':' + lineno + ':' + colno + '<br>Stack: ' + (error && error.stack || 'none');
-        document.body.appendChild(errDiv);
-      };
-      window.addEventListener('unhandledrejection', function(event) {
-        var errDiv = document.createElement('div');
-        errDiv.style.position = 'fixed';
-        errDiv.style.top = '0';
-        errDiv.style.left = '0';
-        errDiv.style.width = '100%';
-        errDiv.style.backgroundColor = '#b22222';
-        errDiv.style.color = 'white';
-        errDiv.style.zIndex = '999999';
-        errDiv.style.padding = '15px';
-        errDiv.style.fontFamily = 'monospace';
-        errDiv.style.fontSize = '12px';
-        errDiv.style.wordBreak = 'break-all';
-        errDiv.innerHTML = '<strong>Promise Rejection:</strong> ' + event.reason + '<br>Stack: ' + (event.reason && event.reason.stack || 'none');
-        document.body.appendChild(errDiv);
-      });
+      // Uncaught errors are only drawn on screen when debugging is switched on by hand
+      // (localStorage "harbor.debugErrors" = "1"); otherwise they go to the console only.
+      (function () {
+        var on = false;
+        try { on = localStorage.getItem('harbor.debugErrors') === '1'; } catch (e) {}
+        if (!on) return;
+        function show(title, text, color) {
+          var d = document.createElement('div');
+          d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;padding:12px;color:#fff;font:12px/1.4 monospace;word-break:break-all;background:' + color;
+          d.textContent = title + ' ' + text;
+          d.addEventListener('click', function () { d.remove(); });
+          (document.body || document.documentElement).appendChild(d);
+        }
+        window.addEventListener('error', function (e) {
+          show('JS Error:', String(e.message) + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno + ' ' + ((e.error && e.error.stack) || ''), '#8b0000');
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          show('Promise Rejection:', String(e.reason) + ' ' + ((e.reason && e.reason.stack) || ''), '#b22222');
+        });
+      })();
     </script>
     <style>
       html, body, #root {

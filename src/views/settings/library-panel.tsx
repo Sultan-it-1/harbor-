@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { useEffect, useRef, useState } from "react";
 import fanartLogo from "@/assets/addon-logos/fanarttv.svg";
 import mdblistLogo from "@/assets/addon-logos/mdblist.png";
@@ -194,7 +195,11 @@ export function LibraryPanel({
 
       <Section
         title={t("Spoilers")}
-        subtitle={t("Blur episode artwork, titles, and descriptions for episodes you have not watched yet, on both shows and anime. Hover an episode to peek.")}
+        subtitle={
+          isPhoneLayout()
+            ? t("Blur episode artwork, titles, and descriptions for episodes you have not watched yet, on both shows and anime. Press and hold an episode to peek.")
+            : t("Blur episode artwork, titles, and descriptions for episodes you have not watched yet, on both shows and anime. Hover an episode to peek.")
+        }
       >
         <ToggleRow
           label={t("Blur spoilers")}

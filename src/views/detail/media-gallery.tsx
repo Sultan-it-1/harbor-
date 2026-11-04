@@ -160,7 +160,7 @@ export function MediaGallery({ detail, title, logo }: { detail: TmdbDetail; titl
         )}
       {toast &&
         createPortal(
-          <div className="pointer-events-none fixed bottom-6 left-1/2 z-[160] -translate-x-1/2 animate-popover-in">
+          <div className="phone-above-tabbar pointer-events-none fixed bottom-6 left-1/2 z-[160] -translate-x-1/2 animate-popover-in">
             <div className="flex items-center gap-2.5 rounded-full border border-edge-soft bg-elevated/95 py-1.5 ps-1.5 pe-4 shadow-[0_18px_50px_-20px_rgba(0,0,0,0.7)] backdrop-blur-md">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/15 text-accent">
                 <Check size={13} strokeWidth={2.6} />

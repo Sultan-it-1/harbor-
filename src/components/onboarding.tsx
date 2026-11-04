@@ -14,7 +14,11 @@ import { useT } from "@/lib/i18n";
 import { useOnboarding } from "@/lib/onboarding";
 
 type StepId = "splash" | "welcome" | "layout" | "tmdb" | "stremio" | "streaming" | "subtitles" | "done";
-const STEPS: StepId[] = ["splash", "welcome", "layout", "tmdb", "stremio", "streaming", "subtitles", "done"];
+// The "layout" step compares two desktop home layouts; the phone app has its own layout, so the
+// step is skipped there.
+const STEPS: StepId[] = isPhoneLayout()
+  ? ["splash", "welcome", "tmdb", "stremio", "streaming", "subtitles", "done"]
+  : ["splash", "welcome", "layout", "tmdb", "stremio", "streaming", "subtitles", "done"];
 
 export function OnboardingModal() {
   const { onboarded, finishOnboarding } = useOnboarding();

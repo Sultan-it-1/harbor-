@@ -552,6 +552,7 @@ function EdgeArrow({
     <div className={`pointer-events-none absolute inset-y-0 z-30 flex w-14 items-center ${sideClass}`}>
       <button
         onClick={onClick}
+        data-hover-only
         aria-label={label}
         tabIndex={visible ? 0 : -1}
         className={`pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-canvas/85 text-ink backdrop-blur-md transition-all duration-200 hover:scale-105 hover:bg-canvas ${

@@ -73,6 +73,8 @@ async function pollOnce(deviceCode: string): Promise<PollResult> {
   if (res.status === 429) return { kind: "slow_down" };
   if (res.status === 410) return { kind: "expired" };
   if (res.status === 418) return { kind: "denied" };
+  // Trakt hiccups (5xx, or a proxy page) are temporary: keep waiting until the code expires.
+  if (res.status >= 500) return { kind: "pending" };
   return { kind: "error", message: `HTTP ${res.status}` };
 }
 
@@ -96,9 +98,12 @@ export function pollForToken(
         return;
       }
 
-      const result = await pollOnce(device.deviceCode).catch(
-        (e: Error): PollResult => ({ kind: "error", message: e.message }),
-      );
+      // A network error (phone between Wi-Fi and mobile data, app in the background) is not a
+      // failure of the sign-in: keep polling until the code expires, like the Simkl flow.
+      const result = await pollOnce(device.deviceCode).catch((e: Error): PollResult => {
+        console.warn("[trakt] device-code poll failed, retrying", e?.message);
+        return { kind: "pending" };
+      });
       if (cancelled) return;
 
       if (result.kind === "slow_down") {

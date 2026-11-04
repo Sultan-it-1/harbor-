@@ -3,18 +3,23 @@ import { WifiOff } from "lucide-react";
 import { useDownloads } from "@/lib/download/downloads-store";
 import { useT } from "@/lib/i18n";
 import { useView } from "@/lib/view";
+import { nativeNetworkLooksDown, subscribeNativeNetwork } from "@/lib/android";
 
 function subscribe(cb: () => void) {
   window.addEventListener("online", cb);
   window.addEventListener("offline", cb);
+  const offNative = subscribeNativeNetwork(cb);
   return () => {
     window.removeEventListener("online", cb);
     window.removeEventListener("offline", cb);
+    offNative();
   };
 }
 
+/** Online = the system says so and (Android app) the last native requests didn't all fail —
+ *  a Wi-Fi without internet reports navigator.onLine = true. */
 export function useOnline(): boolean {
-  return useSyncExternalStore(subscribe, () => navigator.onLine, () => true);
+  return useSyncExternalStore(subscribe, () => navigator.onLine && !nativeNetworkLooksDown(), () => true);
 }
 
 export function OfflineBanner() {

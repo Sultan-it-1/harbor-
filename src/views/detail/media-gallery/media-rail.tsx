@@ -59,6 +59,7 @@ function RailArrow({ side, visible, onClick }: { side: "start" | "end"; visible:
       <button
         type="button"
         onClick={onClick}
+        data-hover-only
         aria-label={side === "start" ? t("Scroll left") : t("Scroll right")}
         tabIndex={visible ? 0 : -1}
         className={`flex h-11 w-11 items-center justify-center rounded-full bg-canvas/85 text-ink backdrop-blur-md transition-all duration-200 hover:scale-105 hover:bg-canvas ${

@@ -43,7 +43,7 @@ export function CatalogCustomizeBar(props: Props) {
         <BarButtons {...props} />
       </div>
       {props.editMode && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+        <div className="phone-above-tabbar pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
           <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-edge-soft bg-canvas/95 px-3 py-2 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.75)] backdrop-blur-md">
             <BarButtons {...props} />
           </div>

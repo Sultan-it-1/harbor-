@@ -114,7 +114,7 @@ export function SavePill({ path, onDismiss }: { path: string; onDismiss: () => v
   const name = path.split(/[\\/]/).pop() ?? path;
   const dir = path.slice(0, Math.max(0, path.length - name.length)).replace(/[\\/]+$/, "");
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[120] flex justify-center px-4">
+    <div className="phone-above-tabbar pointer-events-none fixed inset-x-0 bottom-6 z-[120] flex justify-center px-4">
       <div className="pointer-events-auto flex max-w-[min(560px,90vw)] items-center gap-3 rounded-full border border-edge bg-elevated/95 py-2 ps-3 pe-2 shadow-[0_18px_50px_-15px_rgba(0,0,0,0.7)] backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
           <Check size={13} strokeWidth={2.8} />

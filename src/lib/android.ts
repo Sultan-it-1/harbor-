@@ -82,12 +82,48 @@ export function isAndroidApp(): boolean {
 
 const pendingFetches = new Map<string, { resolve: (r: Response) => void; reject: (e: unknown) => void }>();
 let fetchSeq = 0;
+// Ids are unique per page load: after a reload the counter restarts, and a late answer to a
+// request from the old page must not resolve a new request that happens to reuse its id.
+const fetchPrefix = Math.random().toString(36).slice(2, 8);
 
 function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   const bin = atob(b64);
   const out = new Uint8Array(new ArrayBuffer(bin.length));
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+// ---- "is the network really there?" ---------------------------------------------------
+// navigator.onLine stays true on a Wi-Fi without internet (captive portal, dead router). Several
+// native requests failing in a row, with none succeeding, is the better signal on the phone.
+const NET_DOWN_AFTER = 3;
+let netFailuresInARow = 0;
+const netListeners = new Set<() => void>();
+let netProbe: number | null = null;
+function setNetFailures(n: number) {
+  const wasDown = netFailuresInARow >= NET_DOWN_AFTER;
+  netFailuresInARow = n;
+  const down = netFailuresInARow >= NET_DOWN_AFTER;
+  if (wasDown === down) return;
+  netListeners.forEach((l) => l());
+  // While it looks down, check now and then so the notice goes away once the network is back
+  // even if nothing else on the page makes a request.
+  if (down && netProbe == null) {
+    netProbe = window.setInterval(() => {
+      void androidFetch("https://v3-cinemeta.strem.io/manifest.json", { method: "GET", timeoutMs: 8000 }).catch(() => {});
+    }, 15000);
+  } else if (!down && netProbe != null) {
+    window.clearInterval(netProbe);
+    netProbe = null;
+  }
+}
+/** True when the last few native requests all failed at the network level. */
+export function nativeNetworkLooksDown(): boolean {
+  return netFailuresInARow >= NET_DOWN_AFTER;
+}
+export function subscribeNativeNetwork(cb: () => void): () => void {
+  netListeners.add(cb);
+  return () => netListeners.delete(cb);
 }
 
 if (typeof window !== "undefined") {
@@ -103,9 +139,11 @@ if (typeof window !== "undefined") {
       return;
     }
     if (!r.ok) {
+      if (!/cancel/i.test(r.error)) setNetFailures(netFailuresInARow + 1);
       p.reject(new TypeError(`Network request failed: ${r.error}`));
       return;
     }
+    setNetFailures(0);
     const nullBody = r.status === 204 || r.status === 205 || r.status === 304;
     const resp = new Response(nullBody ? null : base64ToBytes(r.body), { status: r.status, headers: r.headers });
     try {
@@ -132,7 +170,7 @@ export function androidFetch(url: string, init?: RequestInit & { timeoutMs?: num
   if (init?.body instanceof URLSearchParams && !headers["content-type"]) {
     headers["content-type"] = "application/x-www-form-urlencoded;charset=UTF-8";
   }
-  const id = `f${++fetchSeq}`;
+  const id = `f${fetchPrefix}-${++fetchSeq}`;
   return new Promise<Response>((resolve, reject) => {
     const signal = init?.signal;
     if (signal?.aborted) {

@@ -326,6 +326,7 @@ function ScrollArrow({
   return (
     <button
       type="button"
+      data-hover-only
       aria-label={side === "left" ? t("Scroll filters left") : t("Scroll filters right")}
       onClick={onClick}
       className={`absolute top-1/2 -translate-y-1/2 ${side === "left" ? "left-0 -translate-x-1/3" : "right-0 translate-x-1/3"} z-20 flex h-9 w-9 items-center justify-center rounded-full bg-canvas/85 text-ink shadow-[0_8px_24px_-6px_rgba(0,0,0,0.6)] backdrop-blur-md transition-all duration-200 hover:bg-canvas focus:outline-none ${
@@ -380,7 +381,7 @@ function CategoryFab({
   }, [open]);
 
   return (
-    <div data-filter-fab className="fixed bottom-16 end-5 z-40">
+    <div data-filter-fab className="phone-above-tabbar fixed bottom-16 end-5 z-40">
       {open && (
         <div className="absolute bottom-full end-0 mb-2 max-h-[60vh] w-44 overflow-y-auto rounded-2xl border border-edge-soft/60 bg-canvas py-1.5 shadow-2xl">
           {CATEGORIES.map((c) => (

@@ -266,7 +266,13 @@ export function Home({ active = true }: { active?: boolean }) {
       return;
     }
     let cancelled = false;
+    // Phone: the whole Stremio library used to be fetched and written to storage every 30 s and
+    // on every return to the app. Refresh at most every 2 minutes on return, and poll every 5.
+    const phone = isPhoneLayout();
+    const minGapMs = phone ? 2 * 60_000 : 0;
+    let lastLoadAt = 0;
     const load = () => {
+      lastLoadAt = Date.now();
       library(authKey)
         .then((libItems) => {
           if (cancelled) return;
@@ -320,13 +326,13 @@ export function Home({ active = true }: { active?: boolean }) {
     load();
     if (active) {
       const refresh = () => {
-        if (document.visibilityState === "visible") load();
+        if (document.visibilityState === "visible" && Date.now() - lastLoadAt >= minGapMs) load();
       };
       window.addEventListener("focus", refresh);
       document.addEventListener("visibilitychange", refresh);
       const poll = window.setInterval(() => {
         if (document.visibilityState === "visible") load();
-      }, 30000);
+      }, phone ? 5 * 60_000 : 30000);
       return () => {
         cancelled = true;
         window.removeEventListener("focus", refresh);
@@ -623,7 +629,7 @@ export function Home({ active = true }: { active?: boolean }) {
             </div>
           </div>
           {editMode && (
-            <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+            <div className="phone-above-tabbar pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
               <div className="pointer-events-auto rounded-xl border border-edge-soft bg-canvas/95 px-3 py-2 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.75)] backdrop-blur-md">
                 <CustomizeBar
                   editMode={editMode}

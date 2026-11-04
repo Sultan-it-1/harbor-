@@ -121,6 +121,7 @@ const common: Record<string, string> = {
     "تحقّق سريع من العمر قبل فتح إضافات الكبار. أجب عن ثلاثة أسئلة يوميّة يعرفها أي بالغ، وستدخل.",
   "You're verified": "تم التحقّق",
   "That's not it. Try a fresh round in a moment.": "إجابة غير صحيحة. ستظهر جولة جديدة بعد لحظات.",
+  "Tap again to remove": "اضغط مرة ثانية للإزالة",
 };
 
 export default common;

@@ -73,7 +73,7 @@ export function EpisodeJumper({
   };
 
   return (
-    <div ref={popoverRef} className="fixed bottom-16 end-5 z-40">
+    <div ref={popoverRef} className="phone-above-tabbar fixed bottom-16 end-5 z-40">
       {open && (
         <div className="absolute bottom-full end-0 mb-2 flex w-[280px] flex-col gap-2.5 rounded-xl border border-edge-soft/60 bg-canvas/95 p-3 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md animate-popover-in">
           <form

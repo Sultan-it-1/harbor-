@@ -6,6 +6,10 @@ import { anilistMediaToMeta } from "@/lib/anilist/to-meta";
 import type { AnilistMediaEntry, MediaListStatus } from "@/lib/anilist/types";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
+import { isPhoneLayout } from "@/lib/platform";
+import { useTapToConfirm } from "@/views/addons/use-tap-to-confirm";
+
+const PHONE = isPhoneLayout();
 
 const STATUS_LABELS: Record<MediaListStatus, string> = {
   CURRENT: "Watching",
@@ -40,6 +44,7 @@ export function AnilistEntryCard({
 }) {
   const t = useT();
   const { openMeta } = useView();
+  const confirmRemove = useTapToConfirm();
   const m = entry.media;
   const name = m.title.userPreferred || m.title.english || m.title.romaji || t("Untitled");
   const total = m.episodes ?? null;
@@ -64,14 +69,27 @@ export function AnilistEntryCard({
         />
         <span
           role="button"
-          aria-label={t("Remove from AniList")}
+          aria-label={confirmRemove.armed ? t("Tap again to remove") : t("Remove from AniList")}
           onClick={(e) => {
             e.stopPropagation();
-            if (!busy) onRemove();
+            if (busy) return;
+            // Phone: the button is always visible there and the delete hits the AniList account
+            // itself, so the first tap only asks.
+            if (PHONE && !confirmRemove.armed) {
+              confirmRemove.arm();
+              return;
+            }
+            confirmRemove.disarm();
+            onRemove();
           }}
-          className="absolute end-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-canvas/85 text-ink-muted opacity-0 ring-1 ring-edge-soft backdrop-blur-sm transition-opacity hover:text-danger group-hover:opacity-100"
+          className={`absolute end-2 top-2 flex h-8 items-center justify-center gap-1.5 rounded-full ring-1 backdrop-blur-sm transition-opacity group-hover:opacity-100 ${
+            confirmRemove.armed
+              ? "bg-danger px-3 text-[12px] font-semibold text-white opacity-100 ring-danger"
+              : "w-8 bg-canvas/85 text-ink-muted opacity-0 ring-edge-soft hover:text-danger"
+          }`}
         >
           <Trash2 size={13} />
+          {confirmRemove.armed && t("Tap again to remove")}
         </span>
       </button>
 

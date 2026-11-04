@@ -1,6 +1,6 @@
 import { safeFetch as fetch } from "@/lib/safe-fetch";
 import { readActiveStremioAuthKey } from "./auth";
-import { setUserAddons, userAddons, type Addon } from "./addons";
+import { getUserAddonsRaw, setUserAddons, type Addon } from "./addons";
 import { applyOrderToItems } from "./addons-store/reorder";
 
 const STORAGE_KEY = "harbor.installed-addons";
@@ -45,9 +45,16 @@ async function pushToStremio(addon: Addon, mode: "install" | "uninstall"): Promi
   const authKey = readAuthKey();
   if (!authKey) return true;
   try {
-    const current = await userAddons(authKey);
+    // Strict read: a timeout, 5xx or 429 gives null and nothing is written. Building the new
+    // list from a failed read (an empty list) used to replace the account's whole addon
+    // collection with just this addon, or with nothing at all on uninstall.
+    const current = await getUserAddonsRaw(authKey);
+    if (!current) return false;
     const filtered = current.filter((a) => a.transportUrl !== addon.transportUrl);
     const next = mode === "install" ? [...filtered, addon] : filtered;
+    // Never shrink the collection by more than the addon being removed, and never write an
+    // empty one (accounts always keep Stremio's protected base addons).
+    if (next.length === 0 || next.length < current.length - 1) return false;
     return await setUserAddons(authKey, next);
   } catch {
     return false;
@@ -293,9 +300,9 @@ export async function installFromUrl(
     const authKey = readAuthKey();
     if (authKey) {
       try {
-        const current = await userAddons(authKey);
-        const trimmed = current.filter((a) => a.manifest.id !== replaceId);
-        if (trimmed.length !== current.length) {
+        const current = await getUserAddonsRaw(authKey);
+        const trimmed = current ? current.filter((a) => a.manifest.id !== replaceId) : [];
+        if (current && trimmed.length > 0 && trimmed.length !== current.length) {
           await setUserAddons(authKey, trimmed);
         }
       } catch {
@@ -322,11 +329,13 @@ export async function uninstallAddon(id: string, transportUrl?: string): Promise
   }
   const authKey = readAuthKey();
   if (!authKey) return;
-  const current = await userAddons(authKey).catch(() => [] as Addon[]);
+  // Strict read (null on failure): never write back a list built from a failed read.
+  const current = await getUserAddonsRaw(authKey).catch(() => null);
+  if (!current) return;
   const filtered = transportUrl
     ? current.filter((a) => a.transportUrl !== transportUrl)
     : current.filter((a) => a.manifest.id !== id);
-  if (filtered.length !== current.length) {
+  if (filtered.length > 0 && filtered.length !== current.length) {
     await setUserAddons(authKey, filtered).catch(() => {});
   }
 }

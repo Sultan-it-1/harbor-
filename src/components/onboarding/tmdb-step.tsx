@@ -60,7 +60,7 @@ export function TmdbStep() {
       <div className="flex items-center gap-2.5">
         <div
           key={`pulse-${pulseKey}`}
-          className={`flex flex-1 items-center gap-2.5 rounded-xl border border-edge bg-canvas px-4 transition-colors focus-within:border-ink-subtle ${
+          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-edge bg-canvas px-4 transition-colors focus-within:border-ink-subtle ${
             status === "ok" ? "animate-verified-pulse" : ""
           }`}
         >
@@ -77,7 +77,7 @@ export function TmdbStep() {
             placeholder={t("v3 API key")}
             spellCheck={false}
             autoComplete="off"
-            className="h-12 flex-1 bg-transparent text-[14.5px] text-ink outline-none placeholder:text-ink-subtle/60"
+            className="h-12 min-w-0 flex-1 bg-transparent text-[14.5px] text-ink outline-none placeholder:text-ink-subtle/60"
           />
           {status === "ok" && (
             <Check
@@ -92,7 +92,7 @@ export function TmdbStep() {
         <button
           onClick={validate}
           disabled={!draft.trim() || status === "checking" || status === "ok"}
-          className={`flex h-12 min-w-[112px] items-center justify-center gap-1.5 rounded-xl px-5 text-[14px] font-semibold transition-all duration-300 ${
+          className={`flex h-12 min-w-[92px] shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-[14px] font-semibold transition-all duration-300 sm:min-w-[112px] sm:px-5 ${
             status === "ok"
               ? "bg-accent-soft text-accent"
               : "bg-ink text-canvas hover:scale-[1.02] active:scale-[0.98] disabled:scale-100 disabled:opacity-50"

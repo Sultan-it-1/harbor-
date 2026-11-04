@@ -114,6 +114,7 @@ function ArrowButton({
   return (
     <button
       type="button"
+      data-hover-only
       aria-label={t(side === "left" ? "Scroll left" : "Scroll right")}
       onClick={onClick}
       className={`absolute top-[55px] z-10 -translate-y-1/2 ${
