@@ -74,7 +74,7 @@ export function TrailerOverlay({
   }, [dismiss]);
 
   return createPortal(
-    <div
+    <div role="dialog" aria-modal="true"
       onClick={dismiss}
       className="fixed inset-0 z-[120] flex cursor-zoom-out items-center justify-center"
       style={{

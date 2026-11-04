@@ -41,7 +41,7 @@ export function MediaLightbox({
   const multi = images.length > 1;
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       onClick={onClose}
       className="fixed inset-0 z-[120] flex cursor-zoom-out items-center justify-center"
       style={{

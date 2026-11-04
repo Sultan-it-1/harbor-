@@ -63,7 +63,7 @@ export function AnimeGenrePicker({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[210] flex items-center justify-center px-4 py-10">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-[210] flex items-center justify-center px-4 py-10">
       <button
         aria-label={t("Close")}
         onClick={onClose}

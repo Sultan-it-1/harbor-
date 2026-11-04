@@ -39,7 +39,7 @@ export function EditFolderImagesModal({
   if (!isOpen) return null;
 
   return createPortal(
-    <div
+    <div role="dialog" aria-modal="true"
       className="pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center bg-black/72 backdrop-blur-md animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();

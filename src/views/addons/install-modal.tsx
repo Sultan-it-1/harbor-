@@ -130,7 +130,7 @@ export function AddonInstallModal({
   const isUpdate = resolved && resolved.matchKind !== "fresh";
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       className="fixed inset-0 z-[140] flex items-center justify-center bg-black/72 backdrop-blur-md animate-in fade-in duration-150"
       onClick={(e) => {
         if (!installStage && !done && e.target === e.currentTarget) onClose();

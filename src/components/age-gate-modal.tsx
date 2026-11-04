@@ -563,7 +563,7 @@ export function AgeGateModal({
   };
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       onClick={(e) => {
         if (e.target === e.currentTarget && !verified) onClose();
       }}

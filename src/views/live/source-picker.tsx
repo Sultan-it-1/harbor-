@@ -1,6 +1,7 @@
 import { ArrowUpToLine, Check, ChevronDown, ChevronUp, Copy, Download, MoreHorizontal, Pencil, Plus, RefreshCw, TextCursorInput, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { pushAndroidBackHandler } from "@/lib/android";
 import { confirmDialog } from "@/lib/dialog";
 import { useT } from "@/lib/i18n";
 import type { IptvPlaylistSource } from "@/lib/iptv/types";
@@ -62,18 +63,26 @@ export function SourcePicker({
     const onDown = (e: MouseEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) close();
     };
+    // One step back out of the picker: the ⋯ menu, then the add / edit form, then the picker.
+    const stepBack = () => {
+      if (actions) setActions(null);
+      else if (mode !== "list") setMode("list");
+      else close();
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (actions) setActions(null);
-        else if (mode !== "list") setMode("list");
-        else close();
-      }
+      if (e.key === "Escape") stepBack();
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    // Android back gesture does the same instead of leaving Live TV with the picker still open.
+    const dropBack = pushAndroidBackHandler(() => {
+      stepBack();
+      return true;
+    });
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      dropBack();
     };
   }, [open, mode, actions]);
 

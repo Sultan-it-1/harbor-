@@ -206,7 +206,7 @@ export function OrganizeAddonsPage({
   const showBackups = !!authKey && phase.kind !== "loadError";
 
   return (
-    <div className="fixed inset-0 z-[140] flex flex-col bg-canvas animate-in fade-in duration-150">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-[140] flex flex-col bg-canvas animate-in fade-in duration-150">
       <header
         data-tauri-drag-region
         className="relative z-50 shrink-0 border-b border-edge-soft bg-canvas/85 backdrop-blur-xl"

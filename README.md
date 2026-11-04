@@ -17,6 +17,8 @@ A Stremio client for Android and the web.
 - Native player (ExoPlayer) with FFmpeg audio, so Dolby / DTS tracks play with sound.
 - Addon subtitles with adjustable size, background, colour, position and delay.
 - Phone layout with a bottom tab bar, pinch to fill the screen while watching.
+- Downloads run in the background (movies, episodes and whole seasons) and play offline, with their subtitles.
+- A small check on the posters and episodes you've watched, following Harbor's history, your Stremio library and Trakt (switch it off in Settings).
 - Runs at the screen's highest refresh rate; video uses a judder-free rate and hardware decoding.
 - Signed releases: each new APK installs over the previous one.
 

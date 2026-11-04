@@ -35,7 +35,7 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
   };
 
   return createPortal(
-    <div
+    <div role="dialog" aria-modal="true"
       className="animate-fade-in fixed inset-0 z-[210] flex items-center justify-center bg-canvas/80"
       onClick={onClose}
     >
