@@ -94,6 +94,9 @@ export function SearchOverlay() {
     results.addons.length === 0 &&
     results.addonGroups.length === 0;
 
+  // Still waiting on at least one source: never say "no matches" yet.
+  const searching = !!trimmed && !directInput && status !== "done";
+
   return createPortal(
     <div
       className={`fixed inset-x-0 top-0 flex flex-col ${PHONE ? "z-[185] bg-canvas" : "bottom-0 z-[200]"}`}
@@ -130,7 +133,9 @@ export function SearchOverlay() {
             spellCheck={false}
             autoComplete="off"
           />
-          {status === "loading" && <Loader2 size={18} className="shrink-0 animate-spin text-ink-subtle" />}
+          {(status === "loading" || status === "typing") && trimmed && (
+            <Loader2 size={18} className="shrink-0 animate-spin text-ink-subtle" />
+          )}
           {query && (
             <button
               type="button"
@@ -195,6 +200,12 @@ export function SearchOverlay() {
               </div>
               <AnimeRow items={results.anime} onClose={close} />
               <AddonResults groups={results.addonGroups} onClose={close} />
+              {searching && (
+                <div className="flex items-center justify-center gap-2 text-[12.5px] text-ink-subtle">
+                  <Loader2 size={14} className="animate-spin" />
+                  {t("Searching more sources…")}
+                </div>
+              )}
             </div>
           )}
 
@@ -207,7 +218,7 @@ export function SearchOverlay() {
             </div>
           )}
 
-          {trimmed && !directInput && !results && status !== "done" && (
+          {searching && !hasResults && (
             <div className="flex flex-col items-center gap-3 pt-16 text-ink-muted">
               <Loader2 size={22} className="animate-spin" />
               <span className="text-[13.5px]">{t("Looking…")}</span>

@@ -8,6 +8,7 @@ import { getCachedPlaylist } from "@/lib/iptv/store";
 import { arabicAwareMatch } from "@/lib/iptv/rtl";
 import type { Settings } from "@/lib/settings";
 import { safeFetch } from "@/lib/safe-fetch";
+import type { SearchRun } from "@/lib/search-net";
 
 export type SearchPerson = {
   id: number;
@@ -114,14 +115,15 @@ type JikanAnime = {
   score?: number;
 };
 
-export async function searchAnime(query: string, limit = 8): Promise<AnimeHit[]> {
+export async function searchAnime(query: string, limit = 8, run?: SearchRun): Promise<AnimeHit[]> {
   const q = query.trim();
   if (q.length < 2) return [];
   try {
     const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&order_by=popularity&sort=asc&limit=${limit}&sfw=true`;
-    const res = await safeFetch(url);
-    if (!res.ok) return [];
-    const data = (await res.json()) as { data?: JikanAnime[] };
+    const data = run
+      ? await run.json<{ data?: JikanAnime[] }>(url)
+      : await safeFetch(url).then((r) => (r.ok ? (r.json() as Promise<{ data?: JikanAnime[] }>) : null));
+    if (!data) return [];
     return (data.data ?? []).map((a) => {
       const year = a.year ?? (a.aired?.from ? Number(a.aired.from.slice(0, 4)) : null);
       const name = a.title_english?.trim() || a.title?.trim() || "Untitled";
@@ -140,11 +142,12 @@ export async function searchAnime(query: string, limit = 8): Promise<AnimeHit[]>
   }
 }
 
-export async function searchCinemeta(query: string): Promise<{ movies: Meta[]; series: Meta[] }> {
+export async function searchCinemeta(query: string, run?: SearchRun): Promise<{ movies: Meta[]; series: Meta[] }> {
   const q = query.trim();
   if (q.length < 2) return { movies: [], series: [] };
   const fetchKind = async (type: "movie" | "series"): Promise<Meta[]> => {
     const url = `https://v3-cinemeta.strem.io/catalog/${type}/top/search=${encodeURIComponent(q)}.json`;
+    if (run) return ((await run.json<{ metas?: Meta[] }>(url))?.metas ?? []).slice(0, 12);
     const res = await safeFetch(url, { headers: { Accept: "application/json" } }).catch(() => null);
     if (!res || !res.ok) return [];
     const data = (await res.json().catch(() => null)) as { metas?: Meta[] } | null;

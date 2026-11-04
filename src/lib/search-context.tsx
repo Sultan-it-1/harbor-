@@ -1,8 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MOVIE_GENRES } from "@/lib/feed/tags";
 import { useParental } from "@/lib/parental";
-import { searchAll, searchAnime, searchCinemeta, searchLiveTvChannels, type SearchResults } from "@/lib/search";
-import { searchAddonCatalogs, searchAddonGroups, mergeMetas } from "@/lib/search-addons";
+import {
+  detectIntent,
+  searchAll,
+  searchAnime,
+  searchCinemeta,
+  searchLiveTvChannels,
+  type AnimeHit,
+  type SearchResults,
+} from "@/lib/search";
+import { searchAddonCatalogs, searchAddonGroups, mergeMetas, type AddonResultGroup } from "@/lib/search-addons";
+import { createSearchRun } from "@/lib/search-net";
+import type { Meta } from "@/lib/cinemeta";
 import { searchAddonIndex } from "@/lib/search-addon-index";
 import { gatherCatalogAddons, type Addon } from "@/lib/addons";
 import { useAuth } from "@/lib/auth";
@@ -26,6 +36,12 @@ type SearchValue = SearchState & {
 };
 
 const Ctx = createContext<SearchValue | null>(null);
+const CACHE_TTL_MS = 3 * 60_000;
+const CACHE_MAX = 40;
+
+function emptyResults(query: string): SearchResults {
+  return { query, topMatch: null, people: [], movies: [], series: [], liveTv: [], anime: [], addonGroups: [], addons: [], intent: null };
+}
 const RECENT_KEY = "harbor.search.recent";
 const MAX_RECENT = 8;
 
@@ -81,10 +97,22 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     return ids;
   }, [hiddenTabs.anime]);
 
+  // Searches seen recently: typing, backspacing or coming back to a query is instant.
+  const cacheRef = useRef(new Map<string, { at: number; results: SearchResults }>());
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Opening search: have the addon list ready, so the first search doesn't wait for it.
+  useEffect(() => {
+    if (open) void ensureAddons();
+  }, [open, ensureAddons]);
+
   useEffect(() => {
     const trimmed = query.trim();
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     if (!trimmed) {
+      // Nothing to search: forget any search still in flight so it can't show up later.
+      reqIdRef.current += 1;
+      abortRef.current?.abort();
       setResults(null);
       setStatus("idle");
       return;
@@ -92,72 +120,91 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     setStatus("typing");
     const animeAllowed = !hiddenTabs.anime;
     const liveTvAllowed = !hiddenTabs.liveTv && settings.iptvPlaylists.length > 0;
+    const cacheKey = `${trimmed.toLowerCase()}|${settings.tmdbKey ? 1 : 0}|${animeAllowed ? 1 : 0}|${liveTvAllowed ? settings.iptvPlaylists.length : 0}|${excludeGenres.join(",")}|${authKey ?? ""}`;
     debounceRef.current = window.setTimeout(() => {
       const id = ++reqIdRef.current;
+      abortRef.current?.abort();
+      const hit = cacheRef.current.get(cacheKey);
+      if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
+        setResults(hit.results);
+        setStatus("done");
+        return;
+      }
+      const ac = new AbortController();
+      abortRef.current = ac;
+      const run = createSearchRun(ac.signal);
       setStatus("loading");
-      const liveTv = liveTvAllowed ? searchLiveTvChannels(trimmed, settings.iptvPlaylists) : [];
-      const tmdbPromise = searchAll(settings.tmdbKey, trimmed, { excludeGenres });
-      const animePromise = animeAllowed ? searchAnime(trimmed) : Promise.resolve([]);
-      const addonsP = ensureAddons();
-      const addonPromise = addonsP
-        .then((a) => searchAddonCatalogs(a, trimmed))
-        .catch(() => ({ movies: [], series: [] }));
-      const addonGroupsPromise = addonsP
-        .then((a) => searchAddonGroups(a, trimmed))
-        .catch(() => []);
-      const cinemetaPromise = searchCinemeta(trimmed).catch(() => ({ movies: [], series: [] }));
-      let tmdbResult: Awaited<typeof tmdbPromise> | null = null;
+
+      // What has arrived so far. Every source reports in on its own, so nothing waits for the
+      // slowest one (or for TMDB), and the search only counts as finished when all are.
       const acc = {
-        anime: [] as Awaited<typeof animePromise>,
-        addon: { movies: [], series: [] } as Awaited<typeof addonPromise>,
-        cine: { movies: [], series: [] } as Awaited<typeof cinemetaPromise>,
-        groups: [] as Awaited<typeof addonGroupsPromise>,
+        tmdb: null as SearchResults | null,
+        anime: [] as AnimeHit[],
+        addon: { movies: [], series: [] } as { movies: Meta[]; series: Meta[] },
+        cine: { movies: [], series: [] } as { movies: Meta[]; series: Meta[] },
+        groups: [] as AddonResultGroup[],
       };
+      const liveTv = liveTvAllowed ? searchLiveTvChannels(trimmed, settings.iptvPlaylists) : [];
+      const pending = new Set<string>();
       const publish = () => {
-        if (id !== reqIdRef.current || !tmdbResult) return;
-        const mergedMovies = mergeMetas(mergeMetas(tmdbResult.movies, acc.addon.movies), acc.cine.movies);
-        const mergedSeries = mergeMetas(mergeMetas(tmdbResult.series, acc.addon.series), acc.cine.series);
+        if (id !== reqIdRef.current) return;
+        const base = acc.tmdb ?? emptyResults(trimmed);
+        const mergedMovies = mergeMetas(mergeMetas(base.movies, acc.addon.movies), acc.cine.movies);
+        const mergedSeries = mergeMetas(mergeMetas(base.series, acc.addon.series), acc.cine.series);
         const shown = new Set<string>([...mergedMovies, ...mergedSeries].map((m) => m.id));
         const dedupedGroups = acc.groups
           .map((g) => ({ ...g, metas: g.metas.filter((m) => !shown.has(m.id)) }))
           .filter((g) => g.metas.length > 0);
-        setResults({
-          ...tmdbResult,
+        const next: SearchResults = {
+          ...base,
           movies: mergedMovies,
           series: mergedSeries,
           liveTv,
           anime: acc.anime,
           addonGroups: dedupedGroups,
           addons: searchAddonIndex(trimmed),
-        });
-        setStatus("done");
+          intent: base.intent ?? detectIntent(trimmed),
+        };
+        setResults(next);
+        const finished = pending.size === 0;
+        setStatus(finished ? "done" : "loading");
+        if (finished) {
+          const cache = cacheRef.current;
+          cache.set(cacheKey, { at: Date.now(), results: next });
+          while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
+        }
       };
-      tmdbPromise
-        .then((r) => {
-          tmdbResult = r;
-          publish();
-        })
-        .catch(() => {
-          if (id === reqIdRef.current) setStatus("done");
-        });
-      void animePromise.then((a) => {
-        acc.anime = a;
-        publish();
-      });
-      void addonPromise.then((a) => {
-        acc.addon = a;
-        publish();
-      });
-      void cinemetaPromise.then((c) => {
+      const track = <T,>(name: string, p: Promise<T>, apply: (v: T) => void) => {
+        pending.add(name);
+        p.then(apply)
+          .catch(() => {})
+          .finally(() => {
+            pending.delete(name);
+            publish();
+          });
+      };
+
+      // Quick, reliable sources first (they get the first network slots), slow ones after.
+      track("cinemeta", searchCinemeta(trimmed, run), (c) => {
         acc.cine = c;
-        publish();
       });
-      void addonGroupsPromise.then((g) => {
+      track("tmdb", searchAll(settings.tmdbKey, trimmed, { excludeGenres }), (r) => {
+        acc.tmdb = r;
+      });
+      if (animeAllowed) {
+        track("anime", searchAnime(trimmed, 8, run), (a) => {
+          acc.anime = a;
+        });
+      }
+      const addonsP = ensureAddons();
+      track("addon", addonsP.then((a) => searchAddonCatalogs(a, trimmed, run)), (a) => {
+        acc.addon = a;
+      });
+      track("groups", addonsP.then((a) => searchAddonGroups(a, trimmed, run)), (g) => {
         acc.groups = g;
-        publish();
       });
-    }, 180);
-  }, [query, settings.tmdbKey, settings.iptvPlaylists, excludeGenres, hiddenTabs.anime, hiddenTabs.liveTv, authKey]);
+    }, 150);
+  }, [query, settings.tmdbKey, settings.iptvPlaylists, excludeGenres, hiddenTabs.anime, hiddenTabs.liveTv, authKey, ensureAddons]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -179,6 +226,8 @@ export function SearchProvider({ children }: { children: ReactNode }) {
   const setQuery = useCallback((q: string) => setQueryState(q), []);
 
   const clear = useCallback(() => {
+    reqIdRef.current += 1;
+    abortRef.current?.abort();
     setQueryState("");
     setResults(null);
     setStatus("idle");

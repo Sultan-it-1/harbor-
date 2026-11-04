@@ -103,7 +103,7 @@ async function tauriHarborFetch(input: string, init?: RequestInit): Promise<Resp
       method: init?.method ?? "GET",
       headers,
       body,
-      timeoutMs: 30000,
+      timeoutMs: (init as { timeoutMs?: number } | undefined)?.timeoutMs ?? 30000,
     },
   });
   return new Response(resp.body, {
@@ -152,3 +152,23 @@ export const safeFetch: typeof fetch = (input, init) => {
   }
   return fetch(input, init);
 };
+
+/**
+ * A fetch that gives up after `ms` and stops when `init.signal` aborts. Meant for bursts of
+ * requests (search asks dozens of addons at once): a slow or dead server must not hold things up
+ * for the usual 30 seconds. On the Android app the shell also drops the request, freeing its thread.
+ */
+export function timedFetch(input: string, init: RequestInit = {}, ms = 7000): Promise<Response> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  const outer = init.signal ?? null;
+  const onAbort = () => ac.abort();
+  if (outer) {
+    if (outer.aborted) ac.abort();
+    else outer.addEventListener("abort", onAbort, { once: true });
+  }
+  return safeFetch(input, { ...init, signal: ac.signal, timeoutMs: ms } as RequestInit).finally(() => {
+    clearTimeout(timer);
+    outer?.removeEventListener("abort", onAbort);
+  });
+}

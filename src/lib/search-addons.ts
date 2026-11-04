@@ -1,6 +1,6 @@
 import type { Addon } from "./addons";
 import type { Meta } from "./cinemeta";
-import { safeFetch } from "./safe-fetch";
+import type { SearchRun } from "./search-net";
 
 const CAP_PER_CATALOG = 20;
 const MAX_CATALOGS = 12;
@@ -17,6 +17,7 @@ function addonOrigin(addon: Addon) {
 export async function searchAddonCatalogs(
   addons: Addon[],
   query: string,
+  run: SearchRun,
 ): Promise<{ movies: Meta[]; series: Meta[] }> {
   const q = query.trim();
   if (!q) return { movies: [], series: [] };
@@ -38,10 +39,8 @@ export async function searchAddonCatalogs(
     targets.map(async ({ addon, type, id }) => {
       const base = addon.transportUrl.replace(/\/manifest\.json$/, "");
       const url = `${base}/catalog/${type}/${id}/search=${encodeURIComponent(q)}.json`;
-      const res = await safeFetch(url, { headers: { Accept: "application/json" } });
-      if (!res.ok) return { type, metas: [] as Meta[], origin: addonOrigin(addon) };
-      const json = (await res.json()) as { metas?: Meta[] };
-      return { type, metas: (json.metas ?? []).slice(0, CAP_PER_CATALOG), origin: addonOrigin(addon) };
+      const json = await run.json<{ metas?: Meta[] }>(url);
+      return { type, metas: (json?.metas ?? []).slice(0, CAP_PER_CATALOG), origin: addonOrigin(addon) };
     }),
   );
 
@@ -82,7 +81,7 @@ export type AddonResultGroup = {
 const MAX_GROUPS = 8;
 const CAP_PER_GROUP = 14;
 
-export async function searchAddonGroups(addons: Addon[], query: string): Promise<AddonResultGroup[]> {
+export async function searchAddonGroups(addons: Addon[], query: string, run: SearchRun): Promise<AddonResultGroup[]> {
   const q = query.trim();
   if (!q) return [];
 
@@ -108,10 +107,8 @@ export async function searchAddonGroups(addons: Addon[], query: string): Promise
       const settled = await Promise.allSettled(
         targets.map(async ({ type, id }) => {
           const url = `${base}/catalog/${type}/${id}/search=${encodeURIComponent(q)}.json`;
-          const res = await safeFetch(url, { headers: { Accept: "application/json" } });
-          if (!res.ok) return [] as Meta[];
-          const json = (await res.json()) as { metas?: Meta[] };
-          return (json.metas ?? []).slice(0, CAP_PER_GROUP);
+          const json = await run.json<{ metas?: Meta[] }>(url);
+          return (json?.metas ?? []).slice(0, CAP_PER_GROUP);
         }),
       );
       const seen = new Set<string>();

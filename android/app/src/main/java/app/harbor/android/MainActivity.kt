@@ -361,6 +361,9 @@ class MainActivity : ComponentActivity() {
         fun fetch(id: String, requestJson: String) = fetcher.enqueue(id, requestJson)
 
         @JavascriptInterface
+        fun fetchCancel(id: String) = fetcher.cancel(id)
+
+        @JavascriptInterface
         fun play(sourceJson: String) = runOnUiThread { player.play(sourceJson) }
 
         @JavascriptInterface

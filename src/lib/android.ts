@@ -4,6 +4,8 @@
 type HarborAndroidApi = {
   version(): string;
   fetch(id: string, requestJson: string): void;
+  /** Stops a request that is queued or running in the shell (frees its thread). */
+  fetchCancel?(id: string): void;
   play(sourceJson: string): void;
   command(json: string): void;
   stop(): void;
@@ -121,7 +123,7 @@ export function canNativeFetch(init?: RequestInit): boolean {
   return b == null || typeof b === "string" || b instanceof URLSearchParams;
 }
 
-export function androidFetch(url: string, init?: RequestInit): Promise<Response> {
+export function androidFetch(url: string, init?: RequestInit & { timeoutMs?: number }): Promise<Response> {
   const api = androidApi();
   if (!api) return fetch(url, init);
   const headers: Record<string, string> = {};
@@ -139,9 +141,17 @@ export function androidFetch(url: string, init?: RequestInit): Promise<Response>
     }
     pendingFetches.set(id, { resolve, reject });
     signal?.addEventListener("abort", () => {
-      if (pendingFetches.delete(id)) reject(new DOMException("Aborted", "AbortError"));
+      if (pendingFetches.delete(id)) {
+        reject(new DOMException("Aborted", "AbortError"));
+        // Don't leave the request holding one of the shell's few network threads.
+        try {
+          api.fetchCancel?.(id);
+        } catch {
+          /* older shell */
+        }
+      }
     });
-    api.fetch(id, JSON.stringify({ url, method: init?.method ?? "GET", headers, body, timeoutMs: 30000 }));
+    api.fetch(id, JSON.stringify({ url, method: init?.method ?? "GET", headers, body, timeoutMs: init?.timeoutMs ?? 30000 }));
   });
 }
 
