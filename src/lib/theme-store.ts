@@ -1,3 +1,4 @@
+import { harborJson, THEME_STORE_GONE } from "@/lib/harbor-service";
 import { parseThemeJson, saveCustomTheme, type CustomTheme } from "@/lib/custom-themes";
 
 const ORIGIN = "https://harbor.site";
@@ -49,8 +50,8 @@ export async function browseThemes(sort = "top", q = ""): Promise<StoreTheme[]> 
   const url = `${API}/themes?sort=${encodeURIComponent(sort)}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
   const r = await fetch(url);
   if (!r.ok) throw new Error("Could not reach the theme library.");
-  const d = await r.json();
-  return (d.themes || []).map(normalize);
+  const d = await harborJson<{ themes?: unknown[] }>(r, THEME_STORE_GONE);
+  return ((d.themes || []) as Parameters<typeof normalize>[0][]).map(normalize);
 }
 
 export async function downloadTheme(id: string, preview?: string | null): Promise<CustomTheme> {

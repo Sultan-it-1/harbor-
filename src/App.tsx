@@ -218,7 +218,10 @@ function useIdleEvict(active: boolean, pin = false): boolean {
 
 export function App() {
   // if (isWeb() && isMobileDevice()) return <MobileNotice />;
+  // The outer boundary also covers the providers: a throw in one of them used to leave a
+  // blank screen (the inner boundary sits below them).
   return (
+    <HarborErrorBoundary>
     <SettingsProvider>
       <ProfilesProvider>
       <ParentalProvider>
@@ -286,6 +289,7 @@ export function App() {
       </ParentalProvider>
       </ProfilesProvider>
     </SettingsProvider>
+    </HarborErrorBoundary>
   );
 }
 

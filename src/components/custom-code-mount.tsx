@@ -3,6 +3,28 @@ import { useSettings } from "@/lib/settings";
 import { getThemeById } from "@/lib/theme";
 import { useView } from "@/lib/view";
 import type { CustomTheme } from "@/lib/custom-themes";
+import { isPhoneLayout } from "@/lib/platform";
+
+// Android app: a theme (downloaded or imported from a file) may style the app, but its own
+// JavaScript would run with the app's full rights: sign-in tokens, debrid keys and the device
+// bridge. On the phone only the user's own custom code runs; theme scripts are skipped and theme
+// HTML is stripped of scripts and event handlers.
+const PHONE = isPhoneLayout();
+
+function stripActiveContent(html: string): string {
+  if (!html || typeof DOMParser === "undefined") return html;
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  doc.querySelectorAll("script, iframe, object, embed, link, meta, base, form").forEach((n) => n.remove());
+  doc.querySelectorAll("*").forEach((el) => {
+    for (const a of [...el.attributes]) {
+      const name = a.name.toLowerCase();
+      if (name.startsWith("on") || /^\s*javascript:/i.test(a.value) || ((name === "href" || name === "src") && /^\s*data:text\/html/i.test(a.value))) {
+        el.removeAttribute(a.name);
+      }
+    }
+  });
+  return doc.body.innerHTML;
+}
 
 const STYLE_ID = "harbor-custom-css";
 const THEME_STYLE_ID = "harbor-theme-css";
@@ -77,6 +99,10 @@ export function CustomCodeMount() {
     if (typeof window === "undefined") return;
     const code = (themeExt?.js ?? "").trim();
     if (!code) return;
+    if (PHONE) {
+      console.info("[harbor-theme-js] skipped on Android: themes can't run scripts in the app");
+      return;
+    }
     try {
       new Function(code)();
     } catch (err) {
@@ -85,7 +111,8 @@ export function CustomCodeMount() {
     return () => runThemeCleanup("__harborThemeCleanup");
   }, [themeExt?.js]);
 
-  const html = `${settings.customHtml ?? ""}${themeExt?.html ?? ""}`;
+  const themeHtml = PHONE ? stripActiveContent(themeExt?.html ?? "") : (themeExt?.html ?? "");
+  const html = `${settings.customHtml ?? ""}${themeHtml}`;
   return (
     <div
       id={OVERLAY_ID}

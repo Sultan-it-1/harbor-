@@ -8,6 +8,7 @@ import { fetchAniSkipSegments, kitsuToMal } from "./aniskip";
 import { chaptersToSegments } from "./chapters";
 import { fetchIntroDbSegments } from "./theintrodb";
 import type { SkipSegment } from "./types";
+import { useSettings } from "../settings";
 
 export type { SkipSegment, SkipKind, SkipSource } from "./types";
 
@@ -28,6 +29,8 @@ export function useSkipSegments(
 ): SkipSegment[] {
   const [aniSkip, setAniSkip] = useState<SkipSegment[]>([]);
   const [introDb, setIntroDb] = useState<SkipSegment[]>([]);
+  // Settings > Privacy: the online lookups send the title's id to TheIntroDB and AniSkip.
+  const lookups = useSettings().settings.skipLookups !== false;
   const kitsuId = parseKitsuId(meta.id);
   const epNum = episode?.episode;
   const introSeason = episode?.imdbSeason ?? episode?.season;
@@ -41,7 +44,7 @@ export function useSkipSegments(
 
   useEffect(() => {
     setAniSkip([]);
-    if (kitsuId == null || epNum == null) return;
+    if (!lookups || kitsuId == null || epNum == null) return;
     let cancelled = false;
     (async () => {
       const malId = await kitsuToMal(kitsuId);
@@ -53,11 +56,11 @@ export function useSkipSegments(
     return () => {
       cancelled = true;
     };
-  }, [kitsuId, epNum]);
+  }, [kitsuId, epNum, lookups]);
 
   useEffect(() => {
     setIntroDb([]);
-    if (durationSec <= 0) return;
+    if (!lookups || durationSec <= 0) return;
     if (!introDbId.startsWith("tmdb:") && !introDbId.startsWith("tt")) return;
     let cancelled = false;
     const ep =
@@ -72,7 +75,7 @@ export function useSkipSegments(
     return () => {
       cancelled = true;
     };
-  }, [introDbId, introSeason, introEpisode, durationSec]);
+  }, [introDbId, introSeason, introEpisode, durationSec, lookups]);
 
   const fromChapters = useMemo(
     () => chaptersToSegments(chapters, durationSec),

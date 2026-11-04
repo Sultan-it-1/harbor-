@@ -245,6 +245,12 @@ function validateManifest(m: unknown): { ok: true; manifest: Addon["manifest"] }
   const obj = m as Record<string, unknown>;
   if (typeof obj.id !== "string" || obj.id.length === 0) return { ok: false, error: "Manifest is missing an `id`." };
   if (typeof obj.name !== "string" || obj.name.length === 0) return { ok: false, error: "Manifest is missing a `name`." };
+  // The lists the app walks for every title must be lists: one bad manifest used to break
+  // streams and catalogs for all addons.
+  if (obj.resources !== undefined && !Array.isArray(obj.resources)) return { ok: false, error: "Manifest `resources` must be a list." };
+  if (obj.types !== undefined && !Array.isArray(obj.types)) return { ok: false, error: "Manifest `types` must be a list." };
+  if (obj.catalogs !== undefined && !Array.isArray(obj.catalogs)) return { ok: false, error: "Manifest `catalogs` must be a list." };
+  if (obj.idPrefixes !== undefined && obj.idPrefixes !== null && !Array.isArray(obj.idPrefixes)) return { ok: false, error: "Manifest `idPrefixes` must be a list." };
   return { ok: true, manifest: obj as Addon["manifest"] };
 }
 

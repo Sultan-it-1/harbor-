@@ -8,6 +8,8 @@ import { HdrOverlayApp } from "@/views/hdr-overlay-app";
 import { PipApp } from "@/views/pip";
 import "@/index.css";
 import { watchSecureScreens } from "@/lib/android-secure";
+import { installConsoleRedaction } from "@/lib/log-redact";
+import { isPhoneLayout } from "@/lib/platform";
 
 function detectPipMode(): boolean {
   if (new URLSearchParams(window.location.search).get("pip") === "1") return true;
@@ -76,3 +78,5 @@ requestAnimationFrame(() => {
 });
 
 watchSecureScreens();
+// Android: keys and passwords in URLs never reach logcat.
+if (isPhoneLayout()) installConsoleRedaction();

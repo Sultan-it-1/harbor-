@@ -568,7 +568,7 @@ const SETTINGS_OPTIONS: SettingsOption[] = [
 
 // Android app: hide sections that only affect the desktop engine / keyboard / the web
 // player chrome (the phone uses the native player).
-const PHONE_HIDDEN_SECTIONS = new Set<string>(["mpv", "playerLayout", "hotkeys"]);
+const PHONE_HIDDEN_SECTIONS = new Set<string>(["mpv", "playerLayout", "hotkeys", "anime"]);
 const VISIBLE_NAV_GROUPS = isPhoneLayout()
   ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => !PHONE_HIDDEN_SECTIONS.has(it.id)) })).filter((g) => g.items.length > 0)
   : NAV_GROUPS;
@@ -612,8 +612,10 @@ export function SettingsNav({
     if (!trimmed) return null;
     return SETTINGS_OPTIONS.filter(
       (o) =>
-        o.label.toLowerCase().includes(trimmed) ||
-        (o.keywords ?? []).some((k) => k.toLowerCase().includes(trimmed)),
+        // Search never opens a section the phone hides (mpv, hotkeys…).
+        !(isPhoneLayout() && PHONE_HIDDEN_SECTIONS.has(o.section)) &&
+        (o.label.toLowerCase().includes(trimmed) ||
+          (o.keywords ?? []).some((k) => k.toLowerCase().includes(trimmed))),
     );
   }, [trimmed]);
 

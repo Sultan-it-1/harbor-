@@ -3,6 +3,11 @@ import { PlayModePanel, PlayerEnginePanel } from "./player-panel";
 import { Section, Segmented, ToggleRow, useSettingsActiveContext } from "./shared";
 import { CROP_PRESETS } from "@/views/player/hooks/use-video-fill";
 import { useT } from "@/lib/i18n";
+import { isPhoneLayout } from "@/lib/platform";
+
+// Android app: the native player has its own engine, picture and audio handling; the mpv/HTML5
+// engine choice, mpv aspect presets and the mpv audio EQ have no effect there.
+const PHONE = isPhoneLayout();
 
 export function QualityPanel() {
   const t = useT();
@@ -17,12 +22,14 @@ export function QualityPanel() {
         <PlayModePanel />
       </Section>
 
+      {!PHONE && (
       <Section
         title={t("Player engine")}
         subtitle={t("HTML5 plays everything WebView2 supports. mpv handles TrueHD, DTS-HD, AV1, weird containers, and HDR. Auto picks based on the source.")}
       >
         <PlayerEnginePanel />
       </Section>
+      )}
 
       <Section
         title={t("Stream quality in player")}
@@ -36,6 +43,7 @@ export function QualityPanel() {
         />
       </Section>
 
+      {!PHONE && (
       <Section
         title={t("Aspect ratio")}
         subtitle={t("Default picture shape on the mpv engine. Fit keeps the source as-is with any black bars; the rest stretch or crop to fill, handy for old 4:3 shows on a widescreen TV.")}
@@ -56,7 +64,9 @@ export function QualityPanel() {
           </button>
         </p>
       </Section>
+      )}
 
+      {!PHONE && (
       <Section
         title={t("Audio")}
         subtitle={t("Shape the sound without touching your system EQ. Applies on the mpv engine; the HTML5 engine plays audio untouched.")}
@@ -84,6 +94,7 @@ export function QualityPanel() {
           </p>
         </div>
       </Section>
+      )}
 
       <Section
         title={t("Skip intros")}

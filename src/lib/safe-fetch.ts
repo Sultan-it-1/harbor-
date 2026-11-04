@@ -44,6 +44,31 @@ const PROXY_SUFFIXES = [
   ".deno.dev",
 ];
 
+// Android app: these answer with proper CORS headers, so the WebView calls them directly
+// (no base64 hop through the shell, no limit of the shell's 12 network threads). Everything
+// else goes through the shell: IPTV panels, Letterboxd/IMDb, addons and APIs without CORS.
+const CORS_OK_HOSTS = new Set([
+  "api.themoviedb.org",
+  "image.tmdb.org",
+  "api.trakt.tv",
+  "api.simkl.com",
+  "graphql.anilist.co",
+  "kitsu.io",
+  "kitsu.app",
+  "api.jikan.moe",
+  "api.mdblist.com",
+  "webservice.fanart.tv",
+  "torrentio.strem.fun",
+  "stremio.torbox.app",
+]);
+
+function androidGoesNative(parsed: URL): boolean {
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  if (typeof window !== "undefined" && parsed.host === window.location.host) return false;
+  if (needsProxy(parsed)) return true;
+  return !CORS_OK_HOSTS.has(parsed.hostname);
+}
+
 function needsProxy(parsed: URL): boolean {
   if (DIRECT_HOSTS.has(parsed.hostname)) return false;
   return PROXY_HOSTS.has(parsed.hostname) || PROXY_SUFFIXES.some((s) => parsed.hostname.endsWith(s));
@@ -142,7 +167,7 @@ export const safeFetch: typeof fetch = (input, init) => {
     // Android app: no /api-proxy server behind us; the native shell does CORS-free HTTP.
     if (isAndroidApp() && canNativeFetch(init)) {
       try {
-        if (needsProxy(new URL(input))) return androidFetch(input, init);
+        if (androidGoesNative(new URL(input))) return androidFetch(input, init);
       } catch {
         /* not an absolute URL — fall through */
       }

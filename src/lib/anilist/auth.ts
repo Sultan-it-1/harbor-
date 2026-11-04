@@ -1,3 +1,4 @@
+import { ANILIST_SIGNIN_GONE, HarborServiceGone, isJsonResponse } from "@/lib/harbor-service";
 import {
   ANILIST_AUTHORIZE_URL,
   ANILIST_CLIENT_ID,
@@ -45,6 +46,7 @@ async function exchangeCode(code: string): Promise<string> {
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ code }),
   });
+  if (!isJsonResponse(res)) throw new HarborServiceGone(ANILIST_SIGNIN_GONE);
   if (!res.ok) throw new Error("AniList rejected that code. Authorize again and paste the newest one.");
   const json = (await res.json()) as { access_token?: string };
   if (!json.access_token) throw new Error("AniList did not return a token. Try authorizing again.");

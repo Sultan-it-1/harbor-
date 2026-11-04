@@ -1,3 +1,4 @@
+import { t as tNow } from "@/lib/i18n/translate";
 import {
   createContext,
   useCallback,
@@ -120,6 +121,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setSession(null);
   }, [activeProfile, updateProfile]);
+
+  // The Stremio API says the key is no longer valid: sign out, once, and say why.
+  useEffect(() => {
+    if (!session) return;
+    let handled = false;
+    const onExpired = () => {
+      if (handled) return;
+      handled = true;
+      signOut();
+      void import("@/lib/dialog").then(({ alertDialog }) =>
+        alertDialog(tNow("Your Stremio session has ended (signed out elsewhere, or the password changed). Sign in again to see your library.")),
+      );
+    };
+    window.addEventListener("harbor:stremio-session-expired", onExpired);
+    return () => window.removeEventListener("harbor:stremio-session-expired", onExpired);
+  }, [session, signOut]);
 
   const value = useMemo<AuthValue>(
     () => ({

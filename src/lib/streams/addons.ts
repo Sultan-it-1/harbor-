@@ -40,11 +40,19 @@ export async function fetchAddonStreams(
   for (let i = 0; i < addons.length; i++) {
     const addon = addons[i];
     const priority = i;
-    if (isStatusOnlyAddon(addon)) {
-      skipped.push(`${addon.manifest.name}(status-addon)`);
+    // One malformed manifest (resources or types not a list…) used to throw here and leave
+    // every title with "no sources": skip just that addon.
+    let id: string | null;
+    try {
+      if (isStatusOnlyAddon(addon)) {
+        skipped.push(`${addon.manifest.name}(status-addon)`);
+        continue;
+      }
+      id = pickId(addon, req.type, req.ids);
+    } catch (e) {
+      dwarn(`[addons] ${addon.manifest?.name ?? "addon"}: bad manifest, skipped`, e);
       continue;
     }
-    const id = pickId(addon, req.type, req.ids);
     if (!id) {
       skipped.push(`${addon.manifest.name}(no-matching-id)`);
       continue;
@@ -99,7 +107,7 @@ function pickId(addon: Addon, type: string, ids: string[]): string | null {
 
 function addonAcceptsId(addon: Addon, type: string, id: string): boolean {
   const m = addon.manifest;
-  const resources = m.resources ?? [];
+  const resources = Array.isArray(m.resources) ? m.resources : [];
   const streamResources = resources.filter(
     (r): r is { name: string; types?: string[]; idPrefixes?: string[] } =>
       typeof r === "object" && r.name === "stream",
@@ -115,8 +123,8 @@ function addonAcceptsId(addon: Addon, type: string, id: string): boolean {
     });
   }
   if (!resources.some((r) => r === "stream")) return false;
-  if (!m.types || !m.types.includes(type)) return false;
-  if (m.idPrefixes && m.idPrefixes.length > 0 && !m.idPrefixes.some((p) => id.startsWith(p))) {
+  if (!Array.isArray(m.types) || !m.types.includes(type)) return false;
+  if (Array.isArray(m.idPrefixes) && m.idPrefixes.length > 0 && !m.idPrefixes.some((p) => id.startsWith(p))) {
     return false;
   }
   return true;

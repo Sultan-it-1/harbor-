@@ -1,3 +1,4 @@
+import { androidFetch, isAndroidApp } from "@/lib/android";
 import { filterChannelsForDisplay } from "./divider-filter";
 import { loadFromShape } from "./ingest/load";
 import { detectProviderShape } from "./ingest/detect";
@@ -138,6 +139,14 @@ async function iptvFetch(url: string): Promise<Response> {
         },
       });
     }
+  }
+  // Android app: IPTV panels don't send CORS headers; the shell fetches them (as VLC, which
+  // some providers insist on).
+  if (isAndroidApp()) {
+    return androidFetch(url, {
+      headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "audio/x-mpegurl, application/x-mpegURL, application/octet-stream, */*" },
+      timeoutMs: 60_000,
+    });
   }
   return fetch(url, { cache: "no-store" });
 }

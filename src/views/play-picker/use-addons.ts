@@ -80,7 +80,7 @@ export async function loadPickerAddons(
       a.transportUrl?.includes("stremio.torbox.app"),
   );
   console.info(
-    `[picker] authKey=${authKey ? "yes" : "no"} tbKey=${settings.tbKey ? `set(${settings.tbKey.slice(0, 8)}…)` : "EMPTY"} stremioAddons=${stremioAddons.length} installed=${installed.length} merged=${merged.length} userStreamCount=${userStreamCount} hasTorbox=${existingTorboxIdx >= 0} torboxAutoAddable=${!!torbox}`,
+    `[picker] authKey=${authKey ? "yes" : "no"} tbKey=${settings.tbKey ? "set" : "EMPTY"} stremioAddons=${stremioAddons.length} installed=${installed.length} merged=${merged.length} userStreamCount=${userStreamCount} hasTorbox=${existingTorboxIdx >= 0} torboxAutoAddable=${!!torbox}`,
   );
   if (torbox) {
     if (existingTorboxIdx >= 0) {

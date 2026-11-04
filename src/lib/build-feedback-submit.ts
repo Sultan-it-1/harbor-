@@ -1,3 +1,4 @@
+import { isJsonResponse } from "@/lib/harbor-service";
 import { safeFetch } from "@/lib/safe-fetch";
 import { APP_VERSION, IS_BETA_BUILD } from "@/lib/build-info";
 
@@ -10,7 +11,7 @@ export async function submitBuildFeedback(rating: number): Promise<boolean> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ version: APP_VERSION, rating, beta: IS_BETA_BUILD }),
     });
-    return res.ok;
+    return res.ok && isJsonResponse(res);
   } catch {
     return false;
   }

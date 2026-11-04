@@ -1,3 +1,4 @@
+import { androidFetch, isAndroidApp } from "@/lib/android";
 import type { IptvChannel } from "./types";
 
 export type XtreamCreds = {
@@ -97,7 +98,10 @@ async function xtreamFetchText(url: string): Promise<string> {
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     return res.text();
   }
-  const res = await fetch(url, { cache: "no-store" });
+  // Android app: Xtream panels don't send CORS headers; the shell fetches them.
+  const res = isAndroidApp()
+    ? await androidFetch(url, { headers: { "User-Agent": XTREAM_UA, Accept: "application/json, */*" }, timeoutMs: 45_000 })
+    : await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   return res.text();
 }

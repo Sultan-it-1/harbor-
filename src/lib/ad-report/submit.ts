@@ -1,3 +1,4 @@
+import { isJsonResponse } from "@/lib/harbor-service";
 import { safeFetch } from "@/lib/safe-fetch";
 import { fingerprint } from "@/lib/skip-intro/fingerprint";
 import type { PlayerStreamRef } from "@/lib/view";
@@ -29,7 +30,7 @@ export async function submitAdReport(input: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content, source, ranges }),
     });
-    return res.ok;
+    return res.ok && isJsonResponse(res);
   } catch {
     return false;
   }

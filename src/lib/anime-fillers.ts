@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/safe-fetch";
 import { fetch as tauriHttpFetch } from "@tauri-apps/plugin-http";
 
 const CACHE_KEY = "harbor.animefillercache.v2";
@@ -118,7 +119,7 @@ async function fetchShow(slug: string): Promise<string | null> {
     const url = `${AFL}/${slug}`;
     const r = isTauri
       ? await tauriHttpFetch(url, { method: "GET", headers: { "User-Agent": UA } })
-      : await fetch(url);
+      : await safeFetch(url); // no CORS on animefillerlist.com: the Android shell fetches it
     if (!r.ok) return null;
     return await r.text();
   } catch {

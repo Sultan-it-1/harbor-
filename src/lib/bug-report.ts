@@ -1,3 +1,4 @@
+import { HarborServiceGone, isJsonResponse, REPORTS_GONE } from "@/lib/harbor-service";
 declare const __APP_VERSION__: string;
 
 const ENDPOINT =
@@ -167,6 +168,7 @@ export async function submitErrorReport(args: {
     }),
   );
   const res = await fetch(`${ENDPOINT}/v1/reports`, { method: "POST", body: fd });
+  if (!isJsonResponse(res)) throw new HarborServiceGone(REPORTS_GONE);
   if (!res.ok) {
     const j = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     throw new Error(j.error || `HTTP ${res.status}`);
@@ -198,6 +200,7 @@ export async function submitBugReport(
   for (const f of input.files) fd.append("files", f, f.name);
 
   const res = await fetch(`${ENDPOINT}/v1/reports`, { method: "POST", body: fd });
+  if (!isJsonResponse(res)) throw new HarborServiceGone(REPORTS_GONE);
   if (!res.ok) {
     const j = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     throw new Error(j.error || `HTTP ${res.status}`);

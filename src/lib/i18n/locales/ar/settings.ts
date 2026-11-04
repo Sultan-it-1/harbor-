@@ -1634,6 +1634,13 @@ const settings: Record<string, string> = {
     "ارجع إطاراً واحداً مع الإيقاف المؤقت. دقة بمستوى الإطار على mpv.",
   "Step forward one frame and pause. Frame-accurate on mpv.":
     "تقدّم إطاراً واحداً مع الإيقاف المؤقت. دقة بمستوى الإطار على mpv.",
+  "{count} tracker request blocked this session. Harbor sends no analytics of its own.": "حُجب {count} طلب تتبّع في هذه الجلسة. Harbor لا يرسل أي إحصاءات خاصة به.",
+  "Watching for ad, analytics, and tracking requests. Harbor sends no analytics of its own.": "يراقب طلبات الإعلانات والإحصاءات والتتبّع. Harbor لا يرسل أي إحصاءات خاصة به.",
+  "Look up intro and credits times": "البحث عن أوقات المقدمة والشارة",
+  "For the skip buttons, the title's IMDb/TMDB id, season and episode are sent to TheIntroDB, and anime episodes to AniSkip. Turn off to send nothing.": "لأزرار التخطي يُرسَل معرّف العمل في IMDb/TMDB والموسم والحلقة إلى TheIntroDB، وحلقات الأنمي إلى AniSkip. أطفئه حتى لا يُرسل شيء.",
+  "Harbor's report server has shut down, so this report wasn't sent.": "خادم البلاغات في Harbor توقف عن العمل، لذلك لم يُرسل هذا البلاغ.",
+  "The community theme store has shut down.": "متجر ثيمات المجتمع توقف عن العمل.",
+  "AniList sign-in went through Harbor's server, which has shut down, so it can't work right now.": "تسجيل الدخول إلى AniList كان يمر عبر خادم Harbor الذي توقف، لذلك لا يعمل حالياً.",
 };
 
 export default settings;

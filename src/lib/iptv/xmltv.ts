@@ -1,3 +1,4 @@
+import { androidFetch, isAndroidApp } from "@/lib/android";
 import type { EpgChannelMeta, EpgProgram, XmltvParseResult } from "./types";
 
 const MAX_BYTES = 200 * 1024 * 1024;
@@ -29,6 +30,14 @@ async function iptvFetch(url: string, signal: AbortSignal): Promise<Response> {
         },
       });
     }
+  }
+  // Android app: EPG hosts rarely send CORS headers; the shell fetches them.
+  if (isAndroidApp()) {
+    return androidFetch(url, {
+      signal,
+      headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "application/xml, text/xml, application/octet-stream, */*" },
+      timeoutMs: 90_000,
+    });
   }
   return fetch(url, { cache: "no-store", signal });
 }

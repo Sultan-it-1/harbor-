@@ -101,7 +101,15 @@ async function call<T>(path: string, body: object): Promise<T> {
     body: JSON.stringify(body),
   });
   const json = await res.json();
-  if (json.error) throw new Error(json.error.message ?? "Request failed");
+  if (json.error) {
+    // A revoked or expired key used to look like an empty library. Tell the app once, so it can
+    // sign out and say so.
+    const msg = String(json.error.message ?? "");
+    if (path !== "login" && /session does not exist|invalid auth|not logged in|session expired/i.test(msg)) {
+      if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("harbor:stremio-session-expired"));
+    }
+    throw new Error(msg || "Request failed");
+  }
   return json.result as T;
 }
 

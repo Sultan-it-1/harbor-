@@ -163,6 +163,8 @@ export type Settings = {
   preferEmbeddedSubs: boolean;
   betaUpdates: boolean;
   autoSkipIntro: boolean;
+  /** Look up intro/credits times online (sends the title's id to TheIntroDB / AniSkip). */
+  skipLookups: boolean;
   autoSkipAd: boolean;
   trackBlockWords: string[];
   forcedSubsWhenNativeAudio: boolean;

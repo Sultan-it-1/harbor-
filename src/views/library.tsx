@@ -1,3 +1,4 @@
+import { isPhoneLayout } from "@/lib/platform";
 import { Bookmark, Clock, HardDrive } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import traktLogo from "@/assets/trakt.svg";
@@ -26,7 +27,7 @@ function readSavedTab(): Tab {
     if (
       v === "watchlist" ||
       v === "history" ||
-      v === "local" ||
+      (v === "local" && !isPhoneLayout()) ||
       v === "trakt" ||
       v === "anilist" ||
       v === "simkl"
@@ -136,7 +137,9 @@ function Header({
             {t("Your collection.")}
           </h1>
           <p className="text-[14px] leading-snug text-ink-muted">
-            {t("Watchlist is what you've saved for later. History is everything you've watched. Local is files on your computer.")}
+            {isPhoneLayout()
+              ? t("Watchlist is what you've saved for later. History is everything you've watched.")
+              : t("Watchlist is what you've saved for later. History is everything you've watched. Local is files on your computer.")}
           </p>
         </div>
       </div>
@@ -152,10 +155,13 @@ function Header({
           <Clock size={14} strokeWidth={2.2} />
           {t("History")}
         </TabBtn>
-        <TabBtn active={tab === "local"} onClick={() => onTab("local")}>
-          <HardDrive size={14} strokeWidth={2.2} />
-          {t("Local")}
-        </TabBtn>
+        {/* Local = files on this computer: nothing to show on the phone. */}
+        {!isPhoneLayout() && (
+          <TabBtn active={tab === "local"} onClick={() => onTab("local")}>
+            <HardDrive size={14} strokeWidth={2.2} />
+            {t("Local")}
+          </TabBtn>
+        )}
         {traktConnected && (
           <TabBtn active={tab === "trakt"} onClick={() => onTab("trakt")}>
             <img src={traktLogo} alt="" className="h-3.5 w-3.5 object-contain" />

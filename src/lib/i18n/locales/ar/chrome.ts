@@ -146,6 +146,8 @@ const chrome: Record<string, string> = {
   "Lock sidebar tabs": "قفل تبويبات الشريط الجانبي",
   "Locks only activate once a PIN is set.": "تُفعَّل الأقفال فقط بعد تعيين رمز PIN.",
   "No tabs selected": "لم يتم تحديد أي تبويبات",
+  "Profiles": "البروفايلات",
+  "Your Stremio session has ended (signed out elsewhere, or the password changed). Sign in again to see your library.": "انتهت جلسة Stremio (سُجّل الخروج من مكان آخر أو تغيّرت كلمة المرور). سجّل الدخول مرة ثانية لترى مكتبتك.",
 };
 
 export default chrome;

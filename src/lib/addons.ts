@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/safe-fetch";
 import { safeFetch as fetch } from "@/lib/safe-fetch";
 import type { Meta } from "./cinemeta";
 import { fetchManifestAt, filterEnabled, loadInstalled } from "./addon-store";
@@ -85,16 +86,33 @@ async function call<T>(path: string, body: object): Promise<T | null> {
   }
 }
 
+// The account's addon collection is read from a dozen places (Home rows, search, the picker,
+// subtitles…): one request every 3 minutes is enough. Writes below drop the cached copy.
+const COLLECTION_TTL_MS = 3 * 60_000;
+const collectionCache = new Map<string, { at: number; p: Promise<Addon[]> }>();
+
+export function forgetUserAddonsCache(): void {
+  collectionCache.clear();
+}
+
 export async function userAddons(authKey: string): Promise<Addon[]> {
-  const result = await call<{ addons: Addon[] }>("addonCollectionGet", {
+  const hit = collectionCache.get(authKey);
+  if (hit && Date.now() - hit.at < COLLECTION_TTL_MS) return hit.p;
+  const p = call<{ addons: Addon[] }>("addonCollectionGet", {
     authKey,
     type: "user",
     update: false,
+  }).then((result) => {
+    // A failed read isn't cached: the next caller asks again.
+    if (!result) collectionCache.delete(authKey);
+    return result?.addons ?? [];
   });
-  return result?.addons ?? [];
+  collectionCache.set(authKey, { at: Date.now(), p });
+  return p;
 }
 
 export async function setUserAddons(authKey: string, addons: Addon[]): Promise<boolean> {
+  forgetUserAddonsCache();
   const result = await call<{ success?: boolean }>("addonCollectionSet", {
     authKey,
     type: "user",
@@ -126,6 +144,7 @@ export async function getUserAddonsRaw(authKey: string): Promise<Addon[] | null>
 
 export async function setUserAddonsRaw(authKey: string, addons: Addon[]): Promise<boolean> {
   if (addons.length === 0) return false;
+  forgetUserAddonsCache();
   const result = await call<{ success?: boolean }>("addonCollectionSet", {
     authKey,
     type: "user",
@@ -149,7 +168,8 @@ async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    return await fetch(url, { signal: ac.signal });
+    // safeFetch: addons without CORS headers go through the Android shell.
+    return await safeFetch(url, { signal: ac.signal, timeoutMs } as RequestInit);
   } catch {
     return null;
   } finally {
@@ -249,7 +269,11 @@ export async function gatherCatalogAddons(authKey: string | null): Promise<Addon
   const localFull = await Promise.all(
     localOnly.map(async (l): Promise<Addon | null> => {
       if (l.manifest?.catalogs?.length) return { manifest: l.manifest, transportUrl: l.transportUrl };
-      const manifest = await fetchManifestAt(l.transportUrl).catch(() => l.manifest ?? null);
+      // A dead addon must not hold up every row on Home: give its manifest 8 s.
+      const manifest = await Promise.race([
+        fetchManifestAt(l.transportUrl).catch(() => l.manifest ?? null),
+        new Promise<Addon["manifest"] | null>((r) => setTimeout(() => r(l.manifest ?? null), 8000)),
+      ]);
       return manifest ? { manifest, transportUrl: l.transportUrl } : null;
     }),
   );
@@ -257,6 +281,20 @@ export async function gatherCatalogAddons(authKey: string | null): Promise<Addon
 }
 
 const NON_CONTENT_TYPES = new Set(["addon_catalog"]);
+
+/** Runs [jobs] with at most [limit] in flight; results keep the jobs' order. */
+async function runLimited<T>(jobs: (() => Promise<T>)[], limit: number): Promise<T[]> {
+  const out = new Array<T>(jobs.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) {
+      const i = next++;
+      out[i] = await jobs[i]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, worker));
+  return out;
+}
 
 function catalogRequestUrl(base: string, cat: CatalogDef): string | null {
   const required = (cat.extra ?? []).filter((e) => e.isRequired);
@@ -278,10 +316,13 @@ export async function loadAddonRows(
   const dedup = opts.dedup ?? true;
   const cap = opts.cap ?? (dedup ? MAX_ROWS : 200);
   const addons = await gatherCatalogAddons(authKey);
-  const tasks = addons.flatMap((addon) =>
-    (addon.manifest.catalogs ?? [])
+  // Big addons list dozens of catalogs each: ask for a bounded number, a few at a time, and
+  // start each one's timeout when it really starts (a phone used to fire hundreds at once and
+  // time them out while they were still queued).
+  const jobs = addons.flatMap((addon) =>
+    (Array.isArray(addon.manifest.catalogs) ? addon.manifest.catalogs : [])
       .filter((c) => c && c.name && c.type && c.id && !NON_CONTENT_TYPES.has(c.type.toLowerCase()))
-      .map(async (cat): Promise<AddonRow | null> => {
+      .map((cat) => async (): Promise<AddonRow | null> => {
         const base = addon.transportUrl.replace(/\/manifest\.json$/, "");
         const url = catalogRequestUrl(base, cat);
         if (!url) return null;
@@ -310,7 +351,7 @@ export async function loadAddonRows(
         }
       }),
   );
-  const results = await Promise.all(tasks);
+  const results = await runLimited(jobs.slice(0, Math.max(cap * 2, 48)), 6);
   if (!dedup) {
     const out: AddonRow[] = [];
     for (const r of results) {

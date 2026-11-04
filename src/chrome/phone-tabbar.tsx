@@ -1,6 +1,7 @@
+import { useProfiles } from "@/lib/profiles";
 import { startTransition, useEffect, useState, type ReactNode } from "react";
 import { pushAndroidBackHandler } from "@/lib/android";
-import { MoreHorizontal, Search, X } from "lucide-react";
+import { MoreHorizontal, Search, X , Users } from "lucide-react";
 import { AddonsIcon } from "@/components/icons/addons-icon";
 import { AnimeIcon } from "@/components/icons/anime-icon";
 import { CalendarIcon } from "@/components/icons/calendar-icon";
@@ -51,6 +52,7 @@ export function PhoneTabBar() {
   const { settings } = useSettings();
   const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { openPicker: openProfiles, activeProfile } = useProfiles();
   const [pinFor, setPinFor] = useState<View | null>(null);
   // Highlight the tapped tab immediately; the (heavy) view switch renders in a transition,
   // so a tap never looks ignored and nobody needs to tap twice.
@@ -135,6 +137,20 @@ export function PhoneTabBar() {
                 );
               })}
             </div>
+            {/* Profiles: on the phone the desktop profile chip doesn't exist, so switching,
+                adding and editing profiles lives here. */}
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                openProfiles();
+              }}
+              className="mt-2 flex w-full items-center gap-3 rounded-2xl bg-elevated/60 px-4 py-3 text-start text-[13px] font-medium text-ink-muted active:scale-[0.99]"
+            >
+              <Users size={18} strokeWidth={2} className="shrink-0" />
+              <span className="flex-1">{t("Profiles")}</span>
+              {activeProfile && <span className="truncate text-[12px] text-ink-subtle">{activeProfile.name}</span>}
+            </button>
           </div>
         </div>
       )}

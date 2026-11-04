@@ -146,6 +146,7 @@ export const DEFAULT: Settings = {
   preferEmbeddedSubs: false,
   betaUpdates: false,
   autoSkipIntro: false,
+  skipLookups: true,
   autoSkipAd: false,
   trackBlockWords: ["commentary"],
   forcedSubsWhenNativeAudio: false,
