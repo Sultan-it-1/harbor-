@@ -1401,6 +1401,12 @@ html[data-phone] [contenteditable="true"] {
   -webkit-user-select: text;
   user-select: text;
 }
+/* Pages never pan sideways: a few pixels of row bleed or a strip that is too wide used to make the
+   whole page slide left and right. Rows and chip strips scroll on their own, inside. (clip turns
+   into hidden for a scrolling page and leaves a <main> that doesn't scroll alone.) */
+html[data-phone] main {
+  overflow-x: clip;
+}
 /* Desktop-sized dialogs: never wider than the screen. */
 html[data-phone] [role="dialog"],
 html[data-phone] [aria-modal="true"] {

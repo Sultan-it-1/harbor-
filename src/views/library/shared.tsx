@@ -28,13 +28,14 @@ export function TabBtn({
     <button
       type="button"
       onClick={onClick}
-      className={`relative -mb-px flex items-center gap-2 px-4 pb-3 pt-2 text-[13.5px] font-semibold transition-colors ${
+      data-active={active}
+      className={`relative flex shrink-0 items-center gap-2 whitespace-nowrap px-4 pb-3 pt-2 text-[13.5px] font-semibold transition-colors ${
         active ? "text-ink" : "text-ink-muted hover:text-ink"
       }`}
     >
       {children}
       <span
-        className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full transition-colors ${
+        className={`absolute inset-x-3 bottom-0 h-0.5 rounded-full transition-colors ${
           active ? "bg-ink" : "bg-transparent"
         }`}
       />

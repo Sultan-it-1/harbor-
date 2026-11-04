@@ -115,6 +115,16 @@ function Header({
   simklConnected: boolean;
 }) {
   const t = useT();
+  // Many tabs (Trakt, AniList, Simkl…) don't fit a phone: the strip scrolls inside itself, and
+  // the chosen tab is kept in view.
+  const stripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = stripRef.current;
+    const on = strip?.querySelector<HTMLElement>('[data-active="true"]');
+    if (!strip || !on) return;
+    const left = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
+    strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }, [tab, traktConnected, anilistConnected, simklConnected]);
   return (
     <header className="flex flex-col gap-5">
       <div className="flex items-end justify-between gap-6">
@@ -130,7 +140,10 @@ function Header({
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-1 border-b border-edge-soft">
+      <div
+        ref={stripRef}
+        className="-mx-5 flex items-center gap-1 overflow-x-auto border-b border-edge-soft px-5 [scrollbar-width:none] sm:mx-0 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
+      >
         <TabBtn active={tab === "watchlist"} onClick={() => onTab("watchlist")}>
           <Bookmark size={14} strokeWidth={2.2} />
           {t("Watchlist")}
