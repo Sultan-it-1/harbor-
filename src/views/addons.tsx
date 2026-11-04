@@ -1,6 +1,7 @@
 import { Check, ChevronRight, Library, Sparkles, Star, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgeGateModal } from "@/components/age-gate-modal";
+import { isPhoneLayout } from "@/lib/platform";
 import { HarborLoader } from "@/components/harbor-loader";
 import { useScrollMemory, useView } from "@/lib/view";
 import { useSettings } from "@/lib/settings";
@@ -59,6 +60,9 @@ const BROWSE_MODES: Array<{
 
 void Library;
 
+// Android app: single-column header, phone paddings, filters that fold away once you pick.
+const PHONE = isPhoneLayout();
+
 export function AddonsView() {
   const t = useT();
   const { settings, update } = useSettings();
@@ -79,11 +83,17 @@ export function AddonsView() {
   const [browseMode, setBrowseMode] = useState<BrowseModeId>("top");
   const saCategories = useCategories();
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const activeCategoryName = categoryFilter ? saCategories.find((c) => c.slug === categoryFilter)?.name : undefined;
   const scrollRef = useRef<HTMLDivElement>(null);
-  useScrollMemory("addons", scrollRef);
+  // Phone: the header (tabs, search, URL bar…) is tall, so it scrolls away with the list
+  // instead of pinning a third of the screen; the page itself is then the scroller.
+  const pageRef = useRef<HTMLElement>(null);
+  const scrollTarget: { current: HTMLElement | null } = PHONE ? pageRef : scrollRef;
+  useScrollMemory("addons", scrollTarget);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    scrollTarget.current?.scrollTo({ top: 0, behavior: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, categoryFilter]);
   useEffect(() => {
     if (!settings.showAdultAddons && categoryFilter === "nsfw") setCategoryFilter(null);
@@ -92,6 +102,11 @@ export function AddonsView() {
   const goToCategory = (cat: string) => {
     setCategoryFilter(cat);
     setTab("browse");
+  };
+  // Phone: the chip panel takes half the screen, so it folds away as soon as you pick one.
+  const pickFilter = (apply: () => void) => {
+    apply();
+    if (PHONE) setFiltersOpen(false);
   };
   const [ageGateOpen, setAgeGateOpen] = useState(false);
   const [toast, setToast] = useState<ToastInfo | null>(null);
@@ -278,16 +293,19 @@ export function AddonsView() {
   }
 
   return (
-    <main className="relative flex h-full flex-col overflow-hidden">
+    <main
+      ref={pageRef}
+      className={`relative flex h-full flex-col ${PHONE ? "overflow-y-auto overflow-x-hidden" : "overflow-hidden"}`}
+    >
       {tab === "discover" && <AddonsMosaicBackdrop />}
       <AgeGateModal
         open={ageGateOpen}
         onClose={() => setAgeGateOpen(false)}
         onPass={() => update({ showAdultAddons: true })}
       />
-      <header className="shrink-0 px-12 pt-20 pb-3">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <nav className="flex flex-wrap items-center gap-1">
+      <header className={`shrink-0 ${PHONE ? "px-5 pt-24 pb-1" : "px-12 pt-20 pb-3"}`}>
+        <div className={PHONE ? "flex flex-col gap-3" : "flex flex-wrap items-center gap-x-6 gap-y-3"}>
+          <nav className={`flex items-center gap-1 ${PHONE ? "-ms-1" : "flex-wrap"}`}>
             {(["discover", "browse", "installed"] as Tab[]).map((tabId) => {
               const active = tab === tabId;
               if (tabId === "installed") {
@@ -295,7 +313,9 @@ export function AddonsView() {
                   <button
                     key={tabId}
                     onClick={() => setTab(tabId)}
-                    className={`flex h-12 items-center gap-2 rounded-full px-4 text-[14px] font-semibold transition-colors ${
+                    className={`flex items-center gap-2 rounded-full font-semibold transition-colors ${
+                      PHONE ? "h-10 px-3.5 text-[13.5px]" : "h-12 px-4 text-[14px]"
+                    } ${
                       active
                         ? "bg-ink text-canvas"
                         : "text-ink-muted hover:bg-elevated hover:text-ink"
@@ -319,7 +339,9 @@ export function AddonsView() {
                     setTab(tabId);
                     if (tabId === "browse") setCategoryFilter(null);
                   }}
-                  className={`flex h-12 items-center rounded-full px-5 text-[14px] font-semibold transition-colors ${
+                  className={`flex items-center rounded-full font-semibold transition-colors ${
+                    PHONE ? "h-10 px-4 text-[13.5px]" : "h-12 px-5 text-[14px]"
+                  } ${
                     active
                       ? "bg-ink text-canvas"
                       : "text-ink-muted hover:bg-elevated hover:text-ink"
@@ -341,9 +363,9 @@ export function AddonsView() {
               return <span key={tabId}>{btn}</span>;
             })}
           </nav>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <SearchBar value={query} onChange={setQuery} />
-            <div className="min-w-[180px] flex-1">
+          <div className={`flex min-w-0 flex-1 flex-wrap items-center ${PHONE ? "gap-2.5" : "gap-3"}`}>
+            <SearchBar value={query} onChange={setQuery} widthClass={PHONE ? "w-full" : "w-72"} />
+            <div className={PHONE ? "w-full" : "min-w-[180px] flex-1"}>
               <AddByUrlBar onSubmit={async (raw) => { setInstallModal({ kind: "install", url: raw }); }} compact />
             </div>
             <button
@@ -384,7 +406,11 @@ export function AddonsView() {
                   strokeWidth={2.4}
                   className={`transition-transform duration-300 ${filtersOpen ? "rotate-90" : "-rotate-90"}`}
                 />
-                {filtersOpen ? t("Hide") : t("Filters")}
+                {filtersOpen
+                  ? t("Hide")
+                  : PHONE && activeCategoryName
+                    ? `${t("Filters")} · ${activeCategoryName}`
+                    : t("Filters")}
               </button>
             )}
           </div>
@@ -398,8 +424,8 @@ export function AddonsView() {
             <div className="overflow-hidden">
               <div className="flex flex-wrap items-center gap-2 pb-1">
                 <button
-                  onClick={() => setCategoryFilter(null)}
-                  className={`flex h-10 items-center gap-2 rounded-full px-4 text-[13.5px] font-semibold transition-colors ${
+                  onClick={() => pickFilter(() => setCategoryFilter(null))}
+                  className={`flex ${PHONE ? "h-9 px-3.5 text-[13px]" : "h-10 px-4 text-[13.5px]"} items-center gap-2 rounded-full font-semibold transition-colors ${
                     categoryFilter == null
                       ? "bg-ink text-canvas"
                       : "bg-elevated/40 text-ink-muted ring-1 ring-edge-soft/60 hover:bg-elevated/70 hover:text-ink"
@@ -412,8 +438,8 @@ export function AddonsView() {
                   return (
                     <button
                       key={c.slug}
-                      onClick={() => setCategoryFilter(c.slug)}
-                      className={`flex h-10 items-center gap-2 rounded-full px-4 text-[13.5px] font-semibold transition-colors ${
+                      onClick={() => pickFilter(() => setCategoryFilter(c.slug))}
+                      className={`flex ${PHONE ? "h-9 px-3.5 text-[13px]" : "h-10 px-4 text-[13.5px]"} items-center gap-2 rounded-full font-semibold transition-colors ${
                         active
                           ? "bg-ink text-canvas"
                           : "bg-elevated/40 text-ink-muted ring-1 ring-edge-soft/60 hover:bg-elevated/70 hover:text-ink"
@@ -430,9 +456,9 @@ export function AddonsView() {
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => setBrowseMode(m.id)}
+                      onClick={() => pickFilter(() => setBrowseMode(m.id))}
                       title={t(m.sub)}
-                      className={`flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-colors ${
+                      className={`flex ${PHONE ? "h-9" : "h-10"} items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-colors ${
                         active
                           ? "bg-ink text-canvas"
                           : "bg-elevated/40 text-ink-muted ring-1 ring-edge-soft/60 hover:bg-elevated/70 hover:text-ink"
@@ -449,7 +475,7 @@ export function AddonsView() {
         )}
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-12 pb-20 pt-6">
+      <div ref={scrollRef} className={PHONE ? "flex-none px-5 pb-24 pt-4" : "flex-1 overflow-y-auto px-12 pb-20 pt-6"}>
         {loading && allAddons.length === 0 ? (
           <div className="flex h-full items-center justify-center py-24">
             <HarborLoader size="lg" caption={t("Loading the catalog")} keyed />

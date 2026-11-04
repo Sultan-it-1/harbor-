@@ -1,11 +1,17 @@
-import { ArrowUpDown, Settings2 } from "lucide-react";
+import { ArrowUpDown, Settings2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { AddonLogo, resolveAddonLogo } from "@/components/addon-logo";
 import { HoverTooltip } from "@/components/hover-tooltip";
 import { isAddonEnabled, setAddonEnabled } from "@/lib/addon-store";
 import type { ResolvedAddon } from "@/lib/addons-store/store";
 import { useT } from "@/lib/i18n";
+import { isPhoneLayout } from "@/lib/platform";
 import { addonKey, idOf, nameOf, subtitleFromManifest } from "./addons-utils";
+import { useTapToConfirm } from "./use-tap-to-confirm";
+
+// Android app: the row is too narrow for logo + name + switch + Manage + Installed on one
+// line (the name shrank to nothing), so it stacks: logo and name on top, controls below.
+const PHONE = isPhoneLayout();
 
 export function InstalledPane({
   installed,
@@ -95,6 +101,7 @@ function InstalledRow({
   const t = useT();
   const r = resolved;
   const [busy, setBusy] = useState(false);
+  const confirm = useTapToConfirm();
   const [enabled, setEnabled] = useState(() => isAddonEnabled(r.transportUrl));
   const isConfigurable =
     r.manifest?.behaviorHints?.configurable === true ||
@@ -104,6 +111,13 @@ function InstalledRow({
   const handleUninstall = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (busy) return;
+    // Touch screens have no hover, so a tap on "Installed" used to remove the addon at once:
+    // the first tap now asks, the second one removes.
+    if (PHONE && !confirm.armed) {
+      confirm.arm();
+      return;
+    }
+    confirm.disarm();
     setBusy(true);
     try {
       await onUninstall(r);
@@ -128,26 +142,33 @@ function InstalledRow({
       tabIndex={0}
       onClick={() => !busy && onOpen(idOf(r))}
       onKeyDown={(e) => !busy && (e.key === "Enter" || e.key === " ") && onOpen(idOf(r))}
-      className={`flex items-center gap-3.5 rounded-xl border bg-elevated px-4 py-3 text-start transition-all ${
+      className={`flex rounded-xl border bg-elevated text-start transition-all ${
+        PHONE ? "flex-col items-stretch gap-3 px-3.5 py-3" : "items-center gap-3.5 px-4 py-3"
+      } ${
         busy
           ? "border-edge-soft cursor-wait opacity-60"
           : "border-edge-soft cursor-pointer hover:border-edge hover:bg-raised"
       }`}
     >
-      <div className={enabled ? "" : "opacity-45 transition-opacity"}>
-        <AddonLogo
-          addonId={idOf(r)}
-          addonName={nameOf(r)}
-          manifestLogo={resolveAddonLogo(r.manifest?.logo, r.transportUrl)}
-          size="lg"
-        />
+      <div className={`flex min-w-0 items-center ${PHONE ? "gap-3" : "flex-1 gap-3.5"}`}>
+        <div className={`shrink-0 ${enabled ? "" : "opacity-45 transition-opacity"}`}>
+          <AddonLogo
+            addonId={idOf(r)}
+            addonName={nameOf(r)}
+            manifestLogo={resolveAddonLogo(r.manifest?.logo, r.transportUrl)}
+            size={PHONE ? "xl" : "lg"}
+          />
+        </div>
+        <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${enabled ? "" : "opacity-55"}`}>
+          <span className={`text-[14px] font-medium text-ink ${PHONE ? "line-clamp-2 break-words leading-snug" : "truncate"}`}>
+            {nameOf(r)}
+          </span>
+          <span className="truncate text-[11.5px] text-ink-subtle">
+            {enabled ? subtitleFromManifest(r) : t("Off · catalogs and streams hidden")}
+          </span>
+        </div>
       </div>
-      <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${enabled ? "" : "opacity-55"}`}>
-        <span className="truncate text-[14px] font-medium text-ink">{nameOf(r)}</span>
-        <span className="truncate text-[11.5px] text-ink-subtle">
-          {enabled ? subtitleFromManifest(r) : t("Off · catalogs and streams hidden")}
-        </span>
-      </div>
+      <div className={`flex items-center ${PHONE ? "justify-between gap-2" : "shrink-0 gap-3.5"}`}>
       {!busy && (
         <HoverTooltip
           side="top"
@@ -189,8 +210,8 @@ function InstalledRow({
       <button
         onClick={handleUninstall}
         disabled={busy}
-        className={`group/pill flex shrink-0 items-center gap-1 rounded-full px-3.5 py-1.5 text-[12px] font-semibold ring-1 transition-colors ${
-          busy
+        className={`group/pill flex shrink-0 items-center gap-1 rounded-full px-3.5 py-1.5 text-[12px] font-semibold ring-1 transition-colors ${PHONE ? "ms-auto" : ""} ${
+          busy || confirm.armed
             ? "bg-danger/15 text-danger ring-danger/30"
             : "bg-elevated/70 text-ink ring-edge-soft hover:bg-danger/15 hover:text-danger hover:ring-danger/30"
         }`}
@@ -200,10 +221,16 @@ function InstalledRow({
             <span>{t("Uninstalling")}</span>
             <DotsAnim />
           </>
+        ) : confirm.armed ? (
+          <>
+            <Trash2 size={12} strokeWidth={2.4} />
+            <span>{t("Tap again to remove")}</span>
+          </>
         ) : (
           t("Installed")
         )}
       </button>
+      </div>
     </div>
   );
 }

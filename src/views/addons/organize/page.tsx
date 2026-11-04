@@ -211,7 +211,7 @@ export function OrganizeAddonsPage({
         data-tauri-drag-region
         className="relative z-50 shrink-0 border-b border-edge-soft bg-canvas/85 backdrop-blur-xl"
       >
-        <div className="mx-auto flex w-full max-w-[1160px] items-center gap-4 px-6 py-5 sm:px-10">
+        <div className="mx-auto flex w-full max-w-[1160px] flex-wrap items-center gap-x-4 gap-y-3 px-6 py-5 sm:px-10">
           <button
             onClick={onClose}
             disabled={saving}
@@ -221,7 +221,7 @@ export function OrganizeAddonsPage({
           >
             <ArrowLeft size={18} strokeWidth={2.2} className="dir-icon" />
           </button>
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-[10rem] flex-1 flex-col">
             <h1 className="truncate font-display text-[26px] font-medium tracking-tight text-ink sm:text-[30px]">
               {t("Organize addons")}
             </h1>
@@ -266,7 +266,7 @@ export function OrganizeAddonsPage({
             </div>
           )}
           {phase.kind !== "loadError" && (
-            <div className="flex shrink-0 items-center gap-2.5">
+            <div className="ms-auto flex shrink-0 items-center gap-2.5">
               <button
                 onClick={onClose}
                 disabled={saving}

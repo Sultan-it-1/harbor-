@@ -8,7 +8,7 @@ import { addonSiteUrl, rateOnSiteUrl, risingEntryFor, useRising } from "@/lib/pr
 import { useCommunity } from "@/lib/providers/stremio-addons-index";
 import { openInstallerViewport } from "@/components/installer-viewport";
 import { pushActivityHint } from "@/lib/discord/activity-hint";
-import { isWeb } from "@/lib/platform";
+import { isPhoneLayout, isWeb } from "@/lib/platform";
 import { openUrl } from "@/lib/window";
 import { useT } from "@/lib/i18n";
 import { AddonDescription } from "./addon-description";
@@ -17,6 +17,11 @@ import { categoryLabel } from "./addons-types";
 import { idOf, nameOf, resourceLabels } from "./addons-utils";
 import { DetailRail } from "./detail-rail";
 import { TagRow } from "./tag-row";
+import { useTapToConfirm } from "./use-tap-to-confirm";
+
+// Android app: single column that fits the screen (the desktop layout put a 220px logo next to
+// the text and was wider than the phone, so the page scrolled sideways).
+const PHONE = isPhoneLayout();
 
 export function AddonDetail({
   resolved,
@@ -53,6 +58,7 @@ export function AddonDetail({
   const [busy, setBusy] = useState<"install" | "remove" | null>(null);
   const [optimisticInstalled, setOptimisticInstalled] = useState<boolean | null>(null);
   const [manifestVisible, setManifestVisible] = useState(false);
+  const confirmRemove = useTapToConfirm();
   const community = useCommunity(m?.id);
   const rising = useRising();
   const risingEntry = community ? risingEntryFor(rising, community) : null;
@@ -124,6 +130,12 @@ export function AddonDetail({
 
   const handleUninstall = async () => {
     if (busy) return;
+    // Touch screens have no hover: the first tap asks, the second one removes.
+    if (PHONE && !confirmRemove.armed) {
+      confirmRemove.arm();
+      return;
+    }
+    confirmRemove.disarm();
     setBusy("remove");
     setOptimisticInstalled(false);
     try {
@@ -162,8 +174,17 @@ export function AddonDetail({
   }, [resolved.transportUrl]);
 
   return (
-    <main ref={mainRef} className="h-full overflow-y-auto px-12 pb-0 pt-24">
-      <header className="relative isolate -mx-12 -mt-24 flex min-h-[460px] items-start gap-10 px-12 pt-32 pb-10">
+    <main
+      ref={mainRef}
+      className={`h-full overflow-y-auto ${PHONE ? "overflow-x-hidden px-5 pb-6 pt-20" : "px-12 pb-0 pt-24"}`}
+    >
+      <header
+        className={`relative isolate flex items-start ${
+          PHONE
+            ? "-mx-5 -mt-20 flex-col gap-5 px-5 pt-24 pb-6"
+            : "-mx-12 -mt-24 min-h-[460px] gap-10 px-12 pt-32 pb-10"
+        }`}
+      >
         <DetailHeaderBackdrop
           logo={resolveAddonLogo(m?.logo, resolved.transportUrl) ?? undefined}
           background={m?.background ?? undefined}
@@ -173,14 +194,16 @@ export function AddonDetail({
             addonId={idOf(resolved)}
             addonName={nameOf(resolved)}
             manifestLogo={resolveAddonLogo(m?.logo, resolved.transportUrl)}
-            size="4xl"
+            size={PHONE ? "2xl" : "4xl"}
           />
         </div>
         {community && (
           <button
             type="button"
             onClick={openRate}
-            className="absolute end-12 top-32 flex items-baseline gap-2 leading-none transition-opacity hover:opacity-80"
+            className={`absolute flex items-baseline gap-2 leading-none transition-opacity hover:opacity-80 ${
+              PHONE ? "end-5 top-24" : "end-12 top-32"
+            }`}
             title={t("Rate on stremio-addons.net")}
           >
             <Star
@@ -189,18 +212,18 @@ export function AddonDetail({
               fill="currentColor"
               className="text-accent harbor-rating-star"
             />
-            <span className="text-[32px] font-semibold tabular-nums leading-none text-ink">
+            <span className={`${PHONE ? "text-[26px]" : "text-[32px]"} font-semibold tabular-nums leading-none text-ink`}>
               {community.stars.toLocaleString()}
             </span>
           </button>
         )}
-        <div className="relative flex min-w-0 flex-1 flex-col gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.32em] text-ink-subtle">
+        <div className={`relative flex min-w-0 flex-col gap-2 ${PHONE ? "w-full" : "flex-1"}`}>
+          <span className={`text-[11px] font-bold uppercase text-ink-subtle ${PHONE ? "tracking-[0.2em]" : "tracking-[0.32em]"}`}>
             {c?.tags.includes("official") ? t("Official") : t("Community")} ·{" "}
             {categoryLabel(c?.category ?? categorizeAddon(resolved)) ?? t("Addon")}
-            {m?.id && <> · <span className="font-mono normal-case tracking-normal">{m.id}</span></>}
+            {m?.id && <> · <span className="break-all font-mono normal-case tracking-normal">{m.id}</span></>}
           </span>
-          <h1 className="font-display text-[36px] font-medium leading-tight tracking-tight text-ink">
+          <h1 className={`font-display font-medium leading-tight tracking-tight text-ink ${PHONE ? "break-words text-[28px]" : "text-[36px]"}`}>
             {nameOf(resolved)}
           </h1>
           {risingEntry && (
@@ -212,7 +235,7 @@ export function AddonDetail({
             </span>
           )}
           {m?.description && <AddonDescription text={m.description} />}
-          <div className="mt-3 flex flex-wrap items-center gap-2.5">
+          <div className={`mt-3 flex flex-wrap items-center ${PHONE ? "gap-2 [&>button]:px-4 [&>button]:text-[13px]" : "gap-2.5"}`}>
             {busy === "remove" ? (
               <button
                 disabled
@@ -228,6 +251,14 @@ export function AddonDetail({
               >
                 <Loader2 size={14} strokeWidth={2.4} className="animate-spin" />
                 {t("Installing")}
+              </button>
+            ) : installed && confirmRemove.armed ? (
+              <button
+                onClick={() => void handleUninstall()}
+                className="flex h-11 items-center gap-2 rounded-full bg-danger/15 px-5 text-[13.5px] font-semibold text-danger ring-1 ring-danger/30"
+              >
+                <Trash2 size={14} strokeWidth={2.2} />
+                {t("Tap again to remove")}
               </button>
             ) : installed ? (
               <button
@@ -331,10 +362,10 @@ export function AddonDetail({
         </section>
       )}
 
-      <section className="-mx-12 bg-elevated/15 px-12 py-12">
+      <section className={`bg-elevated/15 ${PHONE ? "-mx-5 px-5 py-8" : "-mx-12 px-12 py-12"}`}>
         <div className="mx-auto max-w-5xl">
           {community?.slug && <AddonDocumentation slug={community.slug} />}
-          <div className="mb-8 flex items-baseline justify-between gap-4">
+          <div className="mb-8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 className="font-display text-[22px] font-medium tracking-tight text-ink">
               {t("Project information")}
             </h2>
@@ -342,7 +373,7 @@ export function AddonDetail({
               {t("Pulled from manifest")}
             </span>
           </div>
-          <div className="grid gap-12 md:grid-cols-[1.1fr_1fr]">
+          <div className={`grid md:grid-cols-[1.1fr_1fr] ${PHONE ? "gap-8" : "gap-12"}`}>
             <dl className="border-y border-edge-soft">
               {stats.map(([label, value], i) => (
                 <div
@@ -426,7 +457,7 @@ export function AddonDetail({
         </div>
       </section>
 
-      <div className="mx-auto w-full max-w-5xl pb-20">
+      <div className={`mx-auto w-full max-w-5xl ${PHONE ? "pb-24" : "pb-20"}`}>
         <DetailRail
           title={t("More like this")}
           items={related}

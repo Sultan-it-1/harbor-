@@ -2,7 +2,12 @@ import { Check, Loader2, Plus, Settings2, X } from "lucide-react";
 import { useState } from "react";
 import type { ResolvedAddon } from "@/lib/addons-store/store";
 import { useT } from "@/lib/i18n";
+import { isPhoneLayout } from "@/lib/platform";
 import { withMinDuration } from "./addons-utils";
+import { useTapToConfirm } from "./use-tap-to-confirm";
+
+// Touch screens have no hover to reveal "Remove", so a tap on "Installed" asks first.
+const PHONE = isPhoneLayout();
 
 const MIN_INSTALL_FEEDBACK_MS = 650;
 
@@ -21,6 +26,7 @@ export function InstallPill({
 }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
+  const confirm = useTapToConfirm();
 
   const runInstall = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -36,6 +42,11 @@ export function InstallPill({
   const runUninstall = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (busy) return;
+    if (PHONE && !confirm.armed) {
+      confirm.arm();
+      return;
+    }
+    confirm.disarm();
     setBusy(true);
     try {
       await withMinDuration(onUninstall(), 450);
@@ -56,6 +67,17 @@ export function InstallPill({
     );
   }
 
+  if (installed && confirm.armed) {
+    return (
+      <button
+        onClick={runUninstall}
+        className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-danger/15 px-4 text-[13px] font-semibold text-danger ring-1 ring-danger/30 transition-all duration-150 ease-out active:scale-[0.96]"
+      >
+        <X size={14} strokeWidth={2.6} />
+        {t("Tap again to remove")}
+      </button>
+    );
+  }
   if (installed) {
     return (
       <button
