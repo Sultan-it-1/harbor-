@@ -1,12 +1,17 @@
-import { ArrowUpToLine, Check, ChevronDown, ChevronUp, Copy, Download, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowUpToLine, Check, ChevronDown, ChevronUp, Copy, Download, MoreHorizontal, Pencil, Plus, RefreshCw, TextCursorInput, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { confirmDialog } from "@/lib/dialog";
 import { useT } from "@/lib/i18n";
 import type { IptvPlaylistSource } from "@/lib/iptv/types";
+import { isPhoneLayout } from "@/lib/platform";
 import { EMPTY_FORM, PlaylistForm, type PlaylistFormValue } from "./source-picker/playlist-form";
 
 type ActionsState = { id: string; copied: boolean };
+
+// Touch screens have no hover, so the per-playlist "⋯" button (Edit / Rename / Delete…) must
+// always be visible there; the tiny hover-only reorder arrows are left to the menu.
+const PHONE = isPhoneLayout();
 
 export function SourcePicker({
   sources,
@@ -15,6 +20,7 @@ export function SourcePicker({
   onSelect,
   onAdd,
   onEdit,
+  onRename,
   onRemove,
   onMove,
   onMoveTop,
@@ -23,6 +29,7 @@ export function SourcePicker({
   fetchedAt,
   channelCount,
   loading,
+  editRequest,
 }: {
   sources: IptvPlaylistSource[];
   activeId: string | null;
@@ -30,6 +37,8 @@ export function SourcePicker({
   onSelect: (id: string) => void;
   onAdd: (entry: PlaylistFormValue) => void;
   onEdit: (id: string, entry: PlaylistFormValue) => void;
+  /** Change only the playlist's name (nothing reloads). */
+  onRename?: (id: string, name: string) => void;
   onRemove: (id: string) => void;
   onMove?: (id: string, delta: number) => void;
   onMoveTop?: (id: string) => void;
@@ -38,10 +47,12 @@ export function SourcePicker({
   fetchedAt: number | null;
   channelCount: number | null;
   loading: boolean;
+  /** Asks the picker to open straight into Edit for a playlist (e.g. from the error card). */
+  editRequest?: { id: string; nonce: number } | null;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"list" | "add" | "edit">("list");
+  const [mode, setMode] = useState<"list" | "add" | "edit" | "rename">("list");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actions, setActions] = useState<ActionsState | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -72,6 +83,15 @@ export function SourcePicker({
     setEditingId(null);
     setActions(null);
   };
+
+  useEffect(() => {
+    if (!editRequest) return;
+    setOpen(true);
+    setEditingId(editRequest.id);
+    setMode("edit");
+    setActions(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest?.nonce]);
 
   const editing = editingId ? sources.find((s) => s.id === editingId) ?? null : null;
   const active = sources.find((s) => s.id === activeId);
@@ -142,6 +162,15 @@ export function SourcePicker({
                           setMode("edit");
                           setActions(null);
                         }}
+                        onRename={
+                          onRename
+                            ? () => {
+                                setEditingId(s.id);
+                                setMode("rename");
+                                setActions(null);
+                              }
+                            : undefined
+                        }
                         onCopy={() => void copyUrl(s.url, s.id)}
                         onExport={() => {
                           onExport(s.id);
@@ -176,6 +205,20 @@ export function SourcePicker({
                 onSubmit={(v) => {
                   onAdd(v);
                   close();
+                }}
+              />
+            )}
+            {mode === "rename" && editing && onRename && (
+              <RenameForm
+                initial={editing.name}
+                onCancel={() => {
+                  setMode("list");
+                  setEditingId(null);
+                }}
+                onSubmit={(name) => {
+                  onRename(editing.id, name);
+                  setMode("list");
+                  setEditingId(null);
                 }}
               />
             )}
@@ -229,6 +272,7 @@ function SourceRow({
   onToggleMenu,
   onCloseMenu,
   onEdit,
+  onRename,
   onCopy,
   onExport,
   onDelete,
@@ -246,6 +290,7 @@ function SourceRow({
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onEdit: () => void;
+  onRename?: () => void;
   onCopy: () => void;
   onExport: () => void;
   onDelete: () => void;
@@ -270,7 +315,7 @@ function SourceRow({
           />
           <span className="truncate">{source.name}</span>
         </button>
-        {onMove && total > 1 && (
+        {onMove && total > 1 && !PHONE && (
           <div className="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
             <button
               type="button"
@@ -305,13 +350,17 @@ function SourceRow({
             onToggleMenu();
           }}
           aria-label={t("More for {name}", { name: source.name })}
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity ${
+          className={`flex shrink-0 items-center justify-center rounded-lg transition-opacity ${
+            PHONE ? "h-10 w-10" : "h-8 w-8"
+          } ${
             isMenuOpen
               ? "text-ink"
-              : "text-ink-subtle opacity-0 hover:text-ink group-hover:opacity-100"
+              : PHONE
+                ? "text-ink-muted"
+                : "text-ink-subtle opacity-0 hover:text-ink group-hover:opacity-100"
           }`}
         >
-          <MoreHorizontal size={15} strokeWidth={2} />
+          <MoreHorizontal size={PHONE ? 18 : 15} strokeWidth={2} />
         </button>
       </div>
       {isMenuOpen && (
@@ -324,8 +373,13 @@ function SourceRow({
               {t("Move to top")}
             </MenuItem>
           )}
+          {onRename && (
+            <MenuItem icon={<TextCursorInput size={14} strokeWidth={1.9} />} onClick={onRename}>
+              {t("Rename")}
+            </MenuItem>
+          )}
           <MenuItem icon={<Pencil size={14} strokeWidth={1.9} />} onClick={onEdit}>
-            {t("Edit")}
+            {t("Edit link & login")}
           </MenuItem>
           <MenuItem
             icon={copied ? <Check size={14} strokeWidth={2.2} /> : <Copy size={14} strokeWidth={1.9} />}
@@ -352,6 +406,58 @@ function SourceRow({
         </PortalMenu>
       )}
     </>
+  );
+}
+
+/** Just the name: no link, login or reload (Edit is for those). */
+function RenameForm({
+  initial,
+  onCancel,
+  onSubmit,
+}: {
+  initial: string;
+  onCancel: () => void;
+  onSubmit: (name: string) => void;
+}) {
+  const t = useT();
+  const [name, setName] = useState(initial);
+  const canSave = name.trim().length > 0 && name.trim() !== initial;
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (canSave) onSubmit(name.trim());
+      }}
+      className="flex flex-col gap-3 p-4"
+    >
+      <label className="flex flex-col gap-1.5">
+        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-subtle">{t("Playlist name")}</span>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          maxLength={80}
+          className="h-10 rounded-lg border border-edge-soft/70 bg-canvas px-3 text-[13px] text-ink placeholder:text-ink-subtle focus:border-edge focus:outline-none"
+        />
+      </label>
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-10 items-center rounded-lg px-4 text-[13px] font-medium text-ink-muted transition-colors hover:bg-raised hover:text-ink"
+        >
+          {t("Cancel")}
+        </button>
+        <button
+          type="submit"
+          disabled={!canSave}
+          className="flex h-10 items-center rounded-lg bg-ink px-4 text-[13px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {t("Save")}
+        </button>
+      </div>
+    </form>
   );
 }
 

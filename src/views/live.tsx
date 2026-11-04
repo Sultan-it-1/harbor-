@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlaylistMutations } from "./live/hooks/use-playlist-mutations";
 import { useLiveActions } from "./live/hooks/use-live-actions";
+import { confirmDialog } from "@/lib/dialog";
 import { useT } from "@/lib/i18n";
 import { useSettings } from "@/lib/settings";
 import { useScrollMemory, useView } from "@/lib/view";
@@ -206,8 +207,9 @@ export function LiveView({ active }: { active: boolean }) {
     writeActiveId(id);
   }, []);
 
-  const { addPlaylist, removePlaylist, editPlaylist, reorderPlaylist, movePlaylistTop } =
+  const { addPlaylist, removePlaylist, editPlaylist, renamePlaylist, reorderPlaylist, movePlaylistTop } =
     usePlaylistMutations({ activeId, setActiveId: selectActive, refresh });
+  const [editRequest, setEditRequest] = useState<{ id: string; nonce: number } | null>(null);
 
   const { handlePlay, handlePlayCatchup, exportPlaylist } = useLiveActions({
     epg,
@@ -259,6 +261,7 @@ export function LiveView({ active }: { active: boolean }) {
             }}
             onAdd={addPlaylist}
             onEdit={editPlaylist}
+            onRename={renamePlaylist}
             onRemove={removePlaylist}
             onMove={reorderPlaylist}
             onMoveTop={movePlaylistTop}
@@ -270,6 +273,7 @@ export function LiveView({ active }: { active: boolean }) {
             fetchedAt={playlist?.fetchedAt ?? null}
             channelCount={playlist?.channels.length ?? null}
             loading={state.kind === "loading"}
+            editRequest={editRequest}
           />
           {mode === "multiview" ? (
             <div className="flex h-11 flex-1 min-w-[220px] items-center px-1 text-[13px] text-ink-subtle">
@@ -327,6 +331,15 @@ export function LiveView({ active }: { active: boolean }) {
                 if (activeId) clearPlaylistCache(activeId);
                 refresh();
               }}
+              onEdit={activeId ? () => setEditRequest({ id: activeId, nonce: Date.now() }) : undefined}
+              onRemove={
+                activeId
+                  ? async () => {
+                      const name = managedSources.find((s) => s.id === activeId)?.name ?? "";
+                      if (await confirmDialog(t('Remove playlist "{name}"?', { name }))) removePlaylist(activeId);
+                    }
+                  : undefined
+              }
             />
           ) : state.kind === "loading" ? (
             mode === "guide" ? <GuideSkeleton /> : <GridSkeleton />

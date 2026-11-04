@@ -1,3 +1,5 @@
+import { androidApi } from "@/lib/android";
+
 const EVENT = "harbor:deeplink-install";
 const OPEN_EVENT = "harbor:deeplink-open";
 
@@ -78,7 +80,38 @@ function shouldForward(url: string): boolean {
   return url.includes("manifest.json");
 }
 
+/** Same routing the desktop uses; `trusted` skips the "is anyone waiting for it" check. */
+function routeDeepLink(u: string, trusted = false): void {
+  const open = parseStremioOpen(u);
+  if (open) {
+    emitDeepLinkOpen(open);
+    return;
+  }
+  if (trusted || shouldForward(u)) emitDeepLinkInstall(u);
+}
+
+/**
+ * Android app: the shell is registered for stremio:// links (an addon's "Install" button, in the
+ * in-app setup page or in the phone's browser). It keeps the link until the page asks for it.
+ */
+function startAndroidDeepLinks(): () => void {
+  const take = () => {
+    const u = androidApi()?.takeLink?.();
+    if (u) routeDeepLink(u, true);
+  };
+  window.__harborDeepLinkCheck = take;
+  // A link that launched the app is already waiting: hand it over once the UI is listening.
+  const t = window.setTimeout(take, 400);
+  return () => {
+    window.clearTimeout(t);
+    if (window.__harborDeepLinkCheck === take) window.__harborDeepLinkCheck = undefined;
+  };
+}
+
 export async function startDeepLinkBridge(): Promise<() => void> {
+  if (typeof window !== "undefined" && typeof androidApi()?.takeLink === "function") {
+    return startAndroidDeepLinks();
+  }
   const isTauri =
     typeof window !== "undefined" &&
     ("__TAURI__" in window || "__TAURI_INTERNALS__" in window);

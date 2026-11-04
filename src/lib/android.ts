@@ -23,6 +23,8 @@ type HarborAndroidApi = {
   /** Whether Harbor may run in the background without battery limits, and the system prompt for it. */
   bgAllowed?(): boolean;
   bgRequest?(): void;
+  /** A stremio:// link that opened (or was sent to) the app, once; "" when there is none. */
+  takeLink?(): string;
 };
 
 export type NativePlayerEvent =
@@ -58,6 +60,8 @@ declare global {
     __harborNativeFetchDone?: (id: string, json: string) => void;
     __harborNativeEvent?: (json: string) => void;
     __harborAndroidBack?: () => boolean;
+    /** Called by the shell when a link arrives while the page is running (see takeLink). */
+    __harborDeepLinkCheck?: () => void;
   }
 }
 

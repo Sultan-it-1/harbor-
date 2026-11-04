@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, ChevronUp, Copy, Tv } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Copy, Pencil, Trash2, Tv } from "lucide-react";
 import type { Meta } from "@/lib/cinemeta";
 import { useT } from "@/lib/i18n";
 import { isHydratableChannel } from "@/lib/iptv/channel-hydration";
@@ -91,7 +91,19 @@ export function ChannelGrid({
   );
 }
 
-export function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function ErrorBlock({
+  message,
+  onRetry,
+  onEdit,
+  onRemove,
+}: {
+  message: string;
+  onRetry: () => void;
+  /** Open this playlist's settings (link, login, name). */
+  onEdit?: () => void;
+  /** Delete this playlist (asks first). */
+  onRemove?: () => void;
+}) {
   const t = useT();
   const classified = useMemo(() => classifyError(message), [message]);
   const [expanded, setExpanded] = useState(false);
@@ -130,6 +142,24 @@ export function ErrorBlock({ message, onRetry }: { message: string; onRetry: () 
           {copied ? <Check size={13} strokeWidth={2.2} /> : <Copy size={13} strokeWidth={1.9} />}
           {copied ? t("Copied") : t("Copy error")}
         </button>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-edge-soft/55 bg-canvas/40 px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-raised hover:text-ink"
+          >
+            <Pencil size={13} strokeWidth={1.9} />
+            {t("Edit playlist")}
+          </button>
+        )}
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-danger/35 bg-danger/10 px-3 text-[12.5px] font-medium text-danger transition-colors hover:bg-danger/15"
+          >
+            <Trash2 size={13} strokeWidth={1.9} />
+            {t("Remove playlist")}
+          </button>
+        )}
       </div>
       <div className="border-t border-edge-soft/50 pt-3">
         <button

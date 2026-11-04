@@ -2,6 +2,7 @@ package app.harbor.android
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -12,6 +13,7 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.JsResult
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -52,6 +54,8 @@ class MainActivity : ComponentActivity() {
     private var lastBackAt = 0L
     private var pageLoaded = false
     private var pendingOpenDownloads = false
+    /** A stremio:// link that opened the app: kept until the page asks for it (takeLink). */
+    @Volatile private var pendingLink: String? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,6 +93,8 @@ class MainActivity : ComponentActivity() {
         player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
         DownloadService.createChannel(this)
         pendingOpenDownloads = intent?.getBooleanExtra(EXTRA_OPEN_DOWNLOADS, false) == true
+        // Only a fresh launch: a recreated activity would otherwise replay the link that started it.
+        if (savedInstanceState == null) captureLink(intent)
 
         val assets = WebAssets(this)
         images = ImageCache(this, minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels))
@@ -146,6 +152,18 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onHideCustomView() = hideCustomView()
+
+            // window.confirm() / alert() ("Remove playlist?"…) are shown by the host app. Without
+            // these the WebView answers "no" to every confirm, so Delete buttons did nothing.
+            override fun onJsConfirm(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+                showJsDialog(message, result, withCancel = true)
+                return true
+            }
+
+            override fun onJsAlert(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+                showJsDialog(message, result, withCancel = false)
+                return true
+            }
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -189,6 +207,18 @@ class MainActivity : ComponentActivity() {
             pendingOpenDownloads = true
             if (pageLoaded) openDownloadsPage()
         }
+        captureLink(intent)
+        if (pageLoaded && pendingLink != null) {
+            webView.evaluateJavascript("window.__harborDeepLinkCheck&&window.__harborDeepLinkCheck()", null)
+        }
+    }
+
+    /** stremio://… links (addon install buttons) sent to Harbor by Android. */
+    private fun captureLink(i: Intent?) {
+        val data = i?.data ?: return
+        if (i.action == Intent.ACTION_VIEW && data.scheme.equals("stremio", ignoreCase = true)) {
+            pendingLink = data.toString()
+        }
     }
 
     private fun openDownloadsPage() {
@@ -224,6 +254,25 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             } catch (_: Exception) {
             }
+        }
+    }
+
+    /** A page dialog (confirm / alert) as a native one. The result must always be answered. */
+    private fun showJsDialog(message: String?, result: JsResult, withCancel: Boolean) {
+        if (isFinishing || isDestroyed) {
+            result.cancel()
+            return
+        }
+        try {
+            val b = AlertDialog.Builder(this)
+                .setMessage(message ?: "")
+                .setCancelable(true)
+                .setOnCancelListener { result.cancel() }
+                .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
+            if (withCancel) b.setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
+            b.show()
+        } catch (_: Exception) {
+            result.cancel()
         }
     }
 
@@ -331,6 +380,14 @@ class MainActivity : ComponentActivity() {
         }
 
         /** The page has background work (season queue, subtitle searches) — keep Harbor running. */
+        /** The pending stremio:// link, once ("" when there is none). */
+        @JavascriptInterface
+        fun takeLink(): String {
+            val l = pendingLink
+            pendingLink = null
+            return l ?: ""
+        }
+
         @JavascriptInterface
         fun dlKeepAlive(on: Boolean) = DownloadService.keepAlive(this@MainActivity, on)
 

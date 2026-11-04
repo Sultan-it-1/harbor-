@@ -5,12 +5,18 @@ import { installFromUrl } from "@/lib/addon-store";
 import { isAdultText } from "@/lib/addons-store/adult-filter";
 import { pushActivityHint } from "@/lib/discord/activity-hint";
 import { clearPendingDeepLink } from "@/lib/deep-link";
-import { isLinuxDesktop, isWeb } from "@/lib/platform";
+import { androidApi, androidFetch } from "@/lib/android";
+import { blocksFraming } from "@/lib/frame-policy";
+import { isLinuxDesktop, isPhoneLayout, isWeb } from "@/lib/platform";
 import { openUrl } from "@/lib/window";
 import { HarborLoader } from "@/components/harbor-loader";
 import { InstallOverlay } from "./installer-viewport/install-overlay";
 
 const EVENT = "harbor:open-installer";
+
+// Android app: a phone-sized setup screen with plain steps (no clipboard button: the app has no
+// business reading your clipboard; paste with a long-press in the field instead).
+const PHONE = isPhoneLayout();
 
 type InstallerDetail = { url: string; title?: string; logo?: string | null };
 
@@ -135,6 +141,29 @@ function InstallerViewport({
     };
   }, [loaded, reloadKey]);
 
+  // Android: many setup pages forbid being framed (X-Frame-Options / CSP frame-ancestors). The
+  // frame then shows "Web page not available" and still reports "loaded", so ask the page's
+  // headers first (the shell's fetch isn't limited by CORS) and skip the frame when it's refused.
+  const [framingRefused, setFramingRefused] = useState(false);
+  useEffect(() => {
+    if (!PHONE || !androidApi()) return;
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 8000);
+    setFramingRefused(false);
+    androidFetch(url, { signal: ac.signal })
+      .then((r) => {
+        if (blocksFraming(r.headers)) setFramingRefused(true);
+      })
+      .catch(() => {
+        /* offline or the page is down: let the frame show its own error */
+      })
+      .finally(() => window.clearTimeout(timer));
+    return () => {
+      window.clearTimeout(timer);
+      ac.abort();
+    };
+  }, [url, reloadKey]);
+
   const submit = useCallback(
     async (rawUrl: string) => {
       const normalized = normalizeInstallUrl(rawUrl);
@@ -229,6 +258,7 @@ function InstallerViewport({
     }
   };
 
+  const pageRefused = blocked || framingRefused;
   const dismissError = () => setPhase({ kind: "idle" });
   const reload = () => {
     setBlocked(false);
@@ -240,7 +270,9 @@ function InstallerViewport({
     <div className="fixed inset-0 z-[240] flex flex-col bg-black/82 backdrop-blur-md">
       <header
         data-tauri-drag-region
-        className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-canvas/60 px-5 text-ink backdrop-blur-md"
+        className={`flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-canvas/60 text-ink backdrop-blur-md ${
+          PHONE ? "px-4" : "px-5"
+        }`}
       >
         <div className="flex min-w-0 items-center gap-2.5">
           {logo && (
@@ -256,16 +288,18 @@ function InstallerViewport({
               />
             </span>
           )}
-          <span className="truncate text-[10.5px] font-bold uppercase tracking-[0.24em] text-accent">
+          <span className={`truncate font-bold uppercase text-accent ${PHONE ? "text-[11px] tracking-[0.16em]" : "text-[10.5px] tracking-[0.24em]"}`}>
             Setup · {title}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={reload}
             aria-label="Reload"
-            className="flex h-9 items-center gap-1.5 rounded-full border border-edge-soft px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink"
+            className={`flex h-9 items-center gap-1.5 rounded-full border border-edge-soft text-[12px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink ${
+              PHONE ? "w-9 justify-center" : "px-3"
+            }`}
           >
             <RotateCw
               size={12}
@@ -275,16 +309,18 @@ function InstallerViewport({
                 transition: "transform 0.6s cubic-bezier(0.22,0.61,0.36,1)",
               }}
             />
-            Reload
+            {!PHONE && "Reload"}
           </button>
-          <button
-            type="button"
-            onClick={() => openUrl(url)}
-            className="flex h-9 items-center gap-1.5 rounded-full border border-edge-soft px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink"
-          >
-            <ExternalLink size={12} strokeWidth={2.4} />
-            Open in browser
-          </button>
+          {!PHONE && (
+            <button
+              type="button"
+              onClick={() => openUrl(url)}
+              className="flex h-9 items-center gap-1.5 rounded-full border border-edge-soft px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink"
+            >
+              <ExternalLink size={12} strokeWidth={2.4} />
+              Open in browser
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -298,19 +334,20 @@ function InstallerViewport({
       </header>
 
       <div className="relative flex-1 overflow-hidden bg-white">
-        {!loaded && !blocked && (
+        {!loaded && !blocked && !framingRefused && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-canvas">
             <HarborLoader size="lg" caption={`Loading ${title}`} />
           </div>
         )}
-        {blocked && (
+        {pageRefused && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-canvas px-6 text-center">
             <p className="text-[14px] font-semibold text-ink">
-              {title} won&apos;t load inside Harbor.
+              {title} can&apos;t open inside Harbor.
             </p>
-            <p className="max-w-[44ch] text-[12.5px] text-ink-muted">
-              Open it in a regular browser, set it up there, then come back and paste the install
-              link below.
+            <p className="max-w-[44ch] text-[12.5px] leading-relaxed text-ink-muted">
+              {PHONE
+                ? "This setup page doesn't allow being shown inside another app. Open it in your browser and set it up there. When you tap its Install button, choose Harbor if Android asks which app to use."
+                : "Open it in a regular browser, set it up there, then come back and paste the install link below."}
             </p>
             <button
               type="button"
@@ -322,26 +359,64 @@ function InstallerViewport({
             </button>
           </div>
         )}
-        <iframe
-          key={reloadKey}
-          src={url}
-          title={title}
-          onLoad={() => setLoaded(true)}
-          className="h-full w-full border-0"
-          referrerPolicy="strict-origin-when-cross-origin"
-          allow="clipboard-write; clipboard-read; encrypted-media; fullscreen"
-        />
+        {!framingRefused && (
+          <iframe
+            key={reloadKey}
+            src={url}
+            title={title}
+            onLoad={() => setLoaded(true)}
+            className="h-full w-full border-0"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow={PHONE ? "clipboard-write; encrypted-media; fullscreen" : "clipboard-write; clipboard-read; encrypted-media; fullscreen"}
+          />
+        )}
         {(phase.kind === "installing" || phase.kind === "success") && (
           <InstallOverlay phase={phase} logo={logo} />
         )}
       </div>
 
-      <footer className="flex shrink-0 flex-col gap-2.5 border-t border-white/10 bg-canvas/72 px-5 py-3.5 backdrop-blur-md">
-        <p className="text-[12.5px] leading-snug text-ink-muted">
-          {isWeb()
-            ? "Configure the addon above, then copy its manifest URL and paste it here. The web app can't catch the Install button automatically the way the desktop app does."
-            : "Paste the manifest URL, or click Install on the addon's configuration page above."}
-        </p>
+      <footer
+        className={`flex shrink-0 flex-col border-t border-white/10 bg-canvas/80 backdrop-blur-md ${
+          PHONE ? "gap-3 px-4 pb-4 pt-3.5" : "gap-2.5 px-5 py-3.5"
+        }`}
+      >
+        {PHONE && pageRefused ? (
+          // The message above already says what to do; this is only the paste option.
+          <p className="text-[12.5px] leading-snug text-ink-muted">
+            Already have the addon link? Paste it below (long-press the field, then Paste).
+          </p>
+        ) : PHONE ? (
+          <>
+            <ol className="flex flex-col gap-1.5 text-[12.5px] leading-snug text-ink-muted">
+              <li className="flex gap-2.5">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">1</span>
+                <span>Set up the addon on the page above, then tap its <b className="text-ink">Install</b> button.</span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">2</span>
+                <span>Page not showing? Open it in your browser, set it up there, tap <b className="text-ink">Install</b> and choose <b className="text-ink">Harbor</b>.</span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">3</span>
+                <span>Or paste the addon link (<span className="font-mono text-[11.5px]">stremio://…</span> or <span className="font-mono text-[11.5px]">…/manifest.json</span>) below.</span>
+              </li>
+            </ol>
+            <button
+              type="button"
+              onClick={() => openUrl(url)}
+              className="flex h-11 items-center justify-center gap-2 rounded-full border border-edge bg-elevated/70 text-[13.5px] font-semibold text-ink transition-colors hover:bg-elevated"
+            >
+              <ExternalLink size={14} strokeWidth={2.3} />
+              Open in browser
+            </button>
+          </>
+        ) : (
+          <p className="text-[12.5px] leading-snug text-ink-muted">
+            {isWeb()
+              ? "Configure the addon above, then copy its manifest URL and paste it here. The web app can't catch the Install button automatically the way the desktop app does."
+              : "Paste the manifest URL, or click Install on the addon's configuration page above."}
+          </p>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -361,25 +436,31 @@ function InstallerViewport({
               }
             }}
             placeholder="stremio://… or https://…/manifest.json"
-            className="h-10 flex-1 rounded-full border border-edge-soft bg-surface px-4 text-[13px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none"
+            className={`min-w-0 flex-1 rounded-full border border-edge-soft bg-surface px-4 text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none ${
+              PHONE ? "h-11 text-[14px]" : "h-10 text-[13px]"
+            }`}
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
             disabled={phase.kind === "installing" || phase.kind === "success"}
           />
-          <button
-            type="button"
-            onClick={() => void readClipboard()}
-            disabled={phase.kind === "installing" || phase.kind === "success"}
-            className="flex h-10 items-center gap-1.5 rounded-full border border-edge-soft px-3.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink disabled:opacity-40"
-          >
-            <ClipboardCopy size={13} strokeWidth={2.2} />
-            From clipboard
-          </button>
+          {!PHONE && (
+            <button
+              type="button"
+              onClick={() => void readClipboard()}
+              disabled={phase.kind === "installing" || phase.kind === "success"}
+              className="flex h-10 items-center gap-1.5 rounded-full border border-edge-soft px-3.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:border-edge hover:text-ink disabled:opacity-40"
+            >
+              <ClipboardCopy size={13} strokeWidth={2.2} />
+              From clipboard
+            </button>
+          )}
           <button
             type="submit"
             disabled={!pasteValue.trim() || phase.kind === "installing" || phase.kind === "success"}
-            className="flex h-10 items-center gap-1.5 rounded-full bg-accent px-4 text-[13px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className={`flex shrink-0 items-center gap-1.5 rounded-full bg-accent px-4 font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${
+              PHONE ? "h-11 text-[14px]" : "h-10 text-[13px]"
+            }`}
           >
             <Sparkles size={13} strokeWidth={2.4} />
             Install

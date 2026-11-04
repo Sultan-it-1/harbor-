@@ -71,6 +71,15 @@ export function usePlaylistMutations(params: {
     [playlists, update, activeId, refresh],
   );
 
+  const renamePlaylist = useCallback(
+    (id: string, name: string) => {
+      const clean = name.trim();
+      if (!clean) return;
+      update({ iptvPlaylists: playlists.map((s) => (s.id === id ? { ...s, name: clean } : s)) });
+    },
+    [playlists, update],
+  );
+
   const reorderPlaylist = useCallback(
     (id: string, delta: number) => {
       const i = playlists.findIndex((s) => s.id === id);
@@ -95,5 +104,5 @@ export function usePlaylistMutations(params: {
     [playlists, update],
   );
 
-  return { addPlaylist, removePlaylist, editPlaylist, reorderPlaylist, movePlaylistTop };
+  return { addPlaylist, removePlaylist, editPlaylist, renamePlaylist, reorderPlaylist, movePlaylistTop };
 }
