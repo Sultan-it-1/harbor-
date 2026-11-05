@@ -99,4 +99,6 @@ dependencies {
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1")
 
     testImplementation("junit:junit:4.13.2")
+    // The real org.json for JVM tests (android.jar only has stubs of it).
+    testImplementation("org.json:json:20240303")
 }

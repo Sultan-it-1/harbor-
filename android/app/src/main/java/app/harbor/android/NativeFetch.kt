@@ -15,7 +15,12 @@ import java.util.concurrent.Future
  * provides on the hosted web build (addons without CORS headers, debrid REST APIs,
  * Stremio API logins). Response bodies travel back base64-encoded.
  */
-class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
+class NativeFetch(
+    /** Body to base64 text (android.util.Base64 works on API 24; the JVM tests pass java.util's). */
+    private val encode: (ByteArray) -> String = { Base64.encodeToString(it, Base64.NO_WRAP) },
+    private val maxBodyBytes: Int = MAX_BODY_BYTES,
+    private val done: (id: String, resultJson: String) -> Unit,
+) {
     // Mostly waiting on the network, so plenty of threads: a search asks dozens of addons at
     // once and a few dead ones used to hold up everything queued behind them.
     private val pool = Executors.newFixedThreadPool(12)
@@ -120,7 +125,7 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
 
             val status = conn.responseCode
             val stream: InputStream? = if (status >= 400) conn.errorStream else try { conn.inputStream } catch (_: Exception) { conn.errorStream }
-            val bytes = stream?.use { readAll(it, MAX_BODY_BYTES) } ?: ByteArray(0)
+            val bytes = stream?.use { readAll(it, maxBodyBytes) } ?: ByteArray(0)
             val hdrs = JSONObject()
             conn.headerFields.forEach { (k, v) ->
                 if (k != null && v != null && !k.equals("content-encoding", true) && !k.equals("transfer-encoding", true) && !k.equals("content-length", true)) {
@@ -132,7 +137,7 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
             out.put("status", status)
             out.put("url", url.toString())
             out.put("headers", hdrs)
-            out.put("body", Base64.encodeToString(bytes, Base64.NO_WRAP))
+            out.put("body", encode(bytes))
         } catch (e: Exception) {
             out.put("ok", false)
             out.put("error", e.javaClass.simpleName + ": " + (e.message ?: ""))
@@ -147,7 +152,7 @@ class NativeFetch(private val done: (id: String, resultJson: String) -> Unit) {
         while (true) {
             val n = s.read(chunk)
             if (n < 0) break
-            if (buf.size() + n > max) throw java.io.IOException("response larger than ${max / (1024 * 1024)} MB")
+            if (buf.size() + n > max) throw java.io.IOException("response larger than ${max / (1024 * 1024)} MB ($max bytes)")
             buf.write(chunk, 0, n)
         }
         return buf.toByteArray()

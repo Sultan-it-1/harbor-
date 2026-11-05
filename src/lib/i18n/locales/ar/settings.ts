@@ -1850,6 +1850,12 @@ const settings: Record<string, string> = {
   "Rate this theme": "قيّم هذا الثيم",
   "{n} downloads": "{n} تنزيل",
   "by {author}": "بواسطة {author}",
+  "Open-source licences": "تراخيص المصادر المفتوحة",
+  "Harbor's own code is MIT. The app also includes these components, each under its own licence.": "كود Harbor نفسه بترخيص MIT. ويضم التطبيق أيضاً هذه المكوّنات، ولكلٍّ منها ترخيصه.",
+  "Android app": "تطبيق أندرويد",
+  "Interface": "الواجهة",
+  "Fonts": "الخطوط",
+  "The FFmpeg decoder (AC3, E-AC3, DTS and TrueHD audio) is published under GPL-3.0. Its source is public at github.com/jellyfin/jellyfin-androidx-media.": "مفكّك FFmpeg (لصوت AC3 وE-AC3 وDTS وTrueHD) منشور بترخيص GPL-3.0، ومصدره متاح للعموم على github.com/jellyfin/jellyfin-androidx-media.",
 };
 
 export default settings;

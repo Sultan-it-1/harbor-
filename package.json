@@ -14,7 +14,8 @@
     "setup:libmpv": "node scripts/fetch-libmpv.mjs",
     "setup:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
     "setup:fonts": "node scripts/fetch-fonts.mjs",
-    "check:i18n": "node scripts/check-i18n.mjs"
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "test:phone": "node tests/phone-smoke.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -47,6 +48,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "cheerio": "^1.2.0",
+    "playwright": "1.63.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   },
