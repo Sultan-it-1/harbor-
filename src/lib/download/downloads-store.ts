@@ -248,7 +248,9 @@ function pollAndroid() {
         // resolve every episode up front, so later links often expire before their turn).
         const after = items.get(cur.id);
         if (after && !after.autoRelinked && (n.code === "expired" || n.code === "refused") && after.source) {
-          items.set(cur.id, { ...after, autoRelinked: true });
+          // Shown as it happens ("Getting a fresh link…", no Retry); if it fails, the next poll
+          // writes the error back and Retry returns.
+          items.set(cur.id, { ...after, autoRelinked: true, status: "downloading", code: "relinking", note: "Getting a fresh link…", error: null });
           changed = true;
           void relinkDownload(cur.id);
         }

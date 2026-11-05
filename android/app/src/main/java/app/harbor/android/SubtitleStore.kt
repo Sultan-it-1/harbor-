@@ -170,6 +170,10 @@ class SubtitleStore(private val dir: File, private val fileRoots: List<File> = l
             // Read as windows-1251: a capital right after a small letter, inside a word. Never in
             // Russian; in Greek (windows-1253) these bytes are accented small letters (ά έ ή ί).
             var midWordCaps = 0
+            // ل م ن ه و ى ي in windows-1256 (bytes E1, E3-E6, EC, ED): about 40% of the letters of
+            // Arabic, Persian or Urdu text. Capital Cyrillic or Greek never uses these bytes, though
+            // windows-1256 reads every other capital byte (C0-DF) as an Arabic letter.
+            var arabicCore = 0
             fun u(i: Int) = if (i in b.indices) b[i].toInt() and 0xFF else 0
             fun asciiLetter(i: Int) = u(i).let { it in 0x41..0x5A || it in 0x61..0x7A }
             for (i in b.indices) {
@@ -178,6 +182,7 @@ class SubtitleStore(private val dir: File, private val fileRoots: List<File> = l
                 high++
                 if (asciiLetter(i - 1) || asciiLetter(i + 1)) nextToLatin++
                 if (c in 0xC0..0xDF && u(i - 1) in 0xE0..0xFF) midWordCaps++
+                if (c == 0xE1 || c in 0xE3..0xE6 || c == 0xEC || c == 0xED) arabicCore++
             }
             if (high < 16 || high < b.size / 50) return "windows-1252"
             if (nextToLatin * 2 > high) return "windows-1252"
@@ -186,7 +191,7 @@ class SubtitleStore(private val dir: File, private val fileRoots: List<File> = l
             val cyrillic = score("windows-1251") { it in '\u0400'..'\u04FF' }
             val greek = score("windows-1253") { it in '\u0370'..'\u03FF' }
             val floor = high / 3
-            if (arabic > floor && arabic * 100 >= cyrillic * 85) return "windows-1256"
+            if (arabic > floor && arabic * 100 >= cyrillic * 85 && arabicCore * 100 >= high * 15) return "windows-1256"
             if (greek > floor && midWordCaps * 50 >= high) return "windows-1253"
             if (cyrillic > floor) return "windows-1251"
             if (greek > floor) return "windows-1253"

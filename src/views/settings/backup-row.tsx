@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { applyBackup, backupKeyCount, downloadBackup, parseBackup, type Backup } from "@/lib/backup";
 import { useT } from "@/lib/i18n";
 import { uiLocale } from "@/lib/i18n/locale";
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 
 export function BackupRow() {
   const t = useT();
@@ -126,6 +127,10 @@ function RestoreConfirm({
   onCancel: () => void;
 }) {
   const t = useT();
+  // Android back cancels the restore, like the backdrop (not while it is being applied).
+  useCloseOnAndroidBack(true, () => {
+    if (!applying) onCancel();
+  });
   const when = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString(uiLocale()) : t("an unknown date");
   return createPortal(
     <div

@@ -58,6 +58,11 @@ class SubtitleDecodeTest {
         assertEquals(ar, SubtitleStore.decodeText(bytes, ""))
     }
 
+    @Test fun allCapsRussianIsNotReadAsArabic() {
+        val caps = srt(listOf("Я НЕ ЗНАЮ, ЧТО ТЕБЕ СКАЗАТЬ.", "[ЗВОНИТ ТЕЛЕФОН]", "ВСЁ БУДЕТ ХОРОШО, ПОВЕРЬ МНЕ."), 60)
+        assertEquals("windows-1251", SubtitleStore.guessCodePage(caps.toByteArray(Charset.forName("windows-1251"))))
+    }
+
     @Test fun russianAndGreekAreTheirOwnPages() {
         val ru = srt(listOf("Привет, как дела? Всё хорошо, спасибо.", "Где ты был вчера вечером?", "Мы поедем на море завтра."), 60)
         assertEquals("windows-1251", SubtitleStore.guessCodePage(ru.toByteArray(Charset.forName("windows-1251"))))

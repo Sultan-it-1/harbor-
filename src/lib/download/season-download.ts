@@ -15,7 +15,7 @@ import type { PlayEpisode } from "@/lib/view";
 import { loadPickerAddons } from "@/views/play-picker/use-addons";
 import { buildPipelineInput } from "@/views/play-picker/use-pipeline-result";
 import { activeDownloadFor, beginBackgroundJob, endBackgroundJob, enqueueDownload } from "./downloads-store";
-import { isAndroidApp, nativeNetworkLooksDown } from "@/lib/android";
+import { isAndroidApp, nativeNetworkLooksDown, subscribeNativeNetwork } from "@/lib/android";
 import { readActiveStremioAuthKey } from "@/lib/auth";
 import { buildDebridClients } from "@/lib/debrid/registry";
 import { loadStoredSettings } from "@/lib/settings/load";
@@ -194,6 +194,30 @@ function offline(): boolean {
   return (typeof navigator !== "undefined" && navigator.onLine === false) || nativeNetworkLooksDown();
 }
 
+let waitingForNetwork = false;
+/** Back online by any signal (the WebView's "online", a native request that works again, or a
+ *  check every 20 s): resume then. A single "online" event is not enough: on a Wi-Fi without
+ *  internet it never fires, and it can come before the native requests work again. */
+function waitForNetworkThenResume(): void {
+  if (waitingForNetwork) return;
+  waitingForNetwork = true;
+  let timer = 0;
+  const stop = () => {
+    waitingForNetwork = false;
+    window.removeEventListener("online", check);
+    unsubscribe();
+    window.clearInterval(timer);
+  };
+  const check = () => {
+    if (offline()) return;
+    stop();
+    resumeSavedSeasonJobs();
+  };
+  window.addEventListener("online", check);
+  const unsubscribe = subscribeNativeNetwork(check);
+  timer = window.setInterval(check, 20_000);
+}
+
 /**
  * On start (Android): carry on with season queues the app was closed in the middle of. Offline
  * (a train, airplane mode) it waits for the connection: started then, every episode would fail
@@ -203,7 +227,7 @@ export function resumeSavedSeasonJobs(): void {
   const saved = readSavedJobs();
   if (saved.length === 0) return;
   if (offline()) {
-    window.addEventListener("online", () => window.setTimeout(resumeSavedSeasonJobs, 3000), { once: true });
+    waitForNetworkThenResume();
     return;
   }
   const settings = loadStoredSettings();

@@ -82,6 +82,8 @@ function setPressure(high: boolean): void {
 
 // Android's onTrimMemory said memory is short: pressure holds until then, whatever the heap says.
 let trimUntil = 0;
+// The trim (not the heap check) turned the pressure on: it ends with the trim's window.
+let trimSetPressure = false;
 
 function pollPressure(): void {
   if (pressureHigh && Date.now() < trimUntil) return;
@@ -148,14 +150,23 @@ export function startMaintenance(): () => void {
     const level = Number((e as CustomEvent<number>).detail) || 0;
     if (level < 10) return;
     trimUntil = Date.now() + 30_000;
+    if (!pressureHigh) trimSetPressure = true;
     setPressure(true);
     if (trimTimer != null) window.clearTimeout(trimTimer);
     trimTimer = window.setTimeout(() => {
       trimTimer = null;
       trimUntil = 0;
-      // The window is over: the usual checks decide again (pressure the heap check set stays).
-      if (readHeapMB() == null && getNativeRssMB() <= 0) setPressure(false);
-      else pollPressure();
+      // The window is over. Pressure the trim turned on ends now unless memory is high by the
+      // usual measure; pressure the heap check had set is left to it.
+      if (trimSetPressure) {
+        trimSetPressure = false;
+        const rss = getNativeRssMB();
+        const heap = readHeapMB();
+        const stillHigh = rss > 0 ? rss > tierCeilingMB(getRamTier()) : heap != null && heap > PRESSURE_HIGH_MB;
+        if (!stillHigh) setPressure(false);
+      } else {
+        pollPressure();
+      }
     }, 30_000);
   };
   window.addEventListener("harbor:trim-memory", onTrim);

@@ -323,11 +323,11 @@ export function pushAndroidBackHandler(fn: () => boolean): () => void {
  * section, the avatar catalog inside the profile editor) closes before it: that handler and the
  * older ones step aside, and the caller sends the pop-up an Escape.
  */
-export function runAndroidBackHandlers(): boolean {
+export function runAndroidBackHandlers(force = false): boolean {
   const open = visiblePopups();
   for (let i = backInterceptors.length - 1; i >= 0; i--) {
     const e = backInterceptors[i];
-    if (open.some((el) => !e.known.has(el))) return false;
+    if (!force && open.some((el) => !e.known.has(el))) return false;
     if (e.fn()) return true;
   }
   return false;

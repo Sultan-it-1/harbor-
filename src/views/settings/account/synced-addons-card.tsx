@@ -15,13 +15,13 @@ export function SyncedAddonsCard() {
   const [lastSynced, setLastSynced] = useState<number | null>(null);
   const { setView } = useView();
 
-  const sync = async () => {
+  const sync = async (fresh = false) => {
     if (!authKey) return;
     setBusy(true);
     try {
       const mod = await import("@/lib/addons");
-      // "Sync now" asks the server: the 3-minute cache is for page loads.
-      mod.forgetUserAddonsCache();
+      // "Sync now" asks the server; opening the card may use the 3-minute cache.
+      if (fresh) mod.forgetUserAddonsCache();
       const list = await mod.userAddons(authKey);
       setAddons(list);
       setLastSynced(Date.now());
@@ -65,7 +65,7 @@ export function SyncedAddonsCard() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={sync}
+            onClick={() => void sync(true)}
             disabled={busy}
             className="flex h-10 items-center gap-1.5 rounded-xl bg-ink px-4 text-[12.5px] font-semibold text-canvas transition-transform hover:scale-[1.02] disabled:opacity-60"
           >

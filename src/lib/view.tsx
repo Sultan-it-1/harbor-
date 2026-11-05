@@ -393,6 +393,12 @@ export function ViewProvider({ children }: { children: ReactNode }) {
         );
         return true;
       }
+      // The pop-up ignored the Escape: the screen behind it handles Back after all (a Settings
+      // section closes with the pop-up in it) rather than leaving the page.
+      if (modal && modal === lastModal && runAndroidBackHandlers(true)) {
+        lastModal = null;
+        return true;
+      }
       lastModal = null;
       if (stackDepthRef.current > 1) {
         pop();
