@@ -1,5 +1,5 @@
 import type { Meta } from "@/lib/cinemeta";
-import type { AnilistMedia, AnilistMediaEntry } from "./types";
+import type { AnilistMedia } from "./types";
 
 export function anilistMediaToMeta(m: AnilistMedia): Meta | null {
   const name = m.title.english || m.title.userPreferred || m.title.romaji;
@@ -14,8 +14,4 @@ export function anilistMediaToMeta(m: AnilistMedia): Meta | null {
     releaseInfo: m.seasonYear != null ? String(m.seasonYear) : undefined,
     imdbRating: m.averageScore != null ? (m.averageScore / 10).toFixed(1) : undefined,
   };
-}
-
-export function anilistEntryToMeta(entry: AnilistMediaEntry): Meta | null {
-  return anilistMediaToMeta(entry.media);
 }

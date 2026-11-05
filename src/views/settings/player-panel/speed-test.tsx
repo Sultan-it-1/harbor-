@@ -234,7 +234,7 @@ function SpeedTestButtonInner() {
         type="button"
         onClick={run}
         disabled={cooling}
-        aria-label={cooling ? `Wait ${Math.ceil(cooldownRemaining / 1000)}s` : t("Re-test")}
+        aria-label={cooling ? t("Wait {n}s", { n: Math.ceil(cooldownRemaining / 1000) }) : t("Re-test")}
         className={`flex h-7 items-center justify-center rounded-full text-ink-subtle transition-colors ${
           cooling
             ? "w-auto cursor-not-allowed px-2 text-[10.5px] font-semibold tabular-nums tracking-wide"

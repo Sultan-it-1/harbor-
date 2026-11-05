@@ -11,8 +11,7 @@ import { nameColor } from "@/lib/together/colors";
 import { useTogether } from "@/lib/together/provider";
 import { buildPlayInvite } from "@/lib/together/build-invite";
 import { useView, type PlayerSrc, type PlayEpisode } from "@/lib/view";
-import { useSkipSegments, useAdSegments } from "@/lib/skip-intro";
-import { withinAdWindow } from "@/lib/ad-report/window";
+import { useSkipSegments } from "@/lib/skip-intro";
 import { isLocalUrl } from "@/lib/player/local-url";
 import { useAuth } from "@/lib/auth";
 import { embedFlags } from "./player/player-utils";
@@ -577,22 +576,13 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     streamCheckOpen,
   });
 
-  const playStreamRef = liveStreamRef ?? src.streamRef;
   const playUrl = liveUrl ?? src.url;
   useTrickplay({ url: playUrl, enabled: settings.seekPreviewEnabled });
-  const adSegments = useAdSegments(
-    src.meta.id,
-    src.imdbId ?? null,
-    playStreamRef,
-    playUrl,
-    withinAdWindow(src.meta) || settings.adSkipEnabled,
-  );
   const skipSegments = useSkipSegments(
     src.meta,
     src.episode,
     snap.chapters,
     snap.durationSec,
-    adSegments,
   );
   useEffect(() => {
     setSkipSegmentsView(skipSegments);
@@ -659,8 +649,6 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     snap,
     engine,
     src,
-    adStreamRef: playStreamRef,
-    adUrl: playUrl,
     subShowInPip: settings.subShowInPip,
     subAssNative,
     showStats,

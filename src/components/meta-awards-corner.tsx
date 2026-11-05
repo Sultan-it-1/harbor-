@@ -81,7 +81,7 @@ function AnimeCorner({ name, year }: { name: string; year?: number }) {
         <span
           className={`truncate font-bold uppercase tracking-[0.18em] text-ink/55 ${compact ? "text-[9.5px]" : "text-[10.5px]"}`}
         >
-          {compact ? "Award Winner" : `${src.name} Winner`}
+          {compact ? t("Award Winner") : `${src.name} Winner`}
         </span>
         {!compact && <span className="truncate text-[13px] font-semibold text-ink/85">{subline}</span>}
         {!compact && otherWins > 0 && (

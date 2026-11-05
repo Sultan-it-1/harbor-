@@ -5,7 +5,7 @@ import type { Meta } from "@/lib/cinemeta";
 import { activeDownloadFor, cancelDownload, useDownloads } from "@/lib/download/downloads-store";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
-import { AnilistMenuItems, SimklMenuItems, TraktMenuItems } from "./overflow-sync-items";
+import { SimklMenuItems, TraktMenuItems } from "./overflow-sync-items";
 import { PreviewIcon } from "./preview-icon";
 
 const CIRCLES_SAVED_ESTIMATE = 132;
@@ -70,7 +70,6 @@ export function HeroActionOverflow({
   inWatchlist = false,
   onToggleWatchlist,
   simkl = null,
-  anilist = null,
 }: {
   meta: Meta;
   isFav: boolean;
@@ -85,7 +84,6 @@ export function HeroActionOverflow({
   inWatchlist?: boolean;
   onToggleWatchlist?: () => void;
   simkl?: { harborId: string; type: "movie" | "series" } | null;
-  anilist?: { harborId: string } | null;
 }) {
   const t = useT();
   const { openPicker } = useView();
@@ -169,9 +167,6 @@ export function HeroActionOverflow({
                     type={simkl.type}
                     onAction={() => setMenu(null)}
                   />
-                )}
-                {anilist && (
-                  <AnilistMenuItems harborId={anilist.harborId} onAction={() => setMenu(null)} />
                 )}
                 <TraktMenuItems
                   harborId={meta.id}

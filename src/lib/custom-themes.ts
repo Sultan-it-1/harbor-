@@ -241,28 +241,6 @@ export function setCustomThemePreview(id: string, previewImage: string | null): 
   emit();
 }
 
-export function exportThemeJson(theme: ThemePreset | CustomTheme): string {
-  const out: Record<string, unknown> = {
-    name: theme.name,
-    blurb: theme.blurb,
-    swatch: theme.swatch,
-    tokens: theme.tokens,
-  };
-  if (theme.background) out.background = theme.background;
-  if (theme.logo) out.logo = theme.logo;
-  if (theme.layout) out.layout = theme.layout;
-  if (theme.cardStyle) out.cardStyle = theme.cardStyle;
-  if (theme.buttonStyle) out.buttonStyle = theme.buttonStyle;
-  if (theme.fontPair) out.fontPair = theme.fontPair;
-  if (typeof theme.bokeh === "boolean") out.bokeh = theme.bokeh;
-  if (theme.chrome) out.chrome = theme.chrome;
-  const ext = theme as CustomTheme;
-  if (ext.css) out.css = ext.css;
-  if (ext.js) out.js = ext.js;
-  if (ext.html) out.html = ext.html;
-  return JSON.stringify(out, null, 2);
-}
-
 export function getStarterTemplate(): string {
   return JSON.stringify(
     {

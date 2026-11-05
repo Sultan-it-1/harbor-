@@ -150,7 +150,7 @@ export function RuleBuilder({
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-edge-soft bg-canvas/40 p-5">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <span className="flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
             <Zap size={11} strokeWidth={2.3} />
             {t("AUTOMATIONS")}
@@ -163,7 +163,7 @@ export function RuleBuilder({
           type="button"
           onClick={startNew}
           disabled={!canDiscord && !canTelegram}
-          className="flex h-9 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[12.5px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-ink px-3.5 text-[12.5px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           <Plus size={13} strokeWidth={2.4} />
           {t("New rule")}
@@ -276,7 +276,7 @@ function RuleEditor({
       <div className="flex max-h-[88vh] w-full max-w-[560px] flex-col gap-5 overflow-y-auto rounded-2xl border border-edge-soft bg-elevated p-6 shadow-[0_28px_80px_-20px_rgba(0,0,0,0.7)]">
         <div className="flex items-start justify-between">
           <h2 className="text-[18px] font-semibold text-ink">
-            {rule.name ? "Edit rule" : "New rule"}
+            {rule.name ? t("Edit rule") : t("New rule")}
           </h2>
           <button
             type="button"
@@ -414,7 +414,7 @@ function RuleEditor({
               >
                 {[5, 10, 15, 30, 60, 120].map((m) => (
                   <option key={m} value={m}>
-                    {m < 60 ? `${m} minutes before` : `${m / 60} hour${m === 60 ? "" : "s"} before`}
+                    {m < 60 ? t("{n} minutes before", { n: m }) : m === 60 ? t("1 hour before") : t("{n} hours before", { n: m / 60 })}
                   </option>
                 ))}
               </select>

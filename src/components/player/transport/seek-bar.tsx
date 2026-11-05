@@ -43,7 +43,6 @@ export function SeekBar({
     .map((s) => ({
       startPct: Math.max(0, Math.min(100, (s.startSec / dur) * 100)),
       endPct: Math.max(0, Math.min(100, (s.endSec / dur) * 100)),
-      color: s.kind === "ad" ? "rgba(239,68,68,0.9)" : undefined,
     }));
 
   const clearInteraction = () => {

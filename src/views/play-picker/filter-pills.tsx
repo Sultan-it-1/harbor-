@@ -1,5 +1,6 @@
 import { Languages, Zap } from "lucide-react";
 import { abbreviateLanguages, normalizeLangCode } from "./picker-utils";
+import { t } from "@/lib/i18n/translate";
 
 export function CachedFilterPill({
   on,
@@ -21,7 +22,7 @@ export function CachedFilterPill({
       aria-pressed={on}
     >
       <Zap size={11} fill={on ? "currentColor" : "none"} strokeWidth={2.2} />
-      {on ? `Cached only · +${hiddenCount}` : `Show all sources`}
+      {on ? t("Cached only · +{n}", { n: hiddenCount }) : t("Show all sources")}
     </button>
   );
 }
@@ -54,7 +55,7 @@ export function LanguageFilterPill({
       aria-pressed={on}
     >
       <Languages size={11} strokeWidth={2.2} />
-      {on ? `${label} only · +${hiddenCount}` : `Show ${label} only`}
+      {on ? t("{label} only · +{n}", { label, n: hiddenCount }) : t("Show {label} only", { label })}
     </button>
   );
 }

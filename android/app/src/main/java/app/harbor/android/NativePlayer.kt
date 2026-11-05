@@ -535,6 +535,21 @@ class NativePlayer(
             setBufferedColor(Color.argb(110, 255, 255, 255))
         }
 
+        // One even shade over the whole picture while the controls show. The controls keep clear
+        // of the camera cutout and the gesture bar (applyChromeInsets pads them), but the shade
+        // used to stop at that padding too, leaving bright strips along those edges, and the
+        // bottom bar drew a second, almost black box of its own. Now: edge to edge, a little
+        // darker at the top and bottom where the text sits, no hard-edged box.
+        (pv.findViewById<View>(androidx.media3.ui.R.id.exo_controller) as? ViewGroup)?.clipToPadding = false
+        pv.findViewById<View>(androidx.media3.ui.R.id.exo_controls_background)?.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                Color.argb(165, 0, 0, 0), Color.argb(110, 0, 0, 0), Color.argb(110, 0, 0, 0),
+                Color.argb(110, 0, 0, 0), Color.argb(175, 0, 0, 0),
+            ),
+        )
+        pv.findViewById<View>(androidx.media3.ui.R.id.exo_bottom_bar)?.background = null
+
         // Addon subtitles render in their own view above the video, below the controls.
         val sv = SubtitleView(activity)
         (pv.overlayFrameLayout ?: pv).addView(sv, FrameLayout.LayoutParams(MainActivity.MATCH, MainActivity.MATCH))
@@ -559,7 +574,7 @@ class NativePlayer(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(ctx.dp(20), ctx.dp(14), ctx.dp(20), ctx.dp(28))
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(170, 0, 0, 0), Color.TRANSPARENT))
+            // No shade of its own: it only shows with the controls, whose shade covers the screen.
         }
         bar.addView(ctx.iconButton(R.drawable.ic_arrow_left, "رجوع") { close() }.apply {
             (layoutParams as LinearLayout.LayoutParams).marginStart = 0

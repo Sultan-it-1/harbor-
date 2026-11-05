@@ -124,8 +124,8 @@ export function DisplaySection() {
         title={t("Accessibility")}
         subtitle={t("Make everything bigger and easier to read: sidebar, menus, popups, every page. The whole interface scales live as you drag, so you can see the change right here. Great on 4K and ultrawide monitors, or whenever the text feels small.")}
       >
-        <div className="flex items-center gap-4 px-1 py-1.5">
-          <span className="w-32 shrink-0 text-[13.5px] font-medium text-ink">{t("Interface scale")}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 py-1.5">
+          <span className="min-w-0 flex-1 text-[13.5px] font-medium text-ink sm:w-32 sm:flex-none">{t("Interface scale")}</span>
           <input
             type="range"
             min={0.8}
@@ -133,7 +133,7 @@ export function DisplaySection() {
             step={0.05}
             value={settings.uiScale}
             onChange={(e) => update({ uiScale: parseFloat(e.target.value) })}
-            className="h-1 flex-1 appearance-none rounded-full bg-edge-soft accent-ink"
+            className="order-last h-1 w-full min-w-0 appearance-none rounded-full bg-edge-soft accent-ink sm:order-none sm:w-auto sm:flex-1"
           />
           <span className="w-14 shrink-0 text-end text-[13px] tabular-nums text-ink-muted">
             {Math.round(settings.uiScale * 100)}%
@@ -184,8 +184,8 @@ export function DisplaySection() {
         title={t("Home hero shadow")}
         subtitle={t("How dark the gradient behind the featured title on Home is. 100% is the classic look; lower it to let more of the artwork show through.")}
       >
-        <div className="flex items-center gap-4 px-1 py-1.5">
-          <span className="w-32 shrink-0 text-[13.5px] font-medium text-ink">{t("Shadow")}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 py-1.5">
+          <span className="min-w-0 flex-1 text-[13.5px] font-medium text-ink sm:w-32 sm:flex-none">{t("Shadow")}</span>
           <input
             type="range"
             min={0}
@@ -193,7 +193,7 @@ export function DisplaySection() {
             step={5}
             value={settings.heroShadow}
             onChange={(e) => update({ heroShadow: parseInt(e.target.value, 10) })}
-            className="h-1 flex-1 appearance-none rounded-full bg-edge-soft accent-ink"
+            className="order-last h-1 w-full min-w-0 appearance-none rounded-full bg-edge-soft accent-ink sm:order-none sm:w-auto sm:flex-1"
           />
           <span className="w-14 shrink-0 text-end text-[13px] tabular-nums text-ink-muted">
             {settings.heroShadow}%
@@ -246,8 +246,8 @@ function SizeSlider({
 }) {
   const t = useT();
   return (
-    <div className="flex items-center gap-4 px-1 py-1.5">
-      <span className="w-32 shrink-0 text-[13.5px] font-medium text-ink">{label}</span>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 py-1.5">
+      <span className="min-w-0 flex-1 text-[13.5px] font-medium text-ink sm:w-32 sm:flex-none">{label}</span>
       <input
         type="range"
         min={0.8}
@@ -255,7 +255,7 @@ function SizeSlider({
         step={0.05}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="h-1 flex-1 appearance-none rounded-full bg-edge-soft accent-ink"
+        className="order-last h-1 w-full min-w-0 appearance-none rounded-full bg-edge-soft accent-ink sm:order-none sm:w-auto sm:flex-1"
       />
       <span className="w-14 shrink-0 text-end text-[13px] tabular-nums text-ink-muted">
         {Math.round(value * 100)}%

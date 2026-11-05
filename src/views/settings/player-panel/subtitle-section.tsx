@@ -66,7 +66,7 @@ export function SubtitleStylePanel() {
 
       <div className="flex flex-col gap-2.5">
         <Label>{t("Background")}</Label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {styles.map((s) => {
             const sel = settings.subStyle === s.id;
             return (
@@ -88,7 +88,7 @@ export function SubtitleStylePanel() {
 
       <div className="flex flex-col gap-2.5">
         <Label>{t("Styled (ASS) subtitles")}</Label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {assModes.map((m) => {
             const sel = settings.subAssOverride === m.id;
             return (

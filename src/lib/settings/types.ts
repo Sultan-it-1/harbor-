@@ -87,8 +87,6 @@ export type Settings = {
   hdEpisodeImages: boolean;
   harborAvatar: string | null;
   harborColor: string;
-  anilistAutoSync: boolean;
-  useAnilistAvatar: boolean;
   useTraktAvatar: boolean;
   useSimklAvatar: boolean;
   traktClientId: string;
@@ -111,7 +109,6 @@ export type Settings = {
   discordShowWhenBrowsing: boolean;
   discordShowPoster: boolean;
   discordShowTimestamp: boolean;
-  discordShowPartyJoin: boolean;
   playerEngine: "auto" | "html5" | "mpv";
   playerShellId: string;
   playerChromeTheme: "auto" | "default" | "stremio";
@@ -165,7 +162,6 @@ export type Settings = {
   autoSkipIntro: boolean;
   /** Look up intro/credits times online (sends the title's id to TheIntroDB / AniSkip). */
   skipLookups: boolean;
-  autoSkipAd: boolean;
   trackBlockWords: string[];
   forcedSubsWhenNativeAudio: boolean;
   tmdbLanguage: string;
@@ -318,7 +314,4 @@ export type Settings = {
   pauseListStatusOnPause: boolean;
   translateTitles: boolean;
   translateDescriptions: boolean;
-  adSkipEnabled: boolean;
-  adReportAlwaysShow: boolean;
-  adReportFirstSeen: boolean;
 };

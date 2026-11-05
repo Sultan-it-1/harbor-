@@ -1,9 +1,7 @@
 import { BookOpen, Check, Copy, Download, Loader2, Power, Radio, ShieldCheck, Wifi, X } from "lucide-react";
 import { useState } from "react";
 import cloudflareLogo from "@/assets/cloudflare.webp";
-import pubRelaySvg from "@/assets/pubrelay.svg";
 import { deleteRelay } from "@/lib/together/cf-deploy";
-import { HARBOR_PUBLIC_RELAY, isPublicRelay } from "@/lib/together/relay-version";
 import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
 import { downloadText } from "@/lib/download-text";
@@ -35,7 +33,6 @@ export function TogetherRelayPanel({
 
   const hasUrl = !!settings.togetherRelayUrl;
   const isCfRelay = isCloudflareRelay(settings.togetherRelayUrl);
-  const isPubRelay = hasUrl && isPublicRelay(settings.togetherRelayUrl);
 
   const commitDraftUrl = () => {
     const v = draftUrl.trim();
@@ -96,26 +93,17 @@ export function TogetherRelayPanel({
       {hasUrl ? (
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3 rounded-xl border border-edge bg-canvas/60 p-4">
-            {isPubRelay ? (
-              <img
-                src={pubRelaySvg}
-                alt={t("Harbor public relay")}
-                className="h-14 w-14 shrink-0 object-contain"
-                draggable={false}
-              />
-            ) : (
-              <span
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ring-1 ${
-                  isCfRelay ? "bg-[#f6821f]/15 ring-[#f6821f]/30" : "bg-accent/15 ring-accent/30"
-                }`}
-              >
-                {isCfRelay ? (
-                  <img src={cloudflareLogo} alt="Cloudflare" className="h-5 w-5 object-contain" draggable={false} />
-                ) : (
-                  <Radio size={18} strokeWidth={1.9} className="text-accent" />
-                )}
-              </span>
-            )}
+            <span
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ring-1 ${
+                isCfRelay ? "bg-[#f6821f]/15 ring-[#f6821f]/30" : "bg-accent/15 ring-accent/30"
+              }`}
+            >
+              {isCfRelay ? (
+                <img src={cloudflareLogo} alt="Cloudflare" className="h-5 w-5 object-contain" draggable={false} />
+              ) : (
+                <Radio size={18} strokeWidth={1.9} className="text-accent" />
+              )}
+            </span>
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="text-[11px] uppercase tracking-wider text-ink-subtle">
                 {isManaged ? t("Your relay is live") : t("Connected to relay")}
@@ -180,14 +168,12 @@ export function TogetherRelayPanel({
                       </span>
                       <span className="text-[11.5px] text-ink-subtle">
                         {passive.needsUpdate
-                          ? isPubRelay
-                            ? t("Harbor's public relay updates automatically; nothing to do.")
-                            : t("Redeploy to pick up the latest Watch Together fixes. The in-app banner clears once the new version is live.")
+                          ? t("Redeploy to pick up the latest Watch Together fixes. The in-app banner clears once the new version is live.")
                           : t("Running the latest Watch Together protocol.")}
                       </span>
                     </div>
                   </div>
-                  {passive.needsUpdate && !isPubRelay && (
+                  {passive.needsUpdate && (
                     <button
                       onClick={() => (isManaged ? setShowDeploy(true) : setShowDocs(true))}
                       className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-edge px-3 text-[12.5px] text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
@@ -244,7 +230,7 @@ export function TogetherRelayPanel({
                   <span className="text-[11.5px] text-ink-subtle">{testResult.message}</span>
                 </div>
               </div>
-              {testResult.needsUpdate && !isPubRelay && (
+              {testResult.needsUpdate && (
                 <button
                   onClick={() => (isManaged ? setShowDeploy(true) : setShowDocs(true))}
                   className="ms-7 flex h-8 w-fit items-center gap-1.5 rounded-lg bg-ink px-3 text-[11.5px] font-medium text-canvas transition-transform hover:scale-[1.02]"
@@ -281,12 +267,14 @@ export function TogetherRelayPanel({
               >
                 {t("Use a different URL")}
               </button>
-              <button
-                onClick={() => setShowDeploy(true)}
-                className="h-11 flex-1 rounded-xl bg-ink text-[13px] font-medium text-canvas transition-transform hover:scale-[1.01]"
-              >
-                {t("Deploy mine instead")}
-              </button>
+              {isTauri && (
+                <button
+                  onClick={() => setShowDeploy(true)}
+                  className="h-11 flex-1 rounded-xl bg-ink text-[13px] font-medium text-canvas transition-transform hover:scale-[1.01]"
+                >
+                  {t("Deploy mine instead")}
+                </button>
+              )}
             </div>
           )}
 
@@ -328,12 +316,12 @@ export function TogetherRelayPanel({
               }}
               onBlur={commitDraftUrl}
               placeholder="wss://your-relay.workers.dev"
-              className="h-11 flex-1 rounded-xl border border-edge bg-canvas px-3.5 text-[13px] text-ink transition-colors focus:border-accent"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-edge bg-canvas px-3.5 text-[13px] text-ink transition-colors focus:border-accent"
             />
             <button
               onClick={commitDraftUrl}
               disabled={!draftUrl.trim()}
-              className="h-11 rounded-xl bg-ink px-4 text-[13px] font-medium text-canvas transition-transform hover:scale-[1.01] disabled:opacity-40 disabled:hover:scale-100"
+              className="h-11 shrink-0 rounded-xl bg-ink px-4 text-[13px] font-medium text-canvas transition-transform hover:scale-[1.01] disabled:opacity-40 disabled:hover:scale-100"
             >
               {t("Save")}
             </button>
@@ -341,18 +329,6 @@ export function TogetherRelayPanel({
           <p className="text-[11.5px] leading-relaxed text-ink-subtle">
             {t("Only enter URLs for relays you operate or trust. A relay only carries Watch Together sync messages (play, pause, seek). Nothing else passes through it.")}
           </p>
-          <div className="flex flex-col gap-2 rounded-xl border border-edge-soft bg-canvas/40 px-3.5 py-3">
-            <span className="text-[12px] text-ink-muted">
-              {t("Hit your daily quota? Use Harbor's public relay, or host your own.")}
-            </span>
-            <button
-              onClick={() => update({ togetherRelayUrl: HARBOR_PUBLIC_RELAY })}
-              className="flex h-9 w-fit items-center gap-1.5 rounded-lg border border-edge px-3 text-[12.5px] text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
-            >
-              <Radio size={13} strokeWidth={1.9} />
-              {t("Use Harbor's public relay")}
-            </button>
-          </div>
         </div>
       )}
 

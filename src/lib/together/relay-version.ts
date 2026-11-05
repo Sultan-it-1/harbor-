@@ -1,15 +1,18 @@
 export const REQUIRED_RELAY_VERSION = 10;
-export const HARBOR_PUBLIC_RELAY = "wss://pub.harbor.site";
+
+// Harbor's old public relay. It has shut down for good, so a saved relay URL or an invite link
+// that still points at it counts as no relay.
+const RETIRED_RELAY_HOST = "pub.harbor.site";
 
 export function relayOutdated(version: number | null | undefined): boolean {
   return version == null || version < REQUIRED_RELAY_VERSION;
 }
 
-export function isPublicRelay(url: string): boolean {
+export function isRetiredRelay(url: string): boolean {
   const host = url
     .trim()
     .toLowerCase()
     .replace(/^(wss?|https?):\/\//, "")
-    .replace(/\/.*$/, "");
-  return host === "pub.harbor.site";
+    .replace(/[/:?#].*$/, "");
+  return host === RETIRED_RELAY_HOST;
 }

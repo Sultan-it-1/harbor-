@@ -102,7 +102,7 @@ export function MagnetCard({ raw, onClose }: { raw: string; onClose: () => void 
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">{t("Torrent link")}</span>
         <span className="truncate text-[15px] font-semibold text-ink">{title}</span>
         <span className="text-[12.5px] text-ink-subtle">
-          {error ?? "Streams directly from peers over your own connection."}
+          {error ?? t("Streams directly from peers over your own connection.")}
         </span>
       </div>
       <button
@@ -116,7 +116,7 @@ export function MagnetCard({ raw, onClose }: { raw: string; onClose: () => void 
         ) : (
           <Play size={18} fill="currentColor" />
         )}
-        {mode === "starting" ? "Starting" : "Play"}
+        {mode === "starting" ? t("Starting") : t("Play")}
       </button>
     </div>
   );

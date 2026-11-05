@@ -250,7 +250,6 @@ export function SeriesEpisodes({
           traktKey,
           traktWatched,
           stremioWatched,
-          undefined,
           simklWatched,
         ),
       );
@@ -365,7 +364,6 @@ export function SeriesEpisodes({
                   traktKey,
                   traktWatched,
                   stremioWatched,
-                  undefined,
                   simklWatched,
                 )
               }

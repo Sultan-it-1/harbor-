@@ -107,14 +107,14 @@ export function PickerEmptyLadder({
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] px-5 py-3.5 text-[13px] text-ink">
           <div className="flex min-w-0 flex-1 flex-col">
             <p className="font-semibold text-amber-200">
-              {allCount === 1 ? "Only 1 source after filtering" : "Only 2 sources after filtering"}
+              {allCount === 1 ? t("Only 1 source after filtering") : t("Only 2 sources after filtering")}
             </p>
             <p className="text-[12.5px] leading-snug text-ink-muted">
               {allCount === 1
-                ? "Clean releases for this title haven't surfaced yet. The result below may not match the title you're looking for, so confirm the filename and size before playing."
-                : "Clean releases for this title are still scarce. Confirm the filename and size before playing."}
+                ? t("Clean releases for this title haven't surfaced yet. The result below may not match the title you're looking for, so confirm the filename and size before playing.")
+                : t("Clean releases for this title are still scarce. Confirm the filename and size before playing.")}
               {rawCount - allCount > 0 && !forceShowAll
-                ? ` Harbor dropped ${rawCount - allCount} suspicious or mismatched result${rawCount - allCount === 1 ? "" : "s"}.`
+                ? ` ${rawCount - allCount === 1 ? t("Harbor dropped 1 suspicious or mismatched result.") : t("Harbor dropped {n} suspicious or mismatched results.", { n: rawCount - allCount })}`
                 : ""}
             </p>
           </div>

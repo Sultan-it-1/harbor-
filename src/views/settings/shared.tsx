@@ -9,7 +9,6 @@ export type SectionId =
   | "account"
   | "library"
   | "trakt"
-  | "anilist"
   | "simkl"
   | "relay"
   | "streaming"
@@ -22,7 +21,6 @@ export type SectionId =
   | "hotkeys"
   | "theme"
   | "webhooks"
-  | "bug"
   | "advanced";
 
 export const SettingsActiveContext = createContext<{ setActive: (s: SectionId) => void } | null>(null);
@@ -122,8 +120,8 @@ export function KeyField({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <label className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
             {label}
           </label>
@@ -133,7 +131,7 @@ export function KeyField({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
           {headerExtra}
           {!headerExtra && value.length > 0 && !showSave && (
             <span className="flex items-center gap-1.5 text-[11px] font-medium text-accent transition-colors">
@@ -180,7 +178,7 @@ export function KeyField({
           placeholder={placeholder}
           spellCheck={false}
           autoComplete="off"
-          className="h-full flex-1 bg-transparent text-[15px] tracking-wide text-ink placeholder:text-ink-subtle/55 outline-none"
+          className="h-full min-w-0 flex-1 bg-transparent text-[15px] tracking-wide text-ink placeholder:text-ink-subtle/55 outline-none"
         />
         {value.length > 0 && (
           <button

@@ -1118,8 +1118,10 @@ function ClearSnapshotsButton() {
         <p className="text-[12.5px] font-medium text-ink">{t("Clear all saved frames")}</p>
         <p className="text-[11.5px] leading-snug text-ink-subtle">
           {count > 0
-            ? `${count} frame${count === 1 ? "" : "s"} stored. Wiping rebuilds them next time you watch.`
-            : "No frames stored yet. They'll appear here as you watch things."}
+            ? count === 1
+              ? t("1 frame stored. Wiping rebuilds them next time you watch.")
+              : t("{n} frames stored. Wiping rebuilds them next time you watch.", { n: count })
+            : t("No frames stored yet. They'll appear here as you watch things.")}
         </p>
       </div>
       <button
@@ -1132,7 +1134,7 @@ function ClearSnapshotsButton() {
             : "bg-raised text-ink-muted hover:bg-elevated hover:text-ink disabled:opacity-40"
         }`}
       >
-        {confirming ? "Confirm clear" : "Clear all"}
+        {confirming ? t("Confirm clear") : t("Clear all")}
       </button>
     </div>
   );

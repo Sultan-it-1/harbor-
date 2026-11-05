@@ -74,10 +74,10 @@ export function RecommendedAddonCard({
   };
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3.5">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3.5">
       <AddonLogo addonId={id} addonName={title} size="lg" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-[15px] font-medium text-ink">{title}</span>
           {installed && (
             <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.18em] text-accent ring-1 ring-accent/40">
@@ -97,7 +97,7 @@ export function RecommendedAddonCard({
       {installed ? (
         <button
           onClick={onUninstall}
-          className="flex h-10 items-center gap-1.5 rounded-lg border border-edge bg-elevated px-3.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-danger/60 hover:bg-danger/10 hover:text-danger"
+          className="flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-edge bg-elevated px-3.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-danger/60 hover:bg-danger/10 hover:text-danger sm:w-auto"
         >
           <Trash2 size={13} strokeWidth={2.2} />
           {t("Remove")}
@@ -106,7 +106,7 @@ export function RecommendedAddonCard({
         <button
           onClick={onInstall}
           disabled={!debrid || busy}
-          className="flex h-10 items-center gap-1.5 rounded-lg bg-ink px-4 text-[13px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-ink px-4 text-[13px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} strokeWidth={2.2} />}
           {t("Install")}
@@ -168,10 +168,10 @@ export function ManualAddonCard({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3.5">
-      <div className="flex items-start gap-4">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
         <AddonLogo addonId={localId} addonName={title} size="lg" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[15px] font-medium text-ink">{title}</span>
             {installedId && (
               <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.18em] text-accent ring-1 ring-accent/40">
@@ -182,10 +182,10 @@ export function ManualAddonCard({
           </div>
           <span className="text-[12.5px] leading-relaxed text-ink-muted">{blurb}</span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
           <button
             onClick={() => openUrl(configureUrl)}
-            className="flex h-10 items-center gap-1.5 rounded-lg border border-edge bg-elevated px-3.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-ink-subtle hover:text-ink"
+            className="flex h-10 flex-1 items-center justify-center gap-1.5 sm:flex-none rounded-lg border border-edge bg-elevated px-3.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-ink-subtle hover:text-ink"
           >
             <ExternalLink size={13} strokeWidth={2.2} />
             {t("Configure")}
@@ -193,7 +193,7 @@ export function ManualAddonCard({
           {installedId && (
             <button
               onClick={onUninstall}
-              className="flex h-10 items-center gap-1.5 rounded-lg border border-edge bg-elevated px-3.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-danger/60 hover:bg-danger/10 hover:text-danger"
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 sm:flex-none rounded-lg border border-edge bg-elevated px-3.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-danger/60 hover:bg-danger/10 hover:text-danger"
             >
               <Trash2 size={13} strokeWidth={2.2} />
               {t("Remove")}
@@ -202,9 +202,9 @@ export function ManualAddonCard({
         </div>
       </div>
       {!installedId && (
-        <div className="flex items-center gap-2">
-          <div className="flex flex-1 items-center gap-2.5 rounded-lg border border-edge bg-canvas px-3.5 transition-colors focus-within:border-ink-subtle">
-            <Key size={15} className="text-ink-subtle" />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-edge bg-canvas px-3.5 transition-colors focus-within:border-ink-subtle">
+            <Key size={15} className="shrink-0 text-ink-subtle" />
             <input
               type="text"
               value={draft}
@@ -219,13 +219,13 @@ export function ManualAddonCard({
               placeholder={t("Paste the manifest URL the configure page gave you")}
               spellCheck={false}
               autoComplete="off"
-              className="h-11 flex-1 bg-transparent text-[14.5px] text-ink placeholder:text-ink-subtle/60 outline-none"
+              className="h-11 min-w-0 flex-1 bg-transparent text-[14.5px] text-ink placeholder:text-ink-subtle/60 outline-none"
             />
           </div>
           <button
             onClick={onInstall}
             disabled={!draft.trim() || busy}
-            className="flex h-11 items-center gap-1.5 rounded-lg bg-ink px-5 text-[14px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-lg bg-ink px-5 text-[14px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 sm:shrink-0"
           >
             {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} strokeWidth={2.2} />}
             {t("Install")}

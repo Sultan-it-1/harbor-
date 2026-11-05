@@ -14,7 +14,7 @@ export function resolveAccent(settings: Settings): string {
   return (settings.seekBarColor || "").trim() || "oklch(0.78 0.13 60)";
 }
 
-export type SeekSegmentSpan = { startPct: number; endPct: number; color?: string };
+export type SeekSegmentSpan = { startPct: number; endPct: number };
 
 export function SeekBarVisual({
   settings,
@@ -90,7 +90,7 @@ export function SeekBarVisual({
             height: Math.max(2, trackHeight - 2),
             top: "50%",
             transform: "translateY(-50%)",
-            backgroundColor: s.color ?? "rgba(255,255,255,0.45)",
+            backgroundColor: "rgba(255,255,255,0.45)",
           }}
         />
       ))}

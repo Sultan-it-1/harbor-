@@ -115,10 +115,9 @@ function SignInRow({
           <span className="text-[12.5px] leading-snug text-ink-muted">
             {t("Sync your library, watch progress, and installed addons across every device.")}
           </span>
+          <StatusPill text={t("Recommended")} highlight phone />
         </div>
-        <span className="shrink-0 rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-accent">
-          {t("Recommended")}
-        </span>
+        <StatusPill text={t("Recommended")} highlight />
         <ChevronRight
           size={18}
           className="shrink-0 text-ink-subtle transition-transform group-hover:translate-x-0.5"
@@ -193,20 +192,28 @@ function LaunchRow({
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-semibold text-ink">{title}</span>
         <span className="text-[12.5px] leading-snug text-ink-muted">{sub}</span>
+        {status && <StatusPill text={status} highlight={highlight} phone />}
       </div>
-      {status && (
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide ${
-            highlight ? "bg-accent/15 text-accent" : "bg-canvas/70 text-ink-subtle"
-          }`}
-        >
-          {status}
-        </span>
-      )}
+      {status && <StatusPill text={status} highlight={highlight} />}
       <ChevronRight
         size={18}
         className="shrink-0 text-ink-subtle transition-transform group-hover:translate-x-0.5"
       />
     </button>
+  );
+}
+
+/** The small status pill of a row. On a phone (`phone`) it sits under the row's text, so a long
+ *  pill never squeezes the title and description into a narrow column; on wider screens it sits at
+ *  the end of the row. */
+function StatusPill({ text, highlight, phone }: { text: string; highlight?: boolean; phone?: boolean }) {
+  return (
+    <span
+      className={`${phone ? "mt-1.5 self-start sm:hidden" : "hidden shrink-0 sm:inline"} rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide ${
+        highlight ? "bg-accent/15 text-accent" : "bg-canvas/70 text-ink-subtle"
+      }`}
+    >
+      {text}
+    </span>
   );
 }

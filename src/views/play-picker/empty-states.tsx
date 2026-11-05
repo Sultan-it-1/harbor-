@@ -56,7 +56,7 @@ export function NoSourcesState({
         <p className="max-w-md text-[13.5px] leading-relaxed text-ink-muted">{tip}</p>
         <p className="text-[10.5px] font-mono uppercase tracking-[0.18em] text-ink-subtle/70">
           {t("Tried IDs:")} {streamIds.slice(0, 3).join(" · ")}
-          {streamIds.length > 3 ? ` · +${streamIds.length - 3} more` : ""}
+          {streamIds.length > 3 ? ` · ${t("+{n} more", { n: streamIds.length - 3 })}` : ""}
         </p>
       </div>
     </div>

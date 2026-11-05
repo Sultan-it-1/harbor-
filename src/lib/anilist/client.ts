@@ -1,7 +1,6 @@
 import { ANILIST_GRAPHQL_URL } from "./config";
-import { getSession } from "./session";
 
-export class AnilistApiError extends Error {
+class AnilistApiError extends Error {
   constructor(
     public status: number,
     public body: string,
@@ -12,19 +11,13 @@ export class AnilistApiError extends Error {
 
 type GraphqlResponse<T> = { data?: T; errors?: Array<{ message: string }> };
 
-function doFetch(
-  query: string,
-  variables: Record<string, unknown>,
-  token: string | null,
-): Promise<Response> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+function doFetch(query: string, variables: Record<string, unknown>): Promise<Response> {
   return fetch(ANILIST_GRAPHQL_URL, {
     method: "POST",
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     body: JSON.stringify({ query, variables }),
   });
 }
@@ -32,17 +25,14 @@ function doFetch(
 export async function anilistRequest<T>(
   query: string,
   variables: Record<string, unknown> = {},
-  accessToken?: string,
-  skipAuth = false,
 ): Promise<T> {
-  const token = skipAuth ? null : accessToken ?? getSession()?.accessToken ?? null;
-  let res = await doFetch(query, variables, token);
+  let res = await doFetch(query, variables);
 
   if (res.status === 429) {
     const retry = Number(res.headers.get("retry-after") ?? "1");
     const waitMs = Math.min(Math.max(retry, 1), 30) * 1000;
     await new Promise((r) => setTimeout(r, waitMs));
-    res = await doFetch(query, variables, token);
+    res = await doFetch(query, variables);
   }
 
   if (!res.ok) {

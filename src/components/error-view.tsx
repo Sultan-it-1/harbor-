@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import snip404 from "@/assets/snip404.svg";
 import { HarborMark } from "@/components/icons/harbor-mark";
-import { submitErrorReport } from "@/lib/bug-report";
 import { t } from "@/lib/i18n/translate";
 
 export type HarborError = {
@@ -34,15 +33,8 @@ function isNoisyError(reason: unknown, message?: string): boolean {
   return false;
 }
 
-type ReportState =
-  | { kind: "idle" }
-  | { kind: "sending" }
-  | { kind: "sent"; id: string }
-  | { kind: "error"; message: string };
-
 export function ErrorView() {
   const [error, setError] = useState<HarborError | null>(null);
-  const [report, setReport] = useState<ReportState>({ kind: "idle" });
 
   useEffect(() => {
     const onError = (e: Event) => {
@@ -102,27 +94,6 @@ export function ErrorView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [error]);
 
-  const dismiss = useCallback(() => {
-    setError(null);
-    setReport({ kind: "idle" });
-  }, []);
-
-  const reportBug = useCallback(async () => {
-    if (!error || report.kind === "sending" || report.kind === "sent") return;
-    setReport({ kind: "sending" });
-    try {
-      const { id } = await submitErrorReport({
-        code: error.code,
-        title: error.title,
-        message: error.message,
-        detail: error.detail,
-      });
-      setReport({ kind: "sent", id });
-    } catch (e) {
-      setReport({ kind: "error", message: e instanceof Error ? e.message : String(e) });
-    }
-  }, [error, report.kind]);
-
   const reload = useCallback(() => {
     window.location.reload();
   }, []);
@@ -132,8 +103,8 @@ export function ErrorView() {
       window.location.reload();
       return;
     }
-    dismiss();
-  }, [error, dismiss]);
+    setError(null);
+  }, [error]);
 
   if (!error) return null;
 
@@ -192,31 +163,6 @@ export function ErrorView() {
           </button>
           <button
             type="button"
-            onClick={reportBug}
-            disabled={report.kind === "sending" || report.kind === "sent"}
-            className={`inline-flex h-11 items-center gap-2 rounded-full border px-5 text-[13.5px] font-medium transition-[background-color,border-color,color] disabled:cursor-default ${
-              report.kind === "sent"
-                ? "border-accent/55 bg-accent/15 text-accent"
-                : report.kind === "error"
-                  ? "border-danger/55 bg-danger/10 text-danger hover:border-danger"
-                  : "border-edge-soft bg-elevated/60 text-ink hover:border-ink-subtle hover:bg-elevated"
-            }`}
-          >
-            {report.kind === "sent" ? (
-              <CheckIcon className="h-[15px] w-[15px]" />
-            ) : (
-              <BugIcon className="h-[15px] w-[15px]" />
-            )}
-            {report.kind === "sending"
-              ? "Sending…"
-              : report.kind === "sent"
-                ? "Report sent"
-                : report.kind === "error"
-                  ? "Try again"
-                  : "Submit report"}
-          </button>
-          <button
-            type="button"
             onClick={reload}
             aria-label={t("Reload")}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-elevated/60 hover:text-ink"
@@ -224,19 +170,6 @@ export function ErrorView() {
             <ReloadIcon className="h-[15px] w-[15px]" />
           </button>
         </div>
-
-        <p className="text-[11.5px] text-ink-subtle">
-          {report.kind === "sent" ? (
-            <>
-              {t("Thanks. Tracked as")}{" "}
-              <span className="font-mono text-ink-muted">{report.id}</span>.
-            </>
-          ) : report.kind === "error" ? (
-            <span className="text-danger/80">{t("Could not send:")} {report.message}</span>
-          ) : (
-            <>{t("Sends the context above straight to the Harbor team. No keys or library data.")}</>
-          )}
-        </p>
       </div>
     </div>
   );
@@ -346,28 +279,6 @@ function ArrowLeftIcon({ className }: IconProps) {
     >
       <line x1="19" y1="12" x2="5" y2="12" />
       <polyline points="11 6 5 12 11 18" />
-    </svg>
-  );
-}
-
-function BugIcon({ className }: IconProps) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <ellipse cx="12" cy="13.5" rx="5.5" ry="6.5" />
-      <path d="M9 6.8c0-1.7 1.4-3 3-3s3 1.3 3 3" />
-      <line x1="9" y1="6.8" x2="5" y2="2.5" />
-      <line x1="15" y1="6.8" x2="19" y2="2.5" />
-      <path d="M3 11h3.5M17.5 11h3.5" />
-      <path d="M3 17.5l3.5-1M17.5 16.5l3.5 1" />
-      <path d="M12 8.5v11" opacity="0.4" />
     </svg>
   );
 }

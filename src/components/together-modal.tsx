@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import { useSettings } from "@/lib/settings";
 import { useTogether } from "@/lib/together/provider";
+import { isRetiredRelay } from "@/lib/together/relay-version";
 import { useSelfIdentity } from "@/lib/together/use-self-identity";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
@@ -49,19 +50,20 @@ export function TogetherPopover({
     const value = joinCode.trim();
     if (!value) return;
     if (/^https?:\/\//i.test(value) || value.includes("harbor-relay=")) {
-      try {
-        const url = new URL(value.startsWith("http") ? value : `https://x${value.startsWith("?") ? value : `?${value}`}`);
-        const relay = url.searchParams.get("harbor-relay");
-        const room = url.searchParams.get("harbor-room");
-        if (relay && room) {
-          if (settings.togetherRelayUrl !== relay) {
-            update({ togetherRelayUrl: relay });
-          }
-          setJoinCode(room.toUpperCase());
-          setTimeout(() => joinSession(room), 200);
-          return;
+      // The invite is what follows "?", whichever Harbor made the link (web, Android or desktop).
+      const params = new URLSearchParams(value.slice(value.indexOf("?") + 1));
+      const relay = params.get("harbor-relay");
+      const room = params.get("harbor-room");
+      if (relay && room) {
+        // An old invite to Harbor's shut-down public relay leads nowhere: keep the relay you have.
+        if (isRetiredRelay(relay)) return;
+        if (settings.togetherRelayUrl !== relay) {
+          update({ togetherRelayUrl: relay });
         }
-      } catch {}
+        setJoinCode(room.toUpperCase());
+        setTimeout(() => joinSession(room), 200);
+        return;
+      }
     }
     joinSession(value);
   };
@@ -158,9 +160,13 @@ export function TogetherPopover({
           <div>
             <p className="text-[13px] text-ink">{t("Watch Together needs a relay.")}</p>
             <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
-              {t(
-                "A relay is a tiny Cloudflare Worker that passes play/pause/seek messages between you and your friends. No video data ever touches it. Deploy your own in one click (free tier is plenty), or paste a friend's invite link to use theirs.",
-              )}
+              {"__TAURI_INTERNALS__" in window
+                ? t(
+                    "A relay is a tiny Cloudflare Worker that passes play/pause/seek messages between you and your friends. No video data ever touches it. Deploy your own in one click (free tier is plenty), or paste a friend's invite link to use theirs.",
+                  )
+                : t(
+                    "A relay is a tiny Cloudflare Worker that passes play/pause/seek messages between you and your friends. No video data ever touches it. Deploy one from the Harbor desktop app (the free tier is plenty) and enter its URL in Settings, or paste a friend's invite link to use theirs.",
+                  )}
             </p>
           </div>
           <input

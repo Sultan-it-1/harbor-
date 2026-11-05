@@ -219,7 +219,7 @@ export function PrimaryCard({
                     className="transition-transform group-hover:translate-x-0.5"
                   />
                 )}
-                {resolving ? "Connecting" : inSession ? "Play Together" : "Play"}
+                {resolving ? t("Connecting") : inSession ? t("Play Together") : t("Play")}
               </button>
             ) : queued ? (
               <button
@@ -240,7 +240,7 @@ export function PrimaryCard({
                 ) : (
                   <Download size={18} strokeWidth={2.4} />
                 )}
-                {resolving ? "Sending to TorBox" : `Cache on ${queueTarget.name}`}
+                {resolving ? t("Sending to TorBox") : t("Cache on {name}", { name: queueTarget.name })}
               </button>
             ) : canStream ? (
               <button
@@ -258,7 +258,7 @@ export function PrimaryCard({
                     className="transition-transform group-hover:translate-x-0.5"
                   />
                 )}
-                {resolving ? "Connecting" : inSession ? "Stream Together" : "Stream"}
+                {resolving ? t("Connecting") : inSession ? t("Stream Together") : t("Stream")}
               </button>
             ) : (
               <button

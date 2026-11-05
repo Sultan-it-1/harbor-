@@ -173,18 +173,6 @@ function IconAdvanced(p: IconProps) {
   );
 }
 
-function IconBug(p: IconProps) {
-  return (
-    <IconBase {...p}>
-      <rect x="7.5" y="7.5" width="9" height="11" rx="4.5" />
-      <path d="M9 4.5l1.5 2.5M15 4.5l-1.5 2.5" />
-      <path d="M3.5 11.5h4M16.5 11.5h4" />
-      <path d="M3.5 16.5l3-1.5M16.5 15l4 1.5" />
-      <path d="M3.5 7l3 2M20.5 7l-3 2" />
-    </IconBase>
-  );
-}
-
 function IconTheme(p: IconProps) {
   return (
     <IconBase {...p}>
@@ -216,17 +204,6 @@ function IconTrakt(p: IconProps) {
       <circle cx="12" cy="12" r="9" />
       <path d="M6 13.5l4-4 6 6" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M6 9.5l4-4 8 8" strokeLinecap="round" strokeLinejoin="round" />
-    </IconBase>
-  );
-}
-
-function IconAnilist(p: IconProps) {
-  return (
-    <IconBase {...p}>
-      <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
-      <path d="M8 16.5l3-9 3 9" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9 13.5h4" strokeLinecap="round" />
-      <path d="M15.5 7.5v9h2" strokeLinecap="round" strokeLinejoin="round" />
     </IconBase>
   );
 }
@@ -308,12 +285,6 @@ const NAV_GROUPS: Array<{ heading: string | null; items: NavItem[] }> = [
         label: "Trakt",
         Icon: IconTrakt,
         keywords: ["scrobble", "history", "sync", "watchlist"],
-      },
-      {
-        id: "anilist",
-        label: "AniList",
-        Icon: IconAnilist,
-        keywords: ["anime", "lists", "watching", "mal", "kitsu"],
       },
       {
         id: "simkl",
@@ -447,12 +418,6 @@ const NAV_GROUPS: Array<{ heading: string | null; items: NavItem[] }> = [
     ],
   },
   {
-    heading: "Help",
-    items: [
-      { id: "bug", label: "Report a bug", Icon: IconBug, keywords: ["report", "feedback", "issue", "crash"] },
-    ],
-  },
-  {
     heading: "System",
     items: [
       {
@@ -540,16 +505,16 @@ const SETTINGS_OPTIONS: SettingsOption[] = [
   { label: "Home hero shadow", section: "theme", anchorTitle: "Home hero shadow", keywords: ["hero shadow", "home hero", "hero gradient", "featured title", "darken hero", "backdrop shadow", "gradient overlay", "show artwork"] },
 
   // ADVANCED (AdvancedPanel)
-  { label: "Updates & rollback", section: "advanced", anchorTitle: "Updates", keywords: ["updates", "version", "check for updates", "beta updates", "roll back", "rollback", "downgrade", "previous version", "build feedback"] },
+  { label: "Updates & rollback", section: "advanced", anchorTitle: "Updates", keywords: ["updates", "version", "check for updates", "beta updates", "roll back", "rollback", "downgrade", "previous version"] },
   { label: "Backup & restore", section: "advanced", anchorTitle: "Backup & restore", keywords: ["backup", "restore", "export", "import", "settings file"] },
   { label: "Privacy & tracker blocking", section: "advanced", anchorTitle: "Privacy", keywords: ["privacy", "block ads", "trackers", "analytics", "telemetry", "ad blocker"] },
   { label: "System tray & window behavior", section: "advanced", anchorTitle: "System tray", keywords: ["system tray", "close to tray", "minimize", "always on top", "pause when minimized", "pause when unfocused", "background"] },
   { label: "Stremio install links", section: "advanced", anchorTitle: "Stremio install links", keywords: ["stremio install links", "deeplink", "protocol handler", "install addon"] },
-  { label: "Discord Rich Presence", section: "advanced", anchorTitle: "Discord Rich Presence", keywords: ["discord", "rich presence", "now watching", "status", "hide title", "show while paused", "browsing", "poster", "elapsed time", "watch party join"] },
+  { label: "Discord Rich Presence", section: "advanced", anchorTitle: "Discord Rich Presence", keywords: ["discord", "rich presence", "now watching", "status", "hide title", "show while paused", "browsing", "poster", "elapsed time"] },
   { label: "API budget (OMDb)", section: "advanced", anchorTitle: "API budget", keywords: ["api budget", "omdb budget", "daily requests", "counter", "rate limit"] },
   { label: "Onboarding & hints", section: "advanced", anchorTitle: "Onboarding", keywords: ["onboarding", "walkthrough", "tutorial", "replay", "restore hints", "tips"] },
   { label: "Stremio library repair", section: "advanced", anchorTitle: "Stremio library repair", keywords: ["stremio library repair", "fix library", "schema", "repair"] },
-  { label: "About (version / build)", section: "advanced", anchorTitle: "About", keywords: ["about", "version", "build", "platform", "bug reports"] },
+  { label: "About (version / build)", section: "advanced", anchorTitle: "About", keywords: ["about", "version", "build", "platform"] },
 
   // ACCOUNT (AccountStub)
   { label: "Harbor identity (avatar / color)", section: "account", anchorTitle: "Harbor identity", keywords: ["avatar", "profile photo", "upload photo", "color", "identity", "picture"] },
@@ -558,12 +523,10 @@ const SETTINGS_OPTIONS: SettingsOption[] = [
 
   // PANEL-LEVEL (no Section anchor — these navigate to the panel)
   { label: "Trakt connection", section: "trakt", keywords: ["trakt", "scrobble", "sync", "watchlist", "connect", "disconnect", "avatar", "history"] },
-  { label: "AniList connection", section: "anilist", keywords: ["anilist", "anime", "lists", "sync", "connect", "disconnect", "avatar", "watch progress", "mal", "kitsu"] },
   { label: "Simkl connection", section: "simkl", keywords: ["simkl", "sync", "watched", "watchlist", "connect", "disconnect", "avatar", "anime"] },
   { label: "Webhooks (Discord / Telegram)", section: "webhooks", keywords: ["webhooks", "discord", "telegram", "notifications", "alerts", "calendar sources", "rules", "upcoming"] },
   { label: "Hotkeys / keyboard shortcuts", section: "hotkeys", keywords: ["hotkeys", "shortcuts", "keybindings", "keyboard", "rebind", "reset shortcuts"] },
   { label: "Player layout / chrome", section: "playerLayout", keywords: ["player layout", "chrome", "controls", "buttons", "overlay", "arrange", "rearrange", "trickplay", "thumbnail", "hide buttons"] },
-  { label: "Report a bug", section: "bug", keywords: ["bug report", "report", "feedback", "issue", "crash", "screenshot", "diagnostics"] },
 ];
 
 // Android app: hide sections that only affect the desktop engine / keyboard / the web
@@ -658,7 +621,6 @@ export function SettingsNav({
     account: null,
     library: libraryKeys > 0 ? `${libraryKeys}/5` : null,
     trakt: null,
-    anilist: null,
     simkl: null,
     relay: relayLive,
     streaming: debridChip,
@@ -671,7 +633,6 @@ export function SettingsNav({
     theme: settings.theme.preset === "cool-grey" && settings.theme.fontPair === "sentient-switzer" ? null : "•",
     webhooks: webhookActive ? "live" : null,
     hotkeys: null,
-    bug: null,
     advanced: null,
   };
 

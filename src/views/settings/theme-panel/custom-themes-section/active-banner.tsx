@@ -13,7 +13,7 @@ export function ActiveBanner({
 }) {
   if (!theme) {
     return (
-      <div className="flex items-center justify-between rounded-2xl border border-edge-soft bg-canvas/40 px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-edge-soft bg-canvas/40 px-5 py-4">
         <div>
           <span className="text-[10.5px] font-bold uppercase tracking-[0.2em] text-ink-subtle">
             {t("Now using")}
@@ -85,7 +85,7 @@ export function ActiveBanner({
             {theme.bokeh && <Chip bg={chipBg} ring={chipRing} fg={fg}>{t("Bokeh")}</Chip>}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onCustomize}
@@ -147,44 +147,44 @@ function parseColor(c: string): [number, number, number] | null {
 function labelForLayout(l?: string): string {
   switch (l) {
     case "topdock":
-      return "Top dock";
+      return t("Top dock");
     case "rail":
-      return "Side rail";
+      return t("Side rail");
     case "stremio":
-      return "Stremio rail";
+      return t("Stremio rail");
     case "minui":
-      return "Floating dock";
+      return t("Floating dock");
     case "dracula":
-      return "Dracula sidebar";
+      return t("Dracula sidebar");
     case "nord":
-      return "Nord sidebar";
+      return t("Nord sidebar");
     case "forest":
-      return "Forest sidebar";
+      return t("Forest sidebar");
     case "royal":
-      return "Royal top bar";
+      return t("Royal top bar");
     case "custom":
-      return "Custom chrome";
+      return t("Custom chrome");
     default:
-      return "Sidebar layout";
+      return t("Sidebar layout");
   }
 }
 
 function labelForCard(c?: string): string {
   switch (c) {
     case "glass":
-      return "Glass cards";
+      return t("Glass cards");
     case "stremio":
-      return "Stremio cards";
+      return t("Stremio cards");
     case "minui":
-      return "Hairline cards";
+      return t("Hairline cards");
     case "crunch":
-      return "Crunch cards";
+      return t("Crunch cards");
     case "noir":
-      return "Noir cards";
+      return t("Noir cards");
     case "custom":
-      return "Custom cards";
+      return t("Custom cards");
     default:
-      return "Flat cards";
+      return t("Flat cards");
   }
 }
 

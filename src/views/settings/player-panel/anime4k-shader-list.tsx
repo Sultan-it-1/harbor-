@@ -82,7 +82,7 @@ export function Anime4kShaderList() {
             className="flex h-11 w-fit items-center gap-2 rounded-full bg-ink px-5 text-[14px] font-semibold text-canvas transition-colors hover:bg-ink/90 disabled:cursor-wait disabled:opacity-70"
           >
             {busy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} strokeWidth={2.2} />}
-            {busy ? "Downloading shaders…" : "Set up Anime4K"}
+            {busy ? t("Downloading shaders…") : t("Set up Anime4K")}
           </button>
         </div>
       ) : (
@@ -131,7 +131,7 @@ export function Anime4kShaderList() {
               disabled={busy}
               className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ink-subtle transition-colors hover:text-ink disabled:opacity-50"
             >
-              {busy ? "Updating…" : "Re-download"}
+              {busy ? t("Updating…") : t("Re-download")}
             </button>
           </div>
           {error && (

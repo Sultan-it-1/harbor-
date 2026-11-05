@@ -40,7 +40,6 @@ import { profileFromDetail, trackEvent } from "@/lib/discover";
 import { MOVIE_GENRES, TV_GENRES } from "@/lib/feed/tags";
 import { useScrollMemory, useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
-import { AddToAnilistButton } from "./detail/add-to-anilist-button";
 import { AddToSimklButton } from "./detail/add-to-simkl-button";
 import { CollectionRow } from "./detail/collection-row";
 import { MediaGallery } from "./detail/media-gallery";
@@ -860,12 +859,6 @@ export function DetailView({
                     )}
                   </button>
                 )}
-                {actionStage < 2 && isAnime && (
-                  <AddToAnilistButton
-                    harborId={animeCanonicalId ?? meta.id}
-                    title={title || meta.name}
-                  />
-                )}
                 {actionStage < 2 && (
                   <AddToSimklButton
                     harborId={isAnime ? (animeCanonicalId ?? meta.id) : meta.id}
@@ -913,7 +906,6 @@ export function DetailView({
                       harborId: isAnime ? (animeCanonicalId ?? meta.id) : meta.id,
                       type: meta.type === "movie" ? "movie" : "series",
                     }}
-                    anilist={isAnime ? { harborId: animeCanonicalId ?? meta.id } : null}
                   />
                 ) : (
                   <>
@@ -1028,7 +1020,6 @@ export function DetailView({
             franchise={franchise}
             currentId={currentFranchiseId}
             scrollRef={scrollRef}
-            trackId={animeCanonicalId ?? undefined}
           />
           </FadeInUp>
         )}

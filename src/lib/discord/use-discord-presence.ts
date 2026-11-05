@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useSettings } from "@/lib/settings";
 import { useView, type MetaFilter } from "@/lib/view";
 import { useTogether } from "@/lib/together/provider";
-import { buildInviteUrl } from "@/lib/together/invite";
 import { SERVICES } from "@/lib/providers/streaming";
 import { awardTypeLabel } from "@/lib/providers/wikidata";
 import { awardSourceMeta } from "@/lib/anime-awards";
@@ -10,28 +9,6 @@ import { tmdbPerson, tmdbPersonCached } from "@/lib/providers/tmdb/tmdb-people";
 import type { Meta } from "@/lib/cinemeta";
 import { configureDiscord, setBrowsePresence, setPartyPresence, type BrowsePresence } from "./presence";
 import { useActivityHint } from "./activity-hint";
-
-const JOIN_BASE = "https://app.harbor.site";
-
-const AWARD_IMG = "https://harbor.site/discord/awards";
-const NORMAL_AWARD_IMG: Record<string, string> = {
-  oscar: "oscar.png",
-  emmy: "emmy.png",
-  golden_globe: "golden-globe.png",
-  bafta: "bafta.png",
-  critics_choice: "critics-choice.png",
-  sag: "sag.png",
-  cannes: "cannestrophy.png",
-  venice: "venice.png",
-  berlin: "berlin.png",
-};
-const ANIME_AWARD_IMG: Record<string, string> = {
-  crunchyroll: "crunchyroll-awards.png",
-  taaf: "taaf-icon.png",
-  jmaf: "jmaf-icon.png",
-  r_anime: "r-anime-icon.png",
-  animation_kobe: "animation-kobe.png",
-};
 
 const STATIC_LABELS: Record<string, BrowsePresence> = {
   home: { details: "Browsing Harbor" },
@@ -83,7 +60,6 @@ export function useDiscordPresence(): void {
   const { topKind, service, meta, awardType, animeAwardSource, filter, personId } = useView();
   const hint = useActivityHint();
   const { snapshot } = useTogether();
-  const relayUrl = settings.togetherRelayUrl;
 
   useEffect(() => {
     configureDiscord({
@@ -93,7 +69,6 @@ export function useDiscordPresence(): void {
       showWhenBrowsing: settings.discordShowWhenBrowsing,
       showPoster: settings.discordShowPoster,
       showTimestamp: settings.discordShowTimestamp,
-      showPartyJoin: settings.discordShowPartyJoin,
     });
   }, [
     settings.discordRichPresence,
@@ -102,7 +77,6 @@ export function useDiscordPresence(): void {
     settings.discordShowWhenBrowsing,
     settings.discordShowPoster,
     settings.discordShowTimestamp,
-    settings.discordShowPartyJoin,
   ]);
 
   useEffect(() => {
@@ -121,22 +95,18 @@ export function useDiscordPresence(): void {
     }
     if (topKind === "award" && awardType) {
       const label = awardTypeLabel(awardType, 2);
-      const file = NORMAL_AWARD_IMG[awardType];
       setBrowsePresence({
         details: `Browsing ${label}`,
         state: "Awards",
-        largeImage: file ? `${AWARD_IMG}/${file}?v=2` : undefined,
         largeText: label,
       });
       return;
     }
     if (topKind === "anime-award" && animeAwardSource) {
       const name = awardSourceMeta(animeAwardSource)?.name;
-      const file = ANIME_AWARD_IMG[animeAwardSource];
       setBrowsePresence({
         details: name ? `Browsing ${name}` : "Browsing anime awards",
         state: "Awards",
-        largeImage: file ? `${AWARD_IMG}/${file}?v=2` : undefined,
         largeText: name ?? "Anime awards",
       });
       return;
@@ -178,11 +148,9 @@ export function useDiscordPresence(): void {
       setPartyPresence(null);
       return;
     }
-    const joinUrl = relayUrl ? buildInviteUrl(relayUrl, snapshot.room, JOIN_BASE) : undefined;
     setPartyPresence({
       id: snapshot.room,
       size: Math.max(1, snapshot.participants.length),
-      joinUrl,
     });
-  }, [snapshot.state, snapshot.room, snapshot.participants.length, relayUrl]);
+  }, [snapshot.state, snapshot.room, snapshot.participants.length]);
 }

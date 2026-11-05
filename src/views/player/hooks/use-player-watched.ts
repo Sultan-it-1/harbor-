@@ -77,7 +77,6 @@ export function usePlayerWatched(params: {
       imdbKey,
       traktWatched,
       stremioWatched,
-      undefined,
       simklWatched,
     ).watched;
 

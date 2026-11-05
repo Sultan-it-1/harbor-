@@ -74,7 +74,6 @@ export function loadStoredSettings(): Settings {
       _anime4kIndicatorOffV1?: boolean;
       _pickerLayoutStremio?: boolean;
       _stremioDeeplinkOnByDefault?: boolean;
-      _anilistSyncOnV1?: boolean;
       _streamSortAddonV1?: boolean;
       scrapers?: unknown;
       scrapersAcknowledged?: boolean;
@@ -87,10 +86,6 @@ export function loadStoredSettings(): Settings {
     if (!parsed._stremioDeeplinkOnByDefault) {
       parsed.stremioDeeplinkInstall = true;
       parsed._stremioDeeplinkOnByDefault = true;
-    }
-    if (!parsed._anilistSyncOnV1) {
-      parsed.anilistAutoSync = true;
-      parsed._anilistSyncOnV1 = true;
     }
     if (!parsed._streamSortAddonV1) {
       if (parsed.streamSort === "harbor") parsed.streamSort = "addon";

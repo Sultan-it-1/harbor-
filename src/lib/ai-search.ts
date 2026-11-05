@@ -22,7 +22,6 @@ export async function aiSuggest(
     headers: {
       Authorization: `Bearer ${key.trim()}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": "https://harbor.site",
       "X-Title": "Harbor",
     },
     body: JSON.stringify({

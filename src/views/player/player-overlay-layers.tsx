@@ -2,7 +2,6 @@ import { type ComponentProps, type RefObject } from "react";
 import { DrawCanvas, StrokesLayer, type Stroke } from "@/components/player/draw-canvas";
 import { StreamSwitcher } from "@/components/player/stream-switcher";
 import { StreamCheckPill } from "@/components/player/stream-check-pill";
-import { AdReportButton } from "@/components/player/ad-report-button";
 import { P2pStatusChip } from "@/components/player/p2p-status-chip";
 import type { PlayerBridge, PlayerSnapshot } from "@/lib/player/bridge";
 import type { PlayerSrc, PlayEpisode } from "@/lib/view";
@@ -34,8 +33,6 @@ export type PlayerOverlayLayersProps = {
   snap: PlayerSnapshot;
   engine: "html5" | "mpv";
   src: PlayerSrc;
-  adStreamRef: PlayerSrc["streamRef"];
-  adUrl: string;
   subShowInPip: boolean;
   subAssNative: boolean;
   showStats: boolean;
@@ -255,17 +252,6 @@ export function PlayerOverlayLayers(p: PlayerOverlayLayersProps) {
         gif={p.gif}
         clip={p.clip}
       />
-
-      {!p.pipMode && !p.drawMode && (
-        <AdReportButton
-          meta={p.src.meta}
-          src={{ ...p.src, streamRef: p.adStreamRef, url: p.adUrl }}
-          visible={p.showChrome}
-          skipSegments={p.skipSegments}
-          durationSec={p.snap.durationSec}
-          hasNextEp={p.hasNextEpDisplay}
-        />
-      )}
 
       {!p.loaderActive && p.syncMode !== "active" && (
         <ShellLayer

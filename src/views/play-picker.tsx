@@ -527,7 +527,6 @@ export function PlayPicker({
       <AutoExhaustedModal
         meta={meta}
         episode={episode}
-        triedCount={autoCandidates.length}
         onBrowseManually={() => {
           setAutoCancelled(true);
           setAutoExhausted(false);

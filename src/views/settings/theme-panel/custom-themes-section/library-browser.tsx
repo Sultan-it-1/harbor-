@@ -3,10 +3,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { setCustomThemePreview } from "@/lib/custom-themes";
 import type { ThemePreset } from "@/lib/theme";
-import { clearUnseenDownloads, getUnseenDownloads, subscribeUnseen } from "@/lib/theme-store";
-import { CommunityPane } from "./community-browser";
 import type { LibraryEntry } from "./library-grid";
-import { fileToPreviewDataUrl } from "./theme-upload/upload-utils";
+import { fileToPreviewDataUrl } from "./preview-image";
 import { t } from "@/lib/i18n/translate";
 
 export function LibraryBrowser({
@@ -17,6 +15,7 @@ export function LibraryBrowser({
   onDownload,
   onRemove,
   onClose,
+  exportPanel,
 }: {
   entries: LibraryEntry[];
   activeId: string;
@@ -25,6 +24,9 @@ export function LibraryBrowser({
   onDownload: (id: string) => void;
   onRemove: (id: string) => void;
   onClose: () => void;
+  /** The theme code of a card's "Copy theme code", shown inside the library (it used to open on
+   *  the settings page behind this full-screen view, so the tap seemed to do nothing). */
+  exportPanel?: React.ReactNode;
 }) {
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -41,14 +43,6 @@ export function LibraryBrowser({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const [tab, setTab] = useState<"library" | "community">("library");
-  const [unseen, setUnseen] = useState(() => getUnseenDownloads().length);
-
-  useEffect(() => subscribeUnseen(() => setUnseen(getUnseenDownloads().length)), []);
-  useEffect(() => {
-    if (tab === "library") clearUnseenDownloads();
-  }, [tab]);
-
   const builtIn = entries.filter((e) => e.category === "Built-in");
   const featured = entries.filter((e) => e.category === "Featured");
   const templates = entries.filter((e) => e.category === "Template");
@@ -60,17 +54,19 @@ export function LibraryBrowser({
       role="dialog"
       aria-label={t("Theme library")}
     >
-      <header data-tauri-drag-region className="flex shrink-0 items-center justify-between gap-4 border-b border-edge-soft bg-surface/40 px-10 py-5">
-        <div className="flex items-center gap-4">
+      {/* Below 640px (the phone): 16px gutters and an arrow-only back button, so the title fits on one line. */}
+      <header data-tauri-drag-region className="flex shrink-0 items-center justify-between gap-3 border-b border-edge-soft bg-surface/40 px-4 py-4 sm:gap-4 sm:px-10 sm:py-5">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button
             type="button"
             onClick={onClose}
-            className="flex h-11 items-center gap-2 rounded-full border border-edge-soft bg-canvas/60 px-4 text-[13px] font-semibold text-ink-muted transition-all hover:-translate-x-0.5 rtl:hover:translate-x-0.5 hover:border-edge hover:text-ink"
+            aria-label={t("Back to settings")}
+            className="flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-edge-soft bg-canvas/60 text-[13px] font-semibold text-ink-muted transition-all hover:-translate-x-0.5 rtl:hover:translate-x-0.5 hover:border-edge hover:text-ink sm:w-auto sm:px-4"
           >
             <ArrowLeft size={15} strokeWidth={2.2} className="dir-icon" />
-            {t("Back to settings")}
+            <span className="hidden sm:inline">{t("Back to settings")}</span>
           </button>
-          <div data-tauri-drag-region className="flex flex-col">
+          <div data-tauri-drag-region className="flex min-w-0 flex-col">
             <h1 className="pointer-events-none text-[24px] font-semibold tracking-tight text-ink">{t("Theme Library")}</h1>
             <p className="pointer-events-none text-[13px] text-ink-subtle">
               {entries.length} {t("themes. Click Apply on any card to use it.")}
@@ -81,34 +77,16 @@ export function LibraryBrowser({
           type="button"
           onClick={onClose}
           aria-label={t("Close")}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
         >
           <X size={18} strokeWidth={2.2} />
         </button>
       </header>
 
-      <div className="flex shrink-0 items-center gap-2 border-b border-edge-soft bg-surface/20 px-10 py-3">
-        <TabBtn active={tab === "library"} onClick={() => setTab("library")}>
-          {t("My library")}
-          {unseen > 0 && (
-            <span className="harbor-pop ms-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-canvas">
-              {unseen}
-            </span>
-          )}
-        </TabBtn>
-        <TabBtn active={tab === "community"} onClick={() => setTab("community")}>
-          {t("Community")}
-        </TabBtn>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-10 py-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-10 sm:py-10">
         <div className="mx-auto flex max-w-[1280px] flex-col gap-12">
-          {tab === "community" ? (
-            <CommunityPane />
-          ) : (
-          <>
           {featured.length > 0 && (
-            <BrowserSection title={t("Featured")} subtitle="Hand-picked reskins from the Harbor crew.">
+            <BrowserSection title={t("Featured")} subtitle={t("Hand-picked reskins from the Harbor crew.")}>
               <BrowserGrid
                 entries={featured}
                 activeId={activeId}
@@ -121,7 +99,7 @@ export function LibraryBrowser({
           )}
 
           {builtIn.length > 0 && (
-            <BrowserSection title={t("Built-in")} subtitle="Ships with Harbor. Always available.">
+            <BrowserSection title={t("Built-in")} subtitle={t("Ships with Harbor. Always available.")}>
               <BrowserGrid
                 entries={builtIn}
                 activeId={activeId}
@@ -134,7 +112,7 @@ export function LibraryBrowser({
           )}
 
           {templates.length > 0 && (
-            <BrowserSection title={t("Templates")} subtitle="Starting points to remix and save your own.">
+            <BrowserSection title={t("Templates")} subtitle={t("Starting points to remix and save your own.")}>
               <BrowserGrid
                 entries={templates}
                 activeId={activeId}
@@ -147,7 +125,7 @@ export function LibraryBrowser({
           )}
 
           {yours.length > 0 && (
-            <BrowserSection title={t("Your themes")} subtitle="Themes you imported or built.">
+            <BrowserSection title={t("Your themes")} subtitle={t("Themes you imported or built.")}>
               <BrowserGrid
                 entries={yours}
                 activeId={activeId}
@@ -158,26 +136,15 @@ export function LibraryBrowser({
               />
             </BrowserSection>
           )}
-          </>
-          )}
         </div>
       </div>
+      {exportPanel && (
+        <div className="max-h-[45%] shrink-0 overflow-y-auto border-t border-edge-soft bg-surface px-4 py-4 sm:px-10">
+          <div className="mx-auto max-w-[1280px]">{exportPanel}</div>
+        </div>
+      )}
     </div>,
     document.body,
-  );
-}
-
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] font-semibold transition-colors ${
-        active ? "bg-ink text-canvas" : "text-ink-muted hover:bg-elevated hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -308,7 +275,7 @@ function BrowserCard({
             className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-canvas/45 text-[12px] font-semibold text-ink-muted opacity-0 backdrop-blur-[1px] transition-opacity hover:text-ink group-hover:opacity-100"
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} strokeWidth={1.9} />}
-            {busy ? "Adding" : "Add image"}
+            {busy ? t("Adding") : t("Add image")}
           </button>
         )}
       </div>
@@ -330,7 +297,7 @@ function BrowserCard({
                 : "bg-ink text-canvas hover:opacity-90"
             }`}
           >
-            {active ? "Active" : "Apply"}
+            {active ? t("Active") : t("Apply")}
           </button>
           <IconButton label={t("Copy theme")} onClick={onExport}>
             <Copy size={14} strokeWidth={2.2} />

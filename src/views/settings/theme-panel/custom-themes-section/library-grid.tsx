@@ -126,8 +126,8 @@ function ImportTile({ onUpload }: { onUpload: (file: File) => void }) {
         <span className="text-[18px] font-semibold tracking-tight text-ink">{t("Import a theme")}</span>
         <span className="max-w-[24ch] text-[12.5px] leading-snug text-ink-muted">
           {dragOver
-            ? "Release to add it to your library"
-            : "Drop a theme file here or click to browse."}
+            ? t("Release to add it to your library")
+            : t("Drop a theme file here or click to browse.")}
         </span>
       </div>
       <div className="relative flex items-end justify-between gap-3 self-stretch">
@@ -214,7 +214,7 @@ function LibraryCard({
                 : "bg-ink text-canvas hover:opacity-90"
             }`}
           >
-            {active ? "Active" : "Apply"}
+            {active ? t("Active") : t("Apply")}
           </button>
           <ActionBtn label={t("Copy")} onClick={onExport}>
             <Copy size={12} strokeWidth={2.2} />

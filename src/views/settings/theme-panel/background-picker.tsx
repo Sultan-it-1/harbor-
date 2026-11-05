@@ -110,7 +110,7 @@ export function BackgroundPicker({
           className="flex items-center gap-2 rounded-full bg-ink px-5 py-2 text-[12.5px] font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <ImageDown size={14} strokeWidth={2.2} />
-          {busy ? "Compressing…" : imageData ? "Replace image" : "Choose image"}
+          {busy ? t("Compressing…") : imageData ? t("Replace image") : t("Choose image")}
         </button>
         {imageData && !busy && (
           <button

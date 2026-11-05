@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useSettings } from "@/lib/settings";
 import { TogetherClient, type RoomEvent, type RoomSnapshot } from "./client";
 import { useSelfIdentity } from "./use-self-identity";
-import { relayOutdated } from "./relay-version";
+import { isRetiredRelay, relayOutdated } from "./relay-version";
 import { deriveHostSource, deriveRoomGuestPick, type HostSourceInfo, type LastInviteMeta } from "./room-derive";
 import { applyRoomEvent } from "./provider-events";
 import type {
@@ -120,7 +120,10 @@ function loadOrInitName(): string {
 export function TogetherProvider({ children }: { children: ReactNode }) {
   const { settings, update } = useSettings();
   const { avatar: effectiveAvatar, color: effectiveColor } = useSelfIdentity();
-  const relayUrl = settings.togetherRelayUrl;
+  const savedRelayUrl = settings.togetherRelayUrl;
+  // A relay URL saved before Harbor's public relay shut down leads nowhere. It counts as no relay
+  // (and is cleared from settings below), so Watch Together asks for a relay instead of failing.
+  const relayUrl = isRetiredRelay(savedRelayUrl) ? "" : savedRelayUrl;
 
   const clientIdRef = useRef<string>(loadOrInitClientId());
   const [displayName, setDisplayNameState] = useState<string>(loadOrInitName());
@@ -174,6 +177,10 @@ export function TogetherProvider({ children }: { children: ReactNode }) {
     const t = window.setTimeout(() => setIncomingSummon(null), 14000);
     return () => window.clearTimeout(t);
   }, [incomingSummon]);
+
+  useEffect(() => {
+    if (savedRelayUrl !== relayUrl) update({ togetherRelayUrl: "" });
+  }, [savedRelayUrl, relayUrl, update]);
 
   useEffect(() => {
     if (!relayUrl) {

@@ -57,10 +57,10 @@ export function DownloadsSection() {
       <div className="flex items-center justify-between gap-3 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-[11.5px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
-            {isCustom ? "Custom location" : "System default"}
+            {isCustom ? t("Custom location") : t("System default")}
           </span>
           <span className="truncate font-mono text-[13px] text-ink" title={current}>
-            {current || "Detecting..."}
+            {current || t("Detecting...")}
           </span>
         </div>
         {current && (

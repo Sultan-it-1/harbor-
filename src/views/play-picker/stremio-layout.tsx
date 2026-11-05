@@ -217,8 +217,10 @@ function PendingAddonsPill({
         ) : (
           <span className="text-[12px] text-ink-muted">
             {fallbackCount > 0
-              ? `${fallbackCount} ${fallbackCount === 1 ? "addon" : "addons"} loading`
-              : "Loading more sources"}
+              ? fallbackCount === 1
+                ? t("1 addon loading")
+                : t("{n} addons loading", { n: fallbackCount })
+              : t("Loading more sources")}
           </span>
         )}
       </div>

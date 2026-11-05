@@ -62,7 +62,7 @@ export function TopMatch({
             {match.meta.name}
           </h2>
           <div className="mt-3 flex flex-wrap items-center gap-2.5 text-[14px] text-ink-muted">
-            <span className="font-medium">{match.kind === "movie" ? "Movie" : "Series"}</span>
+            <span className="font-medium">{match.kind === "movie" ? t("Movie") : t("Series")}</span>
             {yearTxt && (
               <>
                 <Dot />

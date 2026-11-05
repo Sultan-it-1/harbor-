@@ -49,8 +49,6 @@ const together: Record<string, string> = {
   "Hidden by filter: {reason}": "مخفي بواسطة المرشّح: {reason}",
   "Any quality": "أي جودة",
 
-  "Decrease progress": "إنقاص التقدّم",
-  "Increase progress": "زيادة التقدّم",
   "Show elapsed time": "إظهار الوقت المنقضي",
   "Show remaining time": "إظهار الوقت المتبقي",
   "{word} {n} seconds": "{word} {n} ثانية",
@@ -80,6 +78,9 @@ const together: Record<string, string> = {
   "Watch Together needs a relay.": "المشاهدة معاً تتطلب اتصالاً وسيطاً (Relay).",
   "A relay is a tiny Cloudflare Worker that passes play/pause/seek messages between you and your friends. No video data ever touches it. Deploy your own in one click (free tier is plenty), or paste a friend's invite link to use theirs.": "الوسيط هو عبارة عن أداة Cloudflare Worker صغيرة تقوم بتمرير رسائل التشغيل/الإيقاف/التقديم بينك وبين أصدقائك. لا تمر أي بيانات فيديو من خلاله أبداً. قم بنشر الوسيط الخاص بك بنقرة واحدة (الخطة المجانية كافية)، أو الصق رابط دعوة من صديق لاستخدام الوسيط الخاص به.",
   "Watch Together": "المشاهدة معاً",
+  "Anyone who pastes this link into Watch Together gets the relay URL and room code set automatically.": "من يلصق هذا الرابط في المشاهدة الجماعية يُضبط له رابط المرحّل ورمز الغرفة تلقائيًا.",
+  "Redeploy it to get the latest Watch Together fixes.": "أعد نشره لتحصل على آخر إصلاحات المشاهدة الجماعية.",
+  "A relay is a tiny Cloudflare Worker that passes play/pause/seek messages between you and your friends. No video data ever touches it. Deploy one from the Harbor desktop app (the free tier is plenty) and enter its URL in Settings, or paste a friend's invite link to use theirs.": "المرحّل عامل صغير على Cloudflare ينقل رسائل التشغيل والإيقاف والتقديم بينك وبين أصدقائك، ولا يمر عبره أي فيديو. انشره من نسخة Harbor على الكمبيوتر (الخطة المجانية تكفي) وضع رابطه في الإعدادات، أو الصق رابط دعوة من صديق لتستخدم مرحّله.",
 };
 
 export default together;

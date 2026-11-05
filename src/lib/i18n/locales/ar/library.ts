@@ -70,7 +70,6 @@ const library: Record<string, string> = {
   Watching: "قيد المشاهدة",
   "Plan to Watch": "خطة للمشاهدة",
   Completed: "مكتمل",
-  Rewatching: "إعادة مشاهدة",
   "On Hold": "متوقّف مؤقتًا",
   Dropped: "مهجور",
 

@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { AccountStub } from "./settings/account";
 import { AdvancedPanel } from "./settings/advanced-panel";
 import { BasicsPanel } from "./settings/basics-panel";
-import { BugReportPanel } from "./settings/bug-report-panel";
 import { LibraryPanel, type LibraryKey } from "./settings/library-panel";
 import { LanguagePanel } from "./settings/language-panel";
 import { SettingsNav } from "./settings/nav";
@@ -17,7 +16,6 @@ import { MpvPanel } from "./settings/mpv-panel";
 import { P2PPanel } from "./settings/p2p-panel";
 import { AnimePanel } from "./settings/anime-panel";
 import { TraktPanel } from "./settings/trakt-panel";
-import { AnilistPanel } from "./settings/anilist-panel";
 import { SimklPanel } from "./settings/simkl-panel";
 import { RelaySection, type RelayMode } from "./settings/relay-section";
 import { SettingsActiveContext, type SectionId } from "./settings/shared";
@@ -30,7 +28,6 @@ import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 
-const IS_WEB = typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window);
 
 const SECTION_META: Record<SectionId, { label: string; sub: string }> = {
   basics: {
@@ -49,19 +46,13 @@ const SECTION_META: Record<SectionId, { label: string; sub: string }> = {
     label: "Trakt",
     sub: "Connect your Trakt account to scrobble playback, sync your watchlist, and pull personalized recommendations.",
   },
-  anilist: {
-    label: "AniList",
-    sub: "Connect your AniList account to show your anime lists as rails on the Anime page.",
-  },
   simkl: {
     label: "Simkl",
     sub: "Connect your Simkl account to mark what you finish as watched and sync your plan-to-watch list across apps.",
   },
   relay: {
     label: "Harbor Relay",
-    sub: IS_WEB
-      ? "Watch Together rooms are routed through Harbor's hosted relay."
-      : "A Cloudflare Worker on your own account that hosts your Watch Together rooms.",
+    sub: "A Cloudflare Worker on your own account that hosts your Watch Together rooms.",
   },
   streaming: {
     label: "Streaming sources",
@@ -102,10 +93,6 @@ const SECTION_META: Record<SectionId, { label: string; sub: string }> = {
   webhooks: {
     label: "Webhooks",
     sub: "Push upcoming releases to Discord or Telegram. Pick which calendars feed the notifications.",
-  },
-  bug: {
-    label: "Report a bug",
-    sub: "Send a bug report straight to the Harbor team. Screenshots and screen recordings welcome.",
   },
   advanced: {
     label: "Advanced",
@@ -248,9 +235,15 @@ export function Settings() {
       {(!phone || phoneSection) && (
       <main
         ref={scrollRef}
-        className={`flex-1 overflow-y-auto ${phone ? "pt-24 pb-10" : "pt-28 pb-16"}`}
+        className={`min-w-0 flex-1 overflow-y-auto ${phone ? "pt-24 pb-10 [contain:inline-size]" : "pt-28 pb-16"}`}
       >
-        <div data-tauri-drag-region className={`mx-auto flex max-w-3xl flex-col ${phone ? "gap-7 px-4" : "gap-10 px-12"}`}>
+        {/* Phone: the page is exactly as wide as the screen whatever is inside it. inline-size
+            containment stops content (a long address, a row that can't shrink) from making the
+            page wider and cut off at the right edge; long words and links wrap instead. */}
+        <div
+          data-tauri-drag-region
+          className={`mx-auto flex w-full min-w-0 max-w-3xl flex-col ${phone ? "gap-7 px-4 [contain:inline-size] [overflow-wrap:anywhere]" : "gap-10 px-12"}`}
+        >
           {phone && (
             <button
               onClick={() => setPhoneSection(false)}
@@ -327,15 +320,11 @@ export function Settings() {
 
           {active === "trakt" && <TraktPanel />}
 
-          {active === "anilist" && <AnilistPanel />}
-
           {active === "simkl" && <SimklPanel />}
 
           {active === "theme" && <ThemePanel />}
 
           {active === "webhooks" && <WebhooksPanel />}
-
-          {active === "bug" && <BugReportPanel />}
 
           {active === "advanced" && <AdvancedPanel />}
         </div>

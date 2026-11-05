@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { markAnimeWatching, syncAnimeProgress } from "@/lib/anilist/sync";
 import { profileFromMeta } from "@/lib/discover/profile";
 import { trackEvent } from "@/lib/discover/store";
 import { isExternalPlaylistId } from "@/lib/iptv/vod";
@@ -10,7 +9,6 @@ import { saveResumeMs } from "@/lib/resume";
 import { markTitleWatched } from "@/lib/watched-marks";
 import type { PlayerSnapshot } from "@/lib/player/bridge";
 import { getPlaybackPosition, subscribePlaybackClock } from "@/lib/player/playback-clock";
-import { useSettings } from "@/lib/settings";
 import type { PlayerSrc } from "@/lib/view";
 import { CLOUD_OK } from "@/lib/stremio";
 import { isSwapOnTrial, PLACEHOLDER_MAX_SEC } from "@/lib/player/swap-state";
@@ -26,16 +24,6 @@ const MIN_POSITION_SEC = 5;
 const TASTE_MIN_SEC = 90;
 const WATCHED_RATIO = 0.85;
 
-const isAnimeId = (id: string) =>
-  id.startsWith("kitsu:") || id.startsWith("mal:") || id.startsWith("anilist:");
-
-const animeTrackId = (s: PlayerSrc): string | null => {
-  if (isAnimeId(s.meta.id)) return s.meta.id;
-  const ks = s.episode?.kitsuStreamId;
-  if (ks?.startsWith("kitsu:")) return ks.split(":").slice(0, 2).join(":");
-  return null;
-};
-
 export function useResumeAutosave(params: {
   src: PlayerSrc;
   snap: PlayerSnapshot;
@@ -43,11 +31,8 @@ export function useResumeAutosave(params: {
   episode: number | undefined;
 }) {
   const { src, snap, season, episode } = params;
-  const { settings } = useSettings();
   const lastSavedRef = useRef(0);
   const taughtRef = useRef<Set<string>>(new Set());
-  const autoSyncRef = useRef(settings.anilistAutoSync);
-  autoSyncRef.current = settings.anilistAutoSync;
   const latestRef = useRef({ src, snap, season, episode });
   latestRef.current = { src, snap, season, episode };
   const lastGoodPosRef = useRef(0);
@@ -114,14 +99,7 @@ export function useResumeAutosave(params: {
       });
     }
     if (pos < TASTE_MIN_SEC) return;
-    const trackId = animeTrackId(s);
-    if (autoSyncRef.current && trackId) {
-      void markAnimeWatching(trackId, s.meta.name);
-    }
     const ratio = sn.durationSec > 0 ? pos / sn.durationSec : 0;
-    if (ratio >= WATCHED_RATIO && autoSyncRef.current && trackId) {
-      void syncAnimeProgress(trackId, ep, s.meta.name);
-    }
     const kind = ratio >= WATCHED_RATIO ? "watched" : "play";
     const key = `${id}|${kind}`;
     if (taughtRef.current.has(key)) return;

@@ -92,9 +92,6 @@ const chrome: Record<string, string> = {
   "Couldn't find a Trakt avatar on your account.":
     "تعذّر العثور على صورة رمزية من Trakt في حسابك.",
   "Couldn't reach Trakt.": "تعذّر الوصول إلى Trakt.",
-  "Couldn't find an AniList avatar on your account.":
-    "تعذّر العثور على صورة رمزية من AniList في حسابك.",
-  "Couldn't reach AniList.": "تعذّر الوصول إلى AniList.",
   "Couldn't find a Simkl avatar on your account.":
     "تعذّر العثور على صورة رمزية من Simkl في حسابك.",
   "Couldn't reach Simkl.": "تعذّر الوصول إلى Simkl.",
@@ -109,7 +106,6 @@ const chrome: Record<string, string> = {
   "Confirm your current PIN to remove the lock.": "أكّد رمز PIN الحالي لإزالة القفل.",
 
   "Use Trakt avatar": "استخدام صورة Trakt الرمزية",
-  "Use AniList avatar": "استخدام صورة AniList الرمزية",
   "Use Simkl avatar": "استخدام صورة Simkl الرمزية",
 
   "Share with {name}": "المشاركة مع {name}",

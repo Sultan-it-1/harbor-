@@ -123,7 +123,6 @@ const common: Record<string, string> = {
   "That's not it. Try a fresh round in a moment.": "إجابة غير صحيحة. ستظهر جولة جديدة بعد لحظات.",
   "Tap again to remove": "اضغط مرة ثانية للإزالة",
   "Next": "التالي",
-  "Sending...": "جارٍ الإرسال...",
   "Couldn't reach Trakt": "تعذّر الوصول إلى Trakt",
   "Loading more": "جارٍ تحميل المزيد",
   "Nothing here yet.": "لا شيء هنا بعد.",

@@ -27,12 +27,12 @@ async function fetchAnilistBrowse(sort: string, count: number): Promise<Meta[]> 
   const pages = Math.ceil(count / perPage);
   const responses = await Promise.all(
     Array.from({ length: pages }, (_, i) =>
-      anilistRequest<BrowseResponse>(
-        BROWSE_QUERY,
-        { page: i + 1, perPage, sort: [sort], isAdult: adultContentHidden() ? false : null },
-        undefined,
-        true,
-      ).catch(() => null),
+      anilistRequest<BrowseResponse>(BROWSE_QUERY, {
+        page: i + 1,
+        perPage,
+        sort: [sort],
+        isAdult: adultContentHidden() ? false : null,
+      }).catch(() => null),
     ),
   );
   const out: Meta[] = [];
@@ -64,8 +64,6 @@ export async function anilistBannerByTitle(title: string): Promise<string | unde
     const data = await anilistRequest<{ Media: { bannerImage: string | null } | null }>(
       BANNER_QUERY,
       { search: title },
-      undefined,
-      true,
     );
     const url = data?.Media?.bannerImage ?? null;
     bannerCache.set(key, url);

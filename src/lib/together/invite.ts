@@ -1,4 +1,5 @@
 import { normalizeRoomCode } from "./protocol";
+import { isRetiredRelay } from "./relay-version";
 
 const RELAY_PARAM = "harbor-relay";
 const ROOM_PARAM = "harbor-room";
@@ -8,18 +9,11 @@ export type ParsedInvite = {
   roomCode: string;
 };
 
-export const WEB_JOIN_BASE = "https://app.harbor.site";
-
-export function buildInviteUrl(relayUrl: string, roomCode: string, origin?: string): string {
-  const local =
-    typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)
-      ? window.location.origin
-      : WEB_JOIN_BASE;
-  const base = origin ?? local;
+export function buildInviteUrl(relayUrl: string, roomCode: string): string {
   const params = new URLSearchParams();
   params.set(RELAY_PARAM, relayUrl);
   params.set(ROOM_PARAM, roomCode.toUpperCase());
-  return `${base}/?${params.toString()}`;
+  return `${window.location.origin}/?${params.toString()}`;
 }
 
 export function parseInviteFromLocation(): ParsedInvite | null {
@@ -30,7 +24,7 @@ export function parseInviteFromLocation(): ParsedInvite | null {
   if (!relay || !roomRaw) return null;
   const room = normalizeRoomCode(roomRaw);
   if (!room) return null;
-  if (!/^wss?:\/\//.test(relay)) return null;
+  if (!/^wss?:\/\//.test(relay) || isRetiredRelay(relay)) return null;
   return { relayUrl: relay, roomCode: room };
 }
 

@@ -55,7 +55,7 @@ export function SeekImageUpload({
         error ? "border-danger/60" : "border-edge-soft"
       }`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div
           className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-raised transition-colors duration-200"
           style={{
@@ -85,12 +85,14 @@ export function SeekImageUpload({
             </div>
           )}
         </div>
-        <div className="flex flex-1 flex-col gap-1">
+        <div className="flex min-w-40 flex-1 flex-col gap-1">
           <p className="text-[12.5px] font-medium text-ink">
-            {value ? "Custom image loaded" : emptyTitle}
+            {value ? t("Custom image loaded") : emptyTitle}
           </p>
           <p className="text-[11px] leading-snug text-ink-subtle">{hint}</p>
         </div>
+        {/* With too little room beside the text (a phone) both buttons move under it together. */}
+        <div className="ms-auto flex shrink-0 items-center gap-2">
         <button
           type="button"
           disabled={busy}
@@ -98,7 +100,7 @@ export function SeekImageUpload({
           className="flex h-9 items-center gap-1.5 rounded-full bg-raised px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-elevated hover:text-ink disabled:cursor-wait disabled:opacity-60"
         >
           <Upload size={12} strokeWidth={2.2} />
-          {busy ? "Processing" : value ? "Replace" : "Upload"}
+          {busy ? t("Processing") : value ? t("Replace") : t("Upload")}
         </button>
         <button
           type="button"
@@ -112,6 +114,7 @@ export function SeekImageUpload({
         >
           <X size={13} strokeWidth={2.2} />
         </button>
+        </div>
       </div>
       {error && (
         <div className="flex items-start gap-2 rounded-lg bg-danger/15 px-2.5 py-2 text-[11.5px] leading-snug text-danger ring-1 ring-danger/30">

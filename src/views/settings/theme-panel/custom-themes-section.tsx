@@ -56,7 +56,7 @@ export function CustomThemesSection() {
     try {
       const name = file.name.toLowerCase();
       if (name.endsWith(".zip") || file.type === "application/zip") {
-        setError("Zipped themes aren't supported yet. Drop the theme file directly.");
+        setError(t("Zipped themes aren't supported yet. Drop the theme file directly."));
         return;
       }
       const text = await file.text();
@@ -84,7 +84,7 @@ export function CustomThemesSection() {
       setImportedNotice(result.theme.name);
       update({ theme: { ...settings.theme, preset: result.theme.id as ActiveThemeId } });
     } catch {
-      setError("Could not read file");
+      setError(t("Could not read file"));
     }
   };
 
@@ -144,8 +144,8 @@ export function CustomThemesSection() {
           onDownload={downloadThemeFile}
           onRemove={remove}
           onClose={() => setLibraryOpen(false)}
+          exportPanel={exportText ? <ExportBlock text={exportText} onClose={() => setExportText("")} /> : null}
         />
-        {exportText && <ExportBlock text={exportText} onClose={() => setExportText("")} />}
       </div>
     );
   }

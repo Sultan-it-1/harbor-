@@ -49,7 +49,7 @@ export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes:
       <div className="flex flex-wrap items-center gap-2">
         <span className={`${base} border border-edge-soft bg-elevated/60 text-ink-muted`}>
           <Loader2 size={15} className="animate-spin" />
-          {`Finding sources ${Math.min(progress.done + 1, progress.total)}/${progress.total}`}
+          {t("Finding sources {done}/{total}", { done: Math.min(progress.done + 1, progress.total), total: progress.total })}
           {cur ? ` · E${cur.episode}` : ""}
         </span>
         <button
@@ -70,9 +70,11 @@ export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes:
       <div className="flex flex-col gap-1">
         <button type="button" onClick={() => setView("downloads")} className={`${base} w-fit bg-accent/15 text-accent`}>
           <Download size={15} />
-          {`${progress.queued} queued${progress.skipped ? ` · ${progress.skipped} already saved` : ""} · open Downloads`}
+          {t("{n} queued", { n: progress.queued })}
+          {progress.skipped ? ` · ${t("{n} already saved", { n: progress.skipped })}` : ""}
+          {` · ${t("open Downloads")}`}
         </button>
-        {failed && <span className="ps-2 text-[12px] text-ink-subtle">{`No saveable source for ${failed}`}</span>}
+        {failed && <span className="ps-2 text-[12px] text-ink-subtle">{t("No saveable source for {what}", { what: failed })}</span>}
       </div>
     );
   }
@@ -80,7 +82,7 @@ export function SeasonDownloadButton({ meta, episodes }: { meta: Meta; episodes:
   return confirm ? (
     <button type="button" onClick={start} className={`${base} w-fit bg-accent text-canvas`}>
       <Download size={15} />
-      {`Download ${episodes.length} episode${episodes.length === 1 ? "" : "s"}?`}
+      {episodes.length === 1 ? t("Download 1 episode?") : t("Download {n} episodes?", { n: episodes.length })}
     </button>
   ) : (
     <button

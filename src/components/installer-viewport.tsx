@@ -328,7 +328,7 @@ function InstallerViewport({
                 transition: "transform 0.6s cubic-bezier(0.22,0.61,0.36,1)",
               }}
             />
-            {!PHONE && "Reload"}
+            {!PHONE && t("Reload")}
           </button>
           {!PHONE && (
             <button
@@ -365,8 +365,8 @@ function InstallerViewport({
             </p>
             <p className="max-w-[44ch] text-[12.5px] leading-relaxed text-ink-muted">
               {PHONE
-                ? "This setup page doesn't allow being shown inside another app. Open it in your browser and set it up there. When you tap its Install button, choose Harbor if Android asks which app to use."
-                : "Open it in a regular browser, set it up there, then come back and paste the install link below."}
+                ? t("This setup page doesn't allow being shown inside another app. Open it in your browser and set it up there. When you tap its Install button, choose Harbor if Android asks which app to use.")
+                : t("Open it in a regular browser, set it up there, then come back and paste the install link below.")}
             </p>
             <button
               type="button"

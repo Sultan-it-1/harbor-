@@ -10,7 +10,7 @@ import { useView } from "@/lib/view";
 import { useInWatchlist } from "@/lib/watchlist";
 import { useT } from "@/lib/i18n";
 
-export type Tab = "watchlist" | "history" | "local" | "trakt" | "anilist" | "simkl";
+export type Tab = "watchlist" | "history" | "local" | "trakt" | "simkl";
 
 export type TypeKey = "all" | "movie" | "series";
 

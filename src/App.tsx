@@ -40,9 +40,7 @@ import { TogetherHostLeavingPrompt } from "@/components/together-host-leaving-pr
 import { TogetherInviteToast } from "@/components/together-invite-toast";
 import { TogetherSummonToast } from "@/components/together-summon-toast";
 import { TogetherParticipantLeftToast } from "@/components/together-participant-left-toast";
-import { AnilistSyncToast } from "@/components/anilist/anilist-sync-toast";
 import { StorageFullToast } from "@/components/storage-full-toast";
-import { AnilistAvatarSync } from "@/components/anilist/anilist-avatar-sync";
 import { TogetherLeaveForLiveModal } from "@/components/together-leave-for-live-modal";
 import { ThemeBackdrop } from "@/components/theme-backdrop";
 import { TopRankModal } from "@/components/top-rank-modal";
@@ -75,8 +73,20 @@ import { useDiscordPresence } from "@/lib/discord/use-discord-presence";
 import { Home } from "@/views/home";
 import { ParentalProvider } from "@/lib/parental";
 import { TraktProvider } from "@/lib/trakt/provider";
-import { AnilistProvider } from "@/lib/anilist/provider";
 import { SimklProvider } from "@/lib/simkl/provider";
+
+// AniList sign-in is gone. Drop the account an older version stored (token, name, avatar, synced
+// episodes): nothing reads it now, and it shouldn't ride along in backups.
+// The community theme store is gone too: drop its upload list (owner tokens, share links), the
+// new-downloads count, the rating id and the author name (backups export every harbor.* key).
+try {
+  localStorage.removeItem("harbor.anilist.session.v1");
+  localStorage.removeItem("harbor.anilist.synced.v1");
+  localStorage.removeItem("harbor.theme-uploads.v1");
+  localStorage.removeItem("harbor.theme-unseen.v1");
+  localStorage.removeItem("harbor.theme-client-id");
+  localStorage.removeItem("harbor.theme-author");
+} catch {}
 
 const importAnime = () => import("@/views/anime");
 const importCalendar = () => import("@/views/calendar");
@@ -246,7 +256,6 @@ export function App() {
       <ProfilesProvider>
       <ParentalProvider>
       <TraktProvider>
-      <AnilistProvider>
       <SimklProvider>
       <RankingsProvider>
         <AuthProvider>
@@ -262,7 +271,6 @@ export function App() {
                   <TopRankModalProvider>
                     <HarborErrorBoundary>
                       <ProfileIdentitySync />
-                      <AnilistAvatarSync />
                       <ThemeBackdrop />
                       <WatchlistSync />
                       <WatchedMarksSync />
@@ -275,7 +283,6 @@ export function App() {
                       <TogetherHostLeavingPrompt />
                       <TogetherSummonToast />
                       <TogetherParticipantLeftToast />
-                      <AnilistSyncToast />
                       <StorageFullToast />
                       <TogetherLeaveForLiveModal />
                       <TogetherLocationPublisher />
@@ -305,7 +312,6 @@ export function App() {
         </AuthProvider>
       </RankingsProvider>
       </SimklProvider>
-      </AnilistProvider>
       </TraktProvider>
       </ParentalProvider>
       </ProfilesProvider>

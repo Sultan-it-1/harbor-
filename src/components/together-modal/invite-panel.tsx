@@ -76,9 +76,7 @@ export function InvitePanel({
         )}
       </button>
       <p className="text-[11.5px] leading-snug text-ink-subtle">
-        {t(
-          "Anyone who opens this link gets the relay URL and room code set automatically. Works in the browser too: no install required for the joiner.",
-        )}
+        {t("Anyone who pastes this link into Watch Together gets the relay URL and room code set automatically.")}
       </p>
     </div>
   );

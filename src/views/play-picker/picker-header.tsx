@@ -53,7 +53,7 @@ export function PickerHeader({
             {meta.name} {t("· Season")} {episode.imdbSeason ?? episode.season} {t("· Episode")} {String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}
           </p>
           <h1 className={`font-display font-medium leading-[0.96] tracking-tight text-ink ${PHONE ? "text-[34px]" : "text-[64px]"}`}>
-            {episode.name || `Episode ${episode.episode}`}
+            {episode.name || t("Episode {n}", { n: episode.episode })}
           </h1>
           {episode.overview && (
             <p className="mt-2 max-w-2xl text-[14.5px] leading-relaxed text-ink-muted">

@@ -107,7 +107,7 @@ function AwardGroup({ type, entries }: { type: AwardType; entries: AwardEntry[] 
             {totalWins > 0 && (
               <>
                 <span className="text-accent">{totalWins}</span>{" "}
-                {totalWins === 1 ? "Win" : "Wins"}
+                {totalWins === 1 ? t("Win") : t("Wins")}
               </>
             )}
             {totalWins > 0 && totalNoms > 0 && (
@@ -115,7 +115,7 @@ function AwardGroup({ type, entries }: { type: AwardType; entries: AwardEntry[] 
             )}
             {totalNoms > 0 && (
               <>
-                {totalNoms} {totalNoms === 1 ? "Nomination" : "Nominations"}
+                {totalNoms} {totalNoms === 1 ? t("Nomination") : t("Nominations")}
               </>
             )}
           </p>

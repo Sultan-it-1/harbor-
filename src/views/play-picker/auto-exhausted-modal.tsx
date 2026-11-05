@@ -1,18 +1,15 @@
 import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 import type { Meta } from "@/lib/cinemeta";
 import { useView, type PlayEpisode } from "@/lib/view";
-import { openUrl } from "@/lib/window";
 import { t } from "@/lib/i18n/translate";
 
 export function AutoExhaustedModal({
   meta,
   episode,
-  triedCount,
   onBrowseManually,
 }: {
   meta: Meta;
   episode?: PlayEpisode;
-  triedCount: number;
   onBrowseManually: () => void;
 }) {
   useCloseOnAndroidBack(true, onBrowseManually);
@@ -21,14 +18,6 @@ export function AutoExhaustedModal({
   const epSuffix = episode
     ? ` S${episode.imdbSeason ?? episode.season}E${String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}`
     : "";
-  const subject = `Harbor: no working stream for ${title}${epSuffix}`;
-  const body =
-    `Title: ${title}${epSuffix}\n` +
-    `IMDb: ${meta.id ?? ""}\n` +
-    `Streams tried: ${triedCount}\n` +
-    `\nWhat happened: Harbor could not find a working stream automatically.\n` +
-    `\n(Add any extra detail here)`;
-  const mailto = `mailto:bugs@harbor.site?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return (
     <main className="fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-black px-6">
       <div className="w-full max-w-md rounded-2xl bg-elevated p-8 ring-1 ring-edge-soft">
@@ -52,12 +41,6 @@ export function AutoExhaustedModal({
             className="flex h-11 items-center justify-center rounded-full bg-ink text-[14px] font-semibold text-canvas transition-opacity hover:opacity-90"
           >
             {t("Browse streams manually")}
-          </button>
-          <button
-            onClick={() => openUrl(mailto)}
-            className="flex h-11 items-center justify-center rounded-full bg-elevated text-[13.5px] font-medium text-ink ring-1 ring-edge-soft transition-colors hover:bg-raised"
-          >
-            {t("Send a bug report")}
           </button>
           <button
             onClick={goBack}

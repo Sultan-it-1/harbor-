@@ -69,7 +69,7 @@ export function SourceDrawer({
           size={14}
           className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`}
         />
-        <span>{open ? "Hide all sources" : "All sources"}</span>
+        <span>{open ? t("Hide all sources") : t("All sources")}</span>
         <span className="text-ink-subtle/80">{count}</span>
         {usedAddons.length > 0 && (
           <span className="flex items-center gap-2">
@@ -234,7 +234,7 @@ function SourceRow({
           ) : !stream.url ? (
             <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
               <Download size={11} strokeWidth={2.2} />
-              {debrids.length === 0 && stream.infoHash ? "Stream" : "Cache"}
+              {debrids.length === 0 && stream.infoHash ? t("Stream") : t("Cache")}
             </span>
           ) : null}
           {resolving ? (

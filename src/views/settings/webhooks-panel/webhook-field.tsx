@@ -43,7 +43,7 @@ export function WebhookField({
           placeholder={placeholder}
           spellCheck={false}
           autoComplete="off"
-          className="h-10 flex-1 rounded-lg border border-edge bg-canvas px-3 font-mono text-[12px] text-ink outline-none transition-colors focus:border-ink-subtle"
+          className="h-10 min-w-0 flex-1 rounded-lg border border-edge bg-canvas px-3 font-mono text-[12px] text-ink outline-none transition-colors focus:border-ink-subtle"
         />
         <button
           onClick={onTest}

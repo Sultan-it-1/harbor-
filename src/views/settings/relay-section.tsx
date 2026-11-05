@@ -1,9 +1,8 @@
 import { TogetherDeployModal } from "@/components/together-deploy-modal";
+import { useT } from "@/lib/i18n";
 import { RelayDocs } from "./relay-docs";
 import { TogetherRelayPanel } from "./relay-panel";
 import { Section } from "./shared";
-
-const IS_WEB = typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window);
 
 export type RelayMode = "panel" | "docs" | "deploy";
 
@@ -14,6 +13,7 @@ export function RelaySection({
   mode: RelayMode;
   onModeChange: (mode: RelayMode) => void;
 }) {
+  const t = useT();
   if (mode === "panel") {
     return (
       <div
@@ -22,11 +22,7 @@ export function RelaySection({
       >
         <Section
           title="Harbor Relay"
-          subtitle={
-            IS_WEB
-              ? "Watch Together rooms are routed through Harbor's hosted relay."
-              : "A Cloudflare Worker on your own account that hosts your Watch Together rooms."
-          }
+          subtitle={t("A Cloudflare Worker on your own account that hosts your Watch Together rooms.")}
         >
           <TogetherRelayPanel
             onOpenDocs={() => onModeChange("docs")}

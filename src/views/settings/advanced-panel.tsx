@@ -24,7 +24,6 @@ import {
 import { BetaTag } from "@/components/beta-tag";
 import { IS_BETA_BUILD } from "@/lib/build-info";
 import { BackupRow } from "./backup-row";
-import { BuildFeedback } from "./build-feedback";
 import { RollbackRow } from "./rollback-row";
 import { PrivacyRow } from "./privacy-row";
 import { TrayRow } from "./tray-row";
@@ -37,7 +36,6 @@ import { t } from "@/lib/i18n/translate";
 import { Interpolate } from "@/components/interpolate";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-const DOWNLOAD_URL = "https://harbor.site/download";
 const SOURCE_URL = "https://github.com/harborstremio/harbor";
 
 export function AdvancedPanel() {
@@ -55,7 +53,6 @@ export function AdvancedPanel() {
             <UpdatesRow />
             <BetaChannelRow />
             <RollbackRow />
-            <BuildFeedback />
           </div>
         </Section>
       )}
@@ -135,7 +132,7 @@ export function AdvancedPanel() {
 
       <Section
         title={t("About")}
-        subtitle={t("Build identity. Useful when filing a bug report at bugs@harbor.site.")}
+        subtitle={t("Build identity.")}
       >
         <AboutRow />
       </Section>
@@ -202,14 +199,6 @@ function WebBuildBanner() {
           {t("The web build can't run mpv, the trickplay generator, the local bandwidth probe, or your own Cloudflare relay. If you want HDR passthrough, TrueHD or DTS-HD audio, and smoother seeking, grab the desktop app.")}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => openUrl(DOWNLOAD_URL)}
-            className="flex h-10 w-fit items-center gap-2 rounded-xl bg-ink px-4 text-[13.5px] font-semibold text-canvas transition-transform hover:scale-[1.02] active:scale-[0.97]"
-          >
-            <Download size={14} strokeWidth={2.4} />
-            {t("Get Harbor for desktop")}
-          </button>
           <button
             type="button"
             onClick={() => openUrl(SOURCE_URL)}
@@ -441,12 +430,6 @@ function DiscordPresenceRow() {
             on={settings.discordShowTimestamp}
             onToggle={() => update({ discordShowTimestamp: !settings.discordShowTimestamp })}
           />
-          <DiscordSubToggle
-            label={t("Watch party join button")}
-            hint={t("Add a Join button with your room link while you're in a watch party.")}
-            on={settings.discordShowPartyJoin}
-            onToggle={() => update({ discordShowPartyJoin: !settings.discordShowPartyJoin })}
-          />
           <p className="px-1 pt-1 text-[11.5px] leading-snug text-ink-subtle">
             {t("And for the naughty ones: browsing or rating an adult addon never shows on Discord.")}
           </p>
@@ -578,7 +561,6 @@ function AboutRow() {
     <div className="flex flex-col gap-2 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3.5 text-[13px] text-ink-muted">
       <InfoLine label={t("Version")} value={`${__APP_VERSION__}${IS_BETA_BUILD ? " (Beta)" : ""}`} />
       <InfoLine label={t("Build")} value={isTauri ? t("Desktop (Tauri 2 / WebView2)") : t("Web")} />
-      <InfoLine label={t("Bug reports")} value="bugs@harbor.site" />
     </div>
   );
 }
@@ -613,11 +595,11 @@ function ActionRow({
 }) {
   return (
     <div
-      className={`flex items-center justify-between gap-4 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3 ${
+      className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3 ${
         disabled ? "opacity-60" : ""
       }`}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex min-w-48 flex-1 flex-col gap-0.5">
         <span className="text-[14px] font-medium text-ink">{label}</span>
         <span className="text-[12.5px] text-ink-subtle">{sub}</span>
       </div>

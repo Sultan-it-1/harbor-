@@ -1,5 +1,5 @@
 import { SeasonDownloadButton } from "./season-download-button";
-import { Check, ChevronDown, Play } from "lucide-react";
+import { ChevronDown, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { EpisodeJumper } from "@/components/episode-jumper";
 import type { Meta } from "@/lib/cinemeta";
@@ -11,7 +11,6 @@ import { spoilerMaskFor } from "@/lib/spoilers";
 import { fetchWatchedKeySet } from "@/lib/trakt/history";
 import { useTrakt } from "@/lib/trakt/provider";
 import { useView } from "@/lib/view";
-import { useAnilistWatched } from "@/lib/anilist/use-anilist-watched";
 import { EpisodeWatchedMenu, type WatchedMenuTarget } from "@/components/episode-watched-menu";
 import { manualWatchedVersion, setManualWatchedMany, subscribeManualWatched } from "@/lib/manual-watched";
 import { useT } from "@/lib/i18n";
@@ -29,14 +28,12 @@ export function AnimeEpisodes({
   franchise,
   currentId,
   scrollRef,
-  trackId,
 }: {
   meta: Meta;
   episodes: KitsuEpisode[];
   franchise: FranchiseEntry[];
   currentId: string;
   scrollRef: React.RefObject<HTMLElement | null>;
-  trackId?: string;
 }) {
   const t = useT();
   const { isConnected: traktConnected } = useTrakt();
@@ -58,10 +55,6 @@ export function AnimeEpisodes({
     };
   }, [traktConnected]);
 
-  const { watchedKeys: anilistWatched, completed: anilistCompleted } = useAnilistWatched(
-    trackId ?? meta.id,
-    episodes,
-  );
   const { settings, update } = useSettings();
   const mwVersion = useSyncExternalStore(subscribeManualWatched, manualWatchedVersion);
   const [watchedMenu, setWatchedMenu] = useState<WatchedMenuTarget | null>(null);
@@ -88,7 +81,6 @@ export function AnimeEpisodes({
           ep.imdbId ?? null,
           traktWatched,
           undefined,
-          anilistWatched,
           undefined,
           ep.imdbSeason,
           ep.imdbEpisode,
@@ -96,7 +88,7 @@ export function AnimeEpisodes({
       );
     }
     return m;
-  }, [episodes, meta.id, traktWatched, anilistWatched, mwVersion]);
+  }, [episodes, meta.id, traktWatched, mwVersion]);
   const progressFor = (ep: KitsuEpisode) =>
     progressByNum.get(ep.number) ?? { ratio: 0, watched: false, startedAt: 0 };
   const nextUpNum = useMemo(() => {
@@ -200,7 +192,7 @@ export function AnimeEpisodes({
         />
       )}
       {isOneOff ? (
-        <MovieEntryCard meta={meta} ep={episodes[0]} watched={anilistCompleted} />
+        <MovieEntryCard meta={meta} ep={episodes[0]} />
       ) : (
         <div key={settings.episodeLayout} className="animate-fade-in">
           {settings.episodeLayout === "list" ? (
@@ -242,15 +234,7 @@ export function AnimeEpisodes({
   );
 }
 
-function MovieEntryCard({
-  meta,
-  ep,
-  watched = false,
-}: {
-  meta: Meta;
-  ep: KitsuEpisode | undefined;
-  watched?: boolean;
-}) {
+function MovieEntryCard({ meta, ep }: { meta: Meta; ep: KitsuEpisode | undefined }) {
   const t = useT();
   const { openPicker } = useView();
   const { settings } = useSettings();
@@ -292,12 +276,6 @@ function MovieEntryCard({
       <span className="absolute bottom-5 start-6 text-[15px] font-semibold text-ink drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
         {t("Play movie")}
       </span>
-      {watched && (
-        <span className="absolute end-4 top-4 flex items-center gap-1.5 rounded-full bg-emerald-400/22 px-2.5 py-1 text-[12px] font-semibold text-emerald-200 ring-1 ring-emerald-400/40 backdrop-blur-sm">
-          <Check size={13} strokeWidth={3} />
-          {t("Watched")}
-        </span>
-      )}
     </button>
   );
 }

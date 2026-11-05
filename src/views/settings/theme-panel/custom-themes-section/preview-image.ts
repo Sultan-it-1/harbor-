@@ -8,7 +8,7 @@ export async function fileToPreviewDataUrl(file: File, maxDim = 720): Promise<st
   });
 }
 
-export async function scaleToBlob(file: File, maxDim = 1920): Promise<Blob> {
+async function scaleToBlob(file: File, maxDim: number): Promise<Blob> {
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();

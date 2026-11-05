@@ -55,7 +55,6 @@ export function getEpisodeProgress(
   traktImdbId: string | null,
   traktWatched: Set<string>,
   stremioWatched?: Set<string>,
-  anilistWatched?: Set<string>,
   simklWatched?: Set<string>,
   traktSeason?: number,
   traktEpisode?: number,
@@ -73,9 +72,8 @@ export function getEpisodeProgress(
   const traktKey = traktImdbId ? `imdb:${traktImdbId}:${traktSeason ?? season}:${traktEpisode ?? episode}` : null;
   const traktDone = traktKey ? traktWatched.has(traktKey) : false;
   const stremioDone = stremioWatched ? stremioWatched.has(`${season}:${episode}`) : false;
-  const anilistDone = anilistWatched ? anilistWatched.has(`${season}:${episode}`) : false;
   const simklDone = simklWatched ? simklWatched.has(`${season}:${episode}`) : false;
-  const done = manual === true || traktDone || stremioDone || anilistDone || simklDone;
+  const done = manual === true || traktDone || stremioDone || simklDone;
 
   return {
     ratio: done ? 1 : ratio,

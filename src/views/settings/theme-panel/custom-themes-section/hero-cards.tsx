@@ -22,8 +22,8 @@ export function HeroCards({
       <HeroCard
         icon={<Library size={28} strokeWidth={2} />}
         title={t("Theme Library")}
-        body={`Browse all ${libraryCount} themes. Apply with one click.`}
-        cta="Open library"
+        body={t("Browse all {n} themes. Apply with one click.", { n: libraryCount })}
+        cta={t("Open library")}
         onClick={onOpenLibrary}
         accent
         badge={importedNotice}
@@ -32,16 +32,16 @@ export function HeroCards({
         <HeroCard
           icon={<Palette size={28} strokeWidth={2} />}
           title={t("Build a Theme")}
-          body="Pick a layout, set colors and fonts. No code needed."
-          cta="Open studio"
+          body={t("Pick a layout, set colors and fonts. No code needed.")}
+          cta={t("Open studio")}
           onClick={onOpenStudio}
         />
       )}
       <HeroCard
         icon={<FileDown size={28} strokeWidth={2} />}
         title={t("Import a Theme")}
-        body="Got a theme a friend shared? Drop it in."
-        cta="Choose file"
+        body={t("Got a theme a friend shared? Drop it in.")}
+        cta={t("Choose file")}
         onClick={onImport}
       />
     </div>

@@ -1,27 +1,3 @@
-export type AnilistSession = {
-  accessToken: string;
-  createdAt: number;
-  expiresAt: number;
-  userId: number;
-  userName: string;
-  avatar?: string | null;
-};
-
-export type AnilistViewer = {
-  id: number;
-  name: string;
-  avatar: string | null;
-  siteUrl: string | null;
-};
-
-export type MediaListStatus =
-  | "CURRENT"
-  | "PLANNING"
-  | "COMPLETED"
-  | "DROPPED"
-  | "PAUSED"
-  | "REPEATING";
-
 export type AnilistMedia = {
   id: number;
   idMal: number | null;
@@ -37,17 +13,4 @@ export type AnilistMedia = {
   episodes: number | null;
   averageScore: number | null;
   seasonYear: number | null;
-};
-
-export type AnilistMediaEntry = {
-  id: number;
-  status: MediaListStatus;
-  progress: number;
-  score: number;
-  media: AnilistMedia;
-};
-
-export type AnilistListGroup = {
-  status: MediaListStatus;
-  entries: AnilistMediaEntry[];
 };

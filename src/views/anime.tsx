@@ -17,7 +17,6 @@ import { useT } from "@/lib/i18n";
 import { useAnimeTopPicks } from "@/lib/use-anime-top-picks";
 import { useCrunchyrollAwardMetas } from "@/lib/use-crunchyroll-award-metas";
 import { useWatchHistoryRecommendations } from "@/lib/use-watch-history-recs";
-import { AnilistRows } from "./anime/anilist-rows";
 import { useCwAdvance } from "./home/hooks/use-cw-advance";
 import { detectAnimeForCw, useDetectedAnimeVersion } from "@/lib/anime-detect";
 import { AnilistRowControls } from "./anime/anilist-row-controls";
@@ -443,7 +442,6 @@ export function AnimeView({ active = true }: { active?: boolean }) {
               ))}
             </Row>
           )}
-          {!anilistHidden.includes("yourLists") && <AnilistRows />}
           <AnilistRowControls />
           {!anilistHidden.includes("trending") && <AnilistTrendingRow />}
           {!anilistHidden.includes("top100") && <AnilistTopRow />}

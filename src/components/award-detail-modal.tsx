@@ -231,7 +231,7 @@ function AwardRow({
               won ? "bg-accent/15 text-accent" : "bg-canvas/60 text-ink-muted"
             }`}
           >
-            {won ? "Won" : "Nom"}
+            {won ? t("Won") : t("Nom")}
           </span>
         </span>
         <span className="truncate text-[12px] font-semibold text-ink">

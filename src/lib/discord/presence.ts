@@ -1,7 +1,5 @@
 const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-const HARBOR_LOGO = "https://harbor.site/discord/harbordiscord.png";
-
 type DiscordConfig = {
   enabled: boolean;
   hideTitle: boolean;
@@ -9,7 +7,6 @@ type DiscordConfig = {
   showWhenBrowsing: boolean;
   showPoster: boolean;
   showTimestamp: boolean;
-  showPartyJoin: boolean;
 };
 
 export type PlaybackPresence = {
@@ -33,7 +30,6 @@ export type BrowsePresence = {
 export type PartyPresence = {
   id: string;
   size: number;
-  joinUrl?: string;
 };
 
 let config: DiscordConfig = {
@@ -43,7 +39,6 @@ let config: DiscordConfig = {
   showWhenBrowsing: true,
   showPoster: true,
   showTimestamp: true,
-  showPartyJoin: true,
 };
 let playback: PlaybackPresence | null = null;
 let browse: BrowsePresence | null = null;
@@ -73,7 +68,6 @@ function computeBase(): Base {
         payload: {
           details: "Watching something",
           state: playback.paused ? "Paused" : undefined,
-          posterUrl: HARBOR_LOGO,
           paused: playback.paused,
         },
         key: `hide:${playback.paused}`,
@@ -89,7 +83,7 @@ function computeBase(): Base {
       payload: {
         details: playback.title,
         state,
-        posterUrl: (config.showPoster && playback.posterUrl) || HARBOR_LOGO,
+        posterUrl: (config.showPoster && playback.posterUrl) || undefined,
         smallImageUrl: (config.showPoster && playback.smallImageUrl) || undefined,
         largeText: playback.year != null ? `${playback.title} (${playback.year})` : playback.title,
         startTs: live && config.showTimestamp ? nowSec - Math.floor(playback.positionSec) : undefined,
@@ -101,19 +95,19 @@ function computeBase(): Base {
   }
   if (browse && config.showWhenBrowsing) {
     if (config.hideTitle)
-      return { payload: { details: "Browsing Harbor", posterUrl: HARBOR_LOGO }, key: "browse:hide" };
+      return { payload: { details: "Browsing Harbor" }, key: "browse:hide" };
     return {
       payload: {
         details: browse.details ?? "Browsing Harbor",
         state: browse.state,
-        posterUrl: (config.showPoster && browse.largeImage) || HARBOR_LOGO,
+        posterUrl: (config.showPoster && browse.largeImage) || undefined,
         largeText: browse.largeText ?? browse.details,
       },
       key: `browse:${browse.details ?? ""}|${browse.state ?? ""}|${browse.largeImage ?? ""}`,
     };
   }
   if (party) {
-    return { payload: { details: "In a Watch Party", posterUrl: HARBOR_LOGO }, key: "party-only" };
+    return { payload: { details: "In a Watch Party" }, key: "party-only" };
   }
   return null;
 }
@@ -132,14 +126,10 @@ function compute(): Computed {
     const people = headcount === 1 ? "1 👤" : `${headcount} 👥`;
     payload.details = `Watch Party · ${people}`;
     payload.state = context ?? "In the lobby";
-    if (party.joinUrl && config.showPartyJoin) {
-      payload.buttonLabel = "Join the Watch Party";
-      payload.buttonUrl = party.joinUrl;
-    }
     const live = typeof payload.startTs === "number";
     return {
       payload,
-      key: `party:${party.id}:${headcount}:${context ?? ""}:${party.joinUrl ?? ""}:${live ? "live" : "x"}`,
+      key: `party:${party.id}:${headcount}:${context ?? ""}:${live ? "live" : "x"}`,
     };
   }
   if (!base) return { payload: null, key: "clear" };

@@ -3,7 +3,6 @@ import { useT } from "@/lib/i18n";
 import { useSettings } from "@/lib/settings";
 
 const ROWS = [
-  { key: "yourLists", label: "Your lists" },
   { key: "trending", label: "Trending" },
   { key: "top100", label: "Top 100" },
 ] as const;

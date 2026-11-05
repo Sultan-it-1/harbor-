@@ -67,7 +67,7 @@ export function PlayProvenance({
     <div className="flex flex-col gap-1">
       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-ink-muted">
         {isCached && <Zap size={10} fill="currentColor" strokeWidth={0} className="text-accent" />}
-        {isCached ? `plays via ${target.name}` : "uncached on debrid"}
+        {isCached ? t("plays via {name}", { name: target.name }) : t("uncached on debrid")}
       </p>
       <p className="flex items-center gap-1.5 text-[10px] font-medium tracking-[0.18em] text-ink-subtle/70">
         <span>{t("found by")}</span>

@@ -185,7 +185,7 @@ export function AccountStub() {
               src={stremioWordmark}
               alt=""
               aria-hidden
-              className="pointer-events-none absolute end-5 bottom-4 h-9 w-auto opacity-45 select-none"
+              className="pointer-events-none absolute end-5 bottom-4 hidden h-9 w-auto opacity-45 select-none sm:block"
               style={{ filter: "invert(1) grayscale(1) brightness(1.1)" }}
               draggable={false}
             />
@@ -229,8 +229,8 @@ export function AccountStub() {
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-4 rounded-2xl border border-edge-soft bg-canvas/40 p-5">
-            <div className="flex flex-col">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border border-edge-soft bg-canvas/40 p-5">
+            <div className="flex min-w-48 flex-1 flex-col">
               <span className="text-[14px] font-medium text-ink">{t("Not signed in")}</span>
               <span className="text-[12.5px] text-ink-subtle">
                 {t("Sign in to sync your library, watch progress, and addons.")}
@@ -238,7 +238,7 @@ export function AccountStub() {
             </div>
             <button
               onClick={() => setShowAuth(true)}
-              className="flex h-10 items-center gap-1.5 rounded-xl bg-ink px-4 text-[13px] font-semibold text-canvas transition-transform hover:scale-[1.02]"
+              className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-ink px-4 text-[13px] font-semibold text-canvas transition-transform hover:scale-[1.02]"
             >
               {t("Sign in")}
             </button>
