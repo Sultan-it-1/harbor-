@@ -136,6 +136,9 @@ class NativePlayer(
     private var shownLangs: MutableSet<String>? = null
     private var extView: SubtitleView? = null
     private var shade: View? = null
+    /** Where the shade is heading (shown or hidden), so a fade that is still running is turned
+     *  around instead of finishing the wrong way. */
+    private var shadeTarget: Boolean? = null
     private var ext: ExternalSubs? = null
     /** The download of what's playing (when there is one): its saved subtitles, and where the
      *  save button puts new ones. */
@@ -458,7 +461,10 @@ class NativePlayer(
         if (inPip) {
             v.hideController()
             panel?.dismiss()
-            listOfNotNull(topBar, nextButton, unlockButton, indicator, shade).forEach { it.visibility = View.GONE }
+            listOfNotNull(topBar, nextButton, unlockButton, indicator).forEach { it.visibility = View.GONE }
+            shade?.animate()?.cancel()
+            shade?.visibility = View.GONE
+            shadeTarget = false
         } else {
             updateChrome()
         }
@@ -568,6 +574,7 @@ class NativePlayer(
         }
         (pv.overlayFrameLayout ?: pv).addView(shadeView, FrameLayout.LayoutParams(MainActivity.MATCH, MainActivity.MATCH))
         shade = shadeView
+        shadeTarget = null
 
         pv.setOnTouchListener(PlayerGestures(activity, gestureCallbacks))
         pv.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { vis ->
@@ -686,18 +693,7 @@ class NativePlayer(
     private fun updateChrome() {
         val showing = isShowing && !locked && controllerVisible && panel?.isOpen != true
         topBar?.visibility = if (showing) View.VISIBLE else View.GONE
-        shade?.let { s ->
-            val on = isShowing && !locked && controllerVisible
-            if (on && s.visibility != View.VISIBLE) {
-                s.animate().cancel()
-                s.alpha = 0f
-                s.visibility = View.VISIBLE
-                s.animate().alpha(1f).setDuration(180).start()
-            } else if (!on && s.visibility == View.VISIBLE) {
-                s.animate().cancel()
-                s.animate().alpha(0f).setDuration(180).withEndAction { s.visibility = View.GONE }.start()
-            }
-        }
+        setShade(isShowing && !locked && controllerVisible)
         nextButton?.visibility = if (showing && hasNext) View.VISIBLE else View.GONE
         titleView?.text = title
         subtitleView?.text = subtitleLine
@@ -705,6 +701,23 @@ class NativePlayer(
         val q = if (showQuality) qualityText() else ""
         qualityView?.text = q
         qualityView?.visibility = if (q.isBlank()) View.GONE else View.VISIBLE
+    }
+
+    private fun setShade(on: Boolean) {
+        val s = shade ?: return
+        if (shadeTarget == on) return
+        shadeTarget = on
+        s.animate().cancel()
+        if (on) {
+            if (s.visibility != View.VISIBLE) {
+                s.alpha = 0f
+                s.visibility = View.VISIBLE
+            }
+            s.animate().alpha(1f).setDuration(180).start()
+        } else {
+            // withEndAction only runs when the fade finishes, not when a new show cancels it.
+            s.animate().alpha(0f).setDuration(180).withEndAction { s.visibility = View.GONE }.start()
+        }
     }
 
     /** What's actually playing, e.g. "4K · Dolby Vision · TrueHD 7.1" (falls back to the
