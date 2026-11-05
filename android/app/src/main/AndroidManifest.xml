@@ -8,9 +8,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Lets downloads keep going with the screen off on phones that kill background apps. Fine
-         for the APK on GitHub; Google Play allows it only for a few app types, so remove it (and
-         open the battery settings page instead) before any Play Store release. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Only to post "downloads paused, tap to continue" after a reboot (BootReceiver). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

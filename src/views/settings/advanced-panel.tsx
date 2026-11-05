@@ -30,7 +30,6 @@ import { PrivacyRow } from "./privacy-row";
 import { TrayRow } from "./tray-row";
 import { Section } from "./shared";
 import { Signature } from "./signature";
-import { OpenSourceLicences } from "./open-source-licences";
 import { CustomCodeCard, DownloadsSection } from "./player-panel";
 import { DesktopOnlyBlock } from "./player-panel/internals";
 import { useT } from "@/lib/i18n";
@@ -142,7 +141,6 @@ export function AdvancedPanel() {
       </Section>
 
       <LegalDisclaimer />
-      <OpenSourceLicences />
 
       <Signature />
     </>

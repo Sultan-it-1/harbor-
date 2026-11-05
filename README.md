@@ -58,6 +58,4 @@ Harbor hosts no media and ships no content addons. You choose which addons and s
 
 ## License
 
-Harbor's own code is [MIT](./LICENSE). The Android APK also bundles third-party libraries and
-fonts under their own licences, including the Media3 FFmpeg decoder from Jellyfin, which is
-published under GPL-3.0. See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+[MIT](./LICENSE)
