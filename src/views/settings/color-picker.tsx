@@ -174,7 +174,9 @@ export function ColorPopoverTrigger({
         pos &&
         createPortal(
           <>
-            <div
+            {/* Marked like the inline panel's backdrop: the Android Back gesture closes this
+                pop-up first (Escape) instead of the screen behind it. */}
+            <div role="dialog" aria-modal="true"
               className="fixed inset-0 z-[310]"
               onMouseDown={(e) => {
                 e.stopPropagation();
