@@ -411,11 +411,11 @@ function InstallerViewport({
               <li className="flex gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">1</span>
                 {/* "Install" stays English: it names the button on the addon's own (English) page. */}
-                <span><Interpolate text={t("Set up the addon on the page above, then tap its {b1} button.")} values={{ b1: <b className="text-ink">{t("Install")}</b> }} /></span>
+                <span><Interpolate text={t("Set up the addon on the page above, then tap its {b1} button.")} values={{ b1: <b className="text-ink">Install</b> }} /></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">2</span>
-                <span><Interpolate text={t("Page not showing? Open it in your browser, set it up there, tap {b1} and choose {b2}.")} values={{ b1: <b className="text-ink">{t("Install")}</b>, b2: <b className="text-ink">Harbor</b> }} /></span>
+                <span><Interpolate text={t("Page not showing? Open it in your browser, set it up there, tap {b1} and choose {b2}.")} values={{ b1: <b className="text-ink">Install</b>, b2: <b className="text-ink">Harbor</b> }} /></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">3</span>

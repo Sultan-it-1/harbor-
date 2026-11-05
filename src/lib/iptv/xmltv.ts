@@ -55,7 +55,9 @@ export async function fetchAndParseXmltv(
       ac.abort();
     }, STALL_TIMEOUT_MS);
   };
-  armStall();
+  // Android: the shell answers only once the whole body is in (with its own 90 s timeouts), so
+  // the stall timer starts with the answer; armed before, it cut big guides off at 25 s.
+  if (!isAndroidApp()) armStall();
   console.info(`[epg] GET ${url}`);
   try {
     const res = await iptvFetch(url, ac.signal);

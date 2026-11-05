@@ -81,7 +81,15 @@ class MainActivity : ComponentActivity() {
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val cb = fileChooserCallback
         fileChooserCallback = null
-        cb?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
+        // Several files (bug report attachments, theme screenshots) come back in ClipData;
+        // parseResult only reads the single data URI.
+        val clip = r.data?.clipData
+        val uris = if (r.resultCode == RESULT_OK && clip != null && clip.itemCount > 0) {
+            Array(clip.itemCount) { clip.getItemAt(it).uri }.filterNotNull().toTypedArray()
+        } else {
+            WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data)
+        }
+        cb?.onReceiveValue(uris)
     }
 
     // Files the page saves (backup export, images): the user picks where they go.
@@ -146,6 +154,9 @@ class MainActivity : ComponentActivity() {
         assets = WebAssets(this, bridgeScript())
         images = ImageCache(this, minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels))
         webView = buildWebView()
+        // A process kept alive by the download service may still have WebView timers paused from
+        // an earlier activity (pauseTimers is process-wide): a new page must start with them on.
+        webView.resumeTimers()
         root.addView(webView, 0, FrameLayout.LayoutParams(MATCH, MATCH))
         player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
         val ua = webView.settings.userAgentString
@@ -279,6 +290,10 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) {
         }
         webView = buildWebView()
+        webView.resumeTimers()
+        webPaused = false
+        // The new page says again whether it shows a secret; until then nothing is hidden.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         root.addView(webView, idx, FrameLayout.LayoutParams(MATCH, MATCH))
         webView.loadUrl(START_URL)
     }
@@ -552,6 +567,12 @@ class MainActivity : ComponentActivity() {
         fetcher.shutdown()
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
+        // pauseTimers() is process-wide: undo it, or a new activity in this process (the download
+        // service can keep it alive) would load its page with timers stopped.
+        if (webPaused) {
+            webView.resumeTimers()
+            webPaused = false
+        }
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.destroy()
         super.onDestroy()

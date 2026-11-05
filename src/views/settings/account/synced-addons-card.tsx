@@ -20,6 +20,8 @@ export function SyncedAddonsCard() {
     setBusy(true);
     try {
       const mod = await import("@/lib/addons");
+      // "Sync now" asks the server: the 3-minute cache is for page loads.
+      mod.forgetUserAddonsCache();
       const list = await mod.userAddons(authKey);
       setAddons(list);
       setLastSynced(Date.now());

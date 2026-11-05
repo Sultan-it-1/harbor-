@@ -6,8 +6,13 @@ import { useTrakt } from "@/lib/trakt/provider";
 import { openUrl } from "@/lib/window";
 
 export function TraktDeviceModal({ onClose }: { onClose: () => void }) {
-  useCloseOnAndroidBack(true, onClose);
   const { connectState, beginConnect, cancelConnect } = useTrakt();
+  // Back does what the X does: stop the sign-in too (its polling otherwise ran until the code
+  // expired, and an approval in the browser later connected the account unseen).
+  useCloseOnAndroidBack(true, () => {
+    cancelConnect();
+    onClose();
+  });
   const t = useT();
   const [copied, setCopied] = useState(false);
 

@@ -1265,6 +1265,12 @@ const misc: Record<string, string> = {
   "October": "أكتوبر",
   "November": "نوفمبر",
   "December": "ديسمبر",
+  "Harbor ran into a problem and couldn't show this screen. Reload to continue.": "واجه Harbor مشكلة ولم يستطع عرض هذه الشاشة. أعد التحميل للمتابعة.",
+  "Harbor queried 1 addon and got nothing back": "استعلم Harbor من إضافة واحدة ولم يرجع شيء",
+  "Harbor queried {n} addons and got nothing back": "استعلم Harbor من {n} إضافات ولم يرجع شيء",
+  "{n} found across 1 source": "{n} وُجدت عبر مصدر واحد",
+  "{n} found across {count} sources": "{n} وُجدت عبر {count} مصادر",
+  "1 addon": "إضافة واحدة",
 };
 
 export default misc;

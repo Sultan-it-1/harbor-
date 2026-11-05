@@ -191,10 +191,10 @@ function WifiOnlyCard({ waiting }: { waiting: boolean }) {
             : t("Downloads use Wi-Fi only.")
           : t("Downloads also use mobile data.")}
       </p>
+      {/* A plain button: its text says what tapping does ("Use mobile data" / "Wi-Fi only").
+          As a switch with that changing text, TalkBack read the opposite state. */}
       <button
         type="button"
-        role="switch"
-        aria-checked={!wifiOnly}
         onClick={toggle}
         className={`h-9 shrink-0 rounded-lg px-3 text-[12.5px] font-semibold ${
           wifiOnly ? "bg-accent text-canvas" : "bg-ink/10 text-ink"

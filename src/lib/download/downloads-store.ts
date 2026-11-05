@@ -121,7 +121,11 @@ export function endBackgroundJob(key: string): void {
 let lastPersistSig = "";
 let lastPersistAt = 0;
 function persist(force = false) {
-  const sig = [...items.values()].map((d) => `${d.id}:${d.status}:${d.paused ? 1 : 0}:${d.error ?? ""}:${d.subsCount ?? 0}:${d.totalBytes ?? ""}`).join("|");
+  // Everything a restart needs (where the file is, whether a subtitle search is done, whether
+  // Retry can help, a fresh link): only the moving progress numbers wait for the 30 s mark.
+  const sig = [...items.values()]
+    .map((d) => [d.id, d.status, d.paused ? 1 : 0, d.error ?? "", d.code ?? "", d.retryable === false ? 0 : 1, d.subsCount ?? 0, d.subsState ?? "", d.totalBytes ?? "", d.path, d.autoRelinked ? 1 : 0, d.url].join(":"))
+    .join("|");
   const now = Date.now();
   if (!force && sig === lastPersistSig && now - lastPersistAt < 30_000) return;
   try {
@@ -237,6 +241,7 @@ function pollAndroid() {
       continue;
     }
     if (n.status === "error") {
+      if (relinking.has(cur.id)) continue; // the old error, while a fresh link is on its way
       if (cur.status === "downloading" || cur.status === "error") {
         set(cur, { status: "error", error: n.reason || "Download failed", code: n.code ?? null, http: n.http ?? 0, bytesPerSec: 0, note: null, paused: false, receivedBytes: received, totalBytes: total ?? null, ratio: total ? Math.min(1, received / total) : 0 });
         // An expired or refused link: fetch a fresh one once, on its own (season downloads
@@ -337,9 +342,14 @@ export function pauseDownload(id: string): void {
 
 /** Android: get a fresh link for a download whose link expired, and carry on from what is
  *  already downloaded. False when that isn't possible (no source kept, nothing found). */
+// Downloads asking their source for a fresh link right now: the poll leaves them alone (the
+// native task is still in its old error) and Retry doesn't start a second one.
+const relinking = new Set<string>();
+
 export async function relinkDownload(id: string): Promise<boolean> {
   const d = items.get(id);
-  if (!ANDROID || !d?.source) return false;
+  if (!ANDROID || !d?.source || relinking.has(id)) return false;
+  relinking.add(id);
   try {
     const [{ resolveStream }, { buildDebridClients }, { loadStoredSettings }] = await Promise.all([
       import("@/lib/streams/resolve"),
@@ -359,6 +369,8 @@ export async function relinkDownload(id: string): Promise<boolean> {
   } catch (e) {
     console.warn("[downloads] couldn't get a fresh link", e);
     return false;
+  } finally {
+    relinking.delete(id);
   }
 }
 
@@ -367,6 +379,7 @@ export function resumeDownload(id: string): void {
   if (!ANDROID) return;
   const d = items.get(id);
   // An expired or refused link: retrying the same URL can't work, ask the source again.
+  if (relinking.has(id)) return; // already getting a fresh link
   if (d && d.status === "error" && (d.code === "expired" || d.code === "refused") && d.source) {
     patch(id, { note: "Getting a fresh link…", code: "relinking", error: null, status: "downloading", autoRelinked: true });
     void relinkDownload(id).then((ok) => {
@@ -502,14 +515,14 @@ export async function enqueueDownload(args: EnqueueArgs): Promise<string> {
     error: null,
     startedAt: Date.now(),
   };
+  // Android: the file lives with the app's own download engine from the start; saving the bare
+  // file name first left an item that was never re-listed after a restart.
+  if (ANDROID) item.path = `android:${id}`;
   items.set(id, item);
   speed.set(id, { bytes: 0, at: Date.now() });
   rebuild();
 
   if (ANDROID) {
-    item.path = `android:${id}`;
-    items.set(id, { ...item });
-    rebuild();
     // Start the video right away; the subtitle search (which can take a while on a phone,
     // and runs one title at a time) adds its results to the download when it's done.
     const r = nativeStart({

@@ -42,8 +42,10 @@ export function ParentalPinModal({
       if (mode.kind === "unlock") {
         setBusy(true);
         const ok = await verify!(pin);
-        if (cancelled) return;
+        // Always clear "busy", even if the PIN changed meanwhile (a wrong PIN can take up to
+        // 30 s to answer): left set, it disabled the pad for good.
         setBusy(false);
+        if (cancelled) return;
         if (ok) {
           mode.onUnlock();
         } else {
@@ -72,8 +74,8 @@ export function ParentalPinModal({
       }
       setBusy(true);
       await mode.onSet(pin);
-      if (cancelled) return;
       setBusy(false);
+      if (cancelled) return;
     })();
     return () => {
       cancelled = true;
@@ -158,6 +160,8 @@ export function ParentalPinModal({
               maxLength={4}
               value={pin}
               onChange={(e) => {
+                // Checking a PIN: the keyboard can't change it under the check.
+                if (busy) return;
                 const v = e.target.value.replace(/\D/g, "").slice(0, 4);
                 setError(null);
                 setPin(v);

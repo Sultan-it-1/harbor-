@@ -149,7 +149,7 @@ const chrome: Record<string, string> = {
   "Profiles": "البروفايلات",
   "Your Stremio session has ended (signed out elsewhere, or the password changed). Sign in again to see your library.": "انتهت جلسة Stremio (سُجّل الخروج من مكان آخر أو تغيّرت كلمة المرور). سجّل الدخول مرة ثانية لترى مكتبتك.",
   "Storage is full": "مساحة التخزين ممتلئة",
-  "Harbor couldn't save a change (a sign-in or a setting), even after clearing its caches. Free some space on the phone, then try again.": "ما قدر Harbor يحفظ تغيير (تسجيل دخول أو إعداد) حتى بعد ما مسح الكاش. فضّ مساحة في الجوال وجرّب مرة ثانية.",
+  "Harbor couldn't save a change (a sign-in or a setting), even after clearing its caches. Free some space on this device, then try again.": "تعذّر على Harbor حفظ تغيير (تسجيل دخول أو إعداد) حتى بعد مسح ذاكرته المؤقتة. حرّر بعض المساحة على هذا الجهاز ثم حاول مرة أخرى.",
 };
 
 export default chrome;

@@ -23,7 +23,7 @@ import { activeLayout } from "@/lib/theme";
 import { useThemePreview } from "@/lib/theme-preview";
 import { DevErrorTrigger } from "@/components/dev-error-trigger";
 import { ErrorView } from "@/components/error-view";
-import { HarborErrorBoundary } from "@/components/error-boundary";
+import { CrashScreen, HarborErrorBoundary } from "@/components/error-boundary";
 import { ContextMenu } from "@/components/context-menu";
 import { HoverPreview } from "@/components/hover-preview";
 import { EmbedViewportRoot } from "@/components/embed-viewport";
@@ -241,7 +241,7 @@ export function App() {
   // The outer boundary also covers the providers: a throw in one of them used to leave a
   // blank screen (the inner boundary sits below them).
   return (
-    <HarborErrorBoundary>
+    <HarborErrorBoundary fallback={<CrashScreen />}>
     <SettingsProvider>
       <ProfilesProvider>
       <ParentalProvider>

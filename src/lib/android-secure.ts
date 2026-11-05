@@ -8,7 +8,9 @@ const SELECTOR = 'input[type="password"], [data-secure-screen]';
 export function watchSecureScreens(): void {
   const api = androidApi();
   if (!api?.setSecure || typeof MutationObserver === "undefined") return;
-  let secure = false;
+  // Unknown at first: the first check always tells the shell, so a reloaded page (or a rebuilt
+  // WebView) clears a FLAG_SECURE the previous page left on.
+  let secure: boolean | null = null;
   let queued = false;
   const check = () => {
     queued = false;

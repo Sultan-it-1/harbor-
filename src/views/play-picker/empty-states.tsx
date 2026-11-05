@@ -49,7 +49,9 @@ export function NoSourcesState({
           {t("No source returned a stream")}
         </p>
         <h2 className="font-display text-[28px] leading-tight text-ink">
-          {t("Harbor queried")} {addonCount} {t("addon")}{addonCount === 1 ? "" : "s"} {t("and got nothing back")}
+          {addonCount === 1
+            ? t("Harbor queried 1 addon and got nothing back")
+            : t("Harbor queried {n} addons and got nothing back", { n: addonCount })}
         </h2>
         <p className="max-w-md text-[13.5px] leading-relaxed text-ink-muted">{tip}</p>
         <p className="text-[10.5px] font-mono uppercase tracking-[0.18em] text-ink-subtle/70">

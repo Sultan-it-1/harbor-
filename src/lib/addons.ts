@@ -1,3 +1,4 @@
+import { isAndroidApp } from "@/lib/android";
 import { safeFetch } from "@/lib/safe-fetch";
 import { safeFetch as fetch } from "@/lib/safe-fetch";
 import type { Meta } from "./cinemeta";
@@ -351,7 +352,10 @@ export async function loadAddonRows(
         }
       }),
   );
-  const results = await runLimited(jobs.slice(0, Math.max(cap * 2, 48)), 6);
+  // Phone: the shell's native fetch has 12 threads, so catalogs go 6 at a time and leave room for
+  // posters and streams. Desktop and web have no such pool: all at once, as before.
+  const picked = jobs.slice(0, Math.max(cap * 2, 48));
+  const results = await runLimited(picked, isAndroidApp() ? 6 : picked.length);
   if (!dedup) {
     const out: AddonRow[] = [];
     for (const r of results) {

@@ -221,7 +221,9 @@ function CategoryItem({
   const showLogo = logoUrl && !errored;
   const hasActions = !!groupName && !!sourceId;
   return (
-    <div className="group/cat relative [contain-intrinsic-size:auto_52px] [content-visibility:auto]">
+    // Phone: off-screen rows skip rendering (hundreds of categories). Not on desktop, where its
+    // paint containment would clip the keyboard focus ring drawn outside the row.
+    <div className={`group/cat relative ${PHONE ? "[contain-intrinsic-size:auto_52px] [content-visibility:auto]" : ""}`}>
       <button
         data-cat-idx={idx}
         role="option"

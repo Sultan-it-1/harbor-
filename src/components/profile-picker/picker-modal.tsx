@@ -22,19 +22,21 @@ export function ProfilePickerModal() {
   const goList = () => setPickerView({ kind: "list" });
 
   return createPortal(
-    <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/85 backdrop-blur-2xl animate-in fade-in duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
+    <div className="fixed inset-0 z-[195] flex items-center justify-center bg-black/85 backdrop-blur-2xl animate-in fade-in duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
       {hasActive && (
         <button
           type="button"
           onClick={closePicker}
-          style={{ position: "fixed", top: 24, right: 24, zIndex: 190 }}
+          style={{ position: "fixed", top: 24, right: 24, zIndex: 196 }}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white/85 ring-1 ring-white/15 transition-colors hover:bg-black/75 hover:text-white"
           aria-label={t("common.close")}
         >
           <X size={18} />
         </button>
       )}
-      <div className="relative flex max-h-[calc(100vh-3rem)] w-full max-w-[860px] flex-col items-center px-10 py-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-3 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
+      {/* z-195: above the phone tab bar (z-190), so its last row stays tappable; it scrolls when
+          the profiles don't fit. */}
+      <div className="relative flex max-h-[calc(100dvh-3rem)] w-full max-w-[860px] flex-col items-center overflow-y-auto px-10 py-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-3 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
         {pickerView.kind === "list" && (
           <ListView
             onCreate={() => setPickerView({ kind: "create" })}

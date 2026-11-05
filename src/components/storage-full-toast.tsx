@@ -35,7 +35,7 @@ export function StorageFullToast() {
           <span className="text-[13px] font-semibold text-ink">{t("Storage is full")}</span>
           <span className="text-[12px] leading-snug text-ink-muted">
             {t(
-              "Harbor couldn't save a change (a sign-in or a setting), even after clearing its caches. Free some space on the phone, then try again.",
+              "Harbor couldn't save a change (a sign-in or a setting), even after clearing its caches. Free some space on this device, then try again.",
             )}
           </span>
         </span>

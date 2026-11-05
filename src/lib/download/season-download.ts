@@ -15,7 +15,7 @@ import type { PlayEpisode } from "@/lib/view";
 import { loadPickerAddons } from "@/views/play-picker/use-addons";
 import { buildPipelineInput } from "@/views/play-picker/use-pipeline-result";
 import { activeDownloadFor, beginBackgroundJob, endBackgroundJob, enqueueDownload } from "./downloads-store";
-import { isAndroidApp } from "@/lib/android";
+import { isAndroidApp, nativeNetworkLooksDown } from "@/lib/android";
 import { readActiveStremioAuthKey } from "@/lib/auth";
 import { buildDebridClients } from "@/lib/debrid/registry";
 import { loadStoredSettings } from "@/lib/settings/load";
@@ -190,10 +190,22 @@ function saveJob(key: string, meta: Meta, episodes: PlayEpisode[] | null) {
   }
 }
 
-/** On start (Android): carry on with season queues the app was closed in the middle of. */
+function offline(): boolean {
+  return (typeof navigator !== "undefined" && navigator.onLine === false) || nativeNetworkLooksDown();
+}
+
+/**
+ * On start (Android): carry on with season queues the app was closed in the middle of. Offline
+ * (a train, airplane mode) it waits for the connection: started then, every episode would fail
+ * and the queue would be dropped.
+ */
 export function resumeSavedSeasonJobs(): void {
   const saved = readSavedJobs();
   if (saved.length === 0) return;
+  if (offline()) {
+    window.addEventListener("online", () => window.setTimeout(resumeSavedSeasonJobs, 3000), { once: true });
+    return;
+  }
   const settings = loadStoredSettings();
   const debrids = buildDebridClients({ rdKey: settings.rdKey, tbKey: settings.tbKey, adKey: settings.adKey, pmKey: settings.pmKey, dlKey: settings.dlKey });
   for (const j of saved) {
@@ -232,9 +244,11 @@ export function startSeasonDownload(
   })
     .catch((e: unknown) => console.warn("[season-download] stopped", e))
     .finally(() => {
-      // Stopped by the user or finished: nothing to pick up later. (If the app is closed, this
-      // never runs and the saved rest stays.)
-      saveJob(key, opts.meta, null);
+      // Stopped by the user or finished: nothing to pick up later (if the app is closed, this
+      // never runs and the saved rest stays). Episodes that failed while the connection was down
+      // stay saved, so the next start tries them again.
+      const retryLater = !ac.signal.aborted && offline() ? job.progress.failed : [];
+      saveJob(key, opts.meta, retryLater.length > 0 ? retryLater : null);
       job.progress = { ...job.progress, current: null, finished: true };
       endBackgroundJob(bgKey);
       notifyJobs();

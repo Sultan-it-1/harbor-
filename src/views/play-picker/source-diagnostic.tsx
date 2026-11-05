@@ -27,7 +27,6 @@ export function SourceDiagnostic({
   const cachedTotal = result.picker.all.filter(
     (s) => s.url != null || debrids.some((d) => s.cached[d.slug] || s.inLibrary[d.slug]),
   ).length;
-  const sourceWord = counts.length === 1 ? "source" : "sources";
   return (
     <div className="flex flex-col gap-2">
       <button
@@ -37,7 +36,11 @@ export function SourceDiagnostic({
       >
         <span className="font-semibold text-ink-muted">{cachedTotal} {t("cached")}</span>
         <span className="text-ink-subtle/40">·</span>
-        <span>{totalRaw} {t("found across")} {counts.length} {sourceWord}</span>
+        <span>
+          {counts.length === 1
+            ? t("{n} found across 1 source", { n: totalRaw })
+            : t("{n} found across {count} sources", { n: totalRaw, count: counts.length })}
+        </span>
         <ChevronDown
           size={13}
           strokeWidth={2}

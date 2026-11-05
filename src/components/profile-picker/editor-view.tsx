@@ -41,6 +41,7 @@ import { AvatarCatalogModal } from "@/components/avatar-picker/avatar-catalog-mo
 import { avatarUrl } from "@/lib/avatars/catalog";
 import { ColorPicker } from "@/views/settings/color-picker";
 import { PinEntry } from "./pin-entry";
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
 
 type SubView =
   | { kind: "main" }
@@ -94,6 +95,11 @@ export function EditorView({
     editing?.lockedTabs ?? null,
   );
   const [subView, setSubView] = useState<SubView>({ kind: "main" });
+  // Android back inside the editor goes up one level (PIN and tab screens -> Security -> the
+  // editor), not straight back to the profile list with the draft lost.
+  useCloseOnAndroidBack(subView.kind !== "main", () =>
+    setSubView(subView.kind === "security" ? { kind: "main" } : { kind: "security" }),
+  );
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 

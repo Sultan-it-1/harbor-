@@ -1418,6 +1418,10 @@ html[data-phone] [aria-modal="true"] {
 html[data-phone] .phone-above-tabbar {
   bottom: calc(60px + env(safe-area-inset-bottom) + 12px) !important;
 }
+/* A second floating button that sits above another one on desktop keeps that stacking. */
+html[data-phone] .phone-above-tabbar-2 {
+  bottom: calc(60px + env(safe-area-inset-bottom) + 56px) !important;
+}
 
 /* ---- Touch screens ------------------------------------------------------------------ */
 /* Tailwind puts every hover: variant inside @media (hover: hover), so on a phone a control

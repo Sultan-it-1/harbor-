@@ -85,31 +85,39 @@ export async function loadPlaylist(
   opts?: { force?: boolean },
 ): Promise<IptvPlaylist> {
   const existing = cache.get(src.id);
-  if (!opts?.force && existing && Date.now() - existing.fetchedAt < CACHE_TTL_MS) {
+  if (!opts?.force && existing) {
+    if (Date.now() - existing.fetchedAt < CACHE_TTL_MS) return existing;
+    // An old copy is on screen (or saved from an earlier start): keep showing it and fetch the
+    // current list behind it. A failure (offline, provider down) leaves the copy in place
+    // instead of replacing it with an error.
+    if (!inflight.has(src.id)) void loadPlaylist(src, { force: true }).catch(() => {});
     return existing;
   }
   const pending = inflight.get(src.id);
   if (pending && !opts?.force) return pending;
   let fromSnapshot = false;
   const promise = (async () => {
-    if (!opts?.force && !existing) {
+    if (!opts?.force) {
       const saved = await readSnapshot(src);
       if (saved) {
         fromSnapshot = true;
         return saved;
       }
     }
-    const fresh = await loadFromShape(src, detectProviderShape(src));
-    writeSnapshot(src, fresh);
-    return fresh;
+    // A fresh list: an Xtream source's VOD and series are fetched again for it.
+    vodHydrated.delete(src.id);
+    return loadFromShape(src, detectProviderShape(src));
   })();
   inflight.set(src.id, promise);
   let result: IptvPlaylist;
   try {
     result = await promise;
+    // Still the load for this playlist (not removed or edited meanwhile): use it, and save a
+    // fresh list on the device.
     if (inflight.get(src.id) === promise) {
       cache.set(src.id, result);
       notify();
+      if (!fromSnapshot) writeSnapshot(src, result);
     }
   } finally {
     if (inflight.get(src.id) === promise) inflight.delete(src.id);

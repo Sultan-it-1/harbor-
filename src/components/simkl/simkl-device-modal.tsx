@@ -6,8 +6,13 @@ import { useSimkl } from "@/lib/simkl/provider";
 import { openUrl } from "@/lib/window";
 
 export function SimklDeviceModal({ onClose }: { onClose: () => void }) {
-  useCloseOnAndroidBack(true, onClose);
   const { connectState, beginConnect, cancelConnect } = useSimkl();
+  // Back does what the X does: stop the sign-in too (its polling otherwise ran until the code
+  // expired, and an approval in the browser later connected the account unseen).
+  useCloseOnAndroidBack(true, () => {
+    cancelConnect();
+    onClose();
+  });
   const t = useT();
   const [copied, setCopied] = useState(false);
 

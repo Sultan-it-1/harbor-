@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { Meta } from "./cinemeta";
-import { runAndroidBackHandlers } from "./android";
+import { runAndroidBackHandlers, visiblePopups } from "./android";
 import { profileFromMeta, trackEvent } from "./discover";
 import type { StreamingService } from "./settings";
 import { useTogether } from "./together/provider";
@@ -384,11 +384,8 @@ export function ViewProvider({ children }: { children: ReactNode }) {
       // Pop-ups and menus close on Escape; the back gesture sends one (dialogs, and menus such
       // as the long-press/context menu, which used to be skipped).
       // Only one that is actually on screen (some stay mounted while hidden).
-      const modal =
-        [...document.querySelectorAll('[role="dialog"], [aria-modal="true"], [role="menu"]')].find((el) => {
-          const r = el.getBoundingClientRect();
-          return r.width > 0 && r.height > 0;
-        }) ?? null;
+      const popups = visiblePopups();
+      const modal = popups[popups.length - 1] ?? null; // the newest (last in the page) is on top
       if (modal && modal !== lastModal) {
         lastModal = modal;
         (document.activeElement ?? document.body).dispatchEvent(

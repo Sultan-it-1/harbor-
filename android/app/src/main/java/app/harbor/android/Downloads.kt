@@ -199,6 +199,20 @@ class Downloads private constructor(private val ctx: Context) {
         get() = prefs.getBoolean(PREF_WIFI_ONLY, true)
         set(v) {
             prefs.edit().putBoolean(PREF_WIFI_ONLY, v).apply()
+            // Turned on while on mobile data: the running downloads stop too (they carry on over
+            // Wi-Fi from where they got to), not only the ones that hadn't started.
+            if (v && network() == NET_METERED) {
+                synchronized(lock) {
+                    for (t in tasks.values) {
+                        if (t.state != RUNNING) continue
+                        t.state = WAITING
+                        t.waitingFor = WAIT_WIFI
+                        t.stop = true
+                        t.transfer?.abort()
+                        persist(t)
+                    }
+                }
+            }
             pump()
         }
 

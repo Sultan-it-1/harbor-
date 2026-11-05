@@ -33,6 +33,38 @@ class SubtitleDecodeTest {
         assertEquals(fr, SubtitleStore.decodeText(bytes, null))
     }
 
+    private fun srt(lines: List<String>, repeat: Int): String {
+        val b = StringBuilder()
+        var n = 1
+        repeat(repeat) { lines.forEach { line -> b.append("$n\n00:00:${(n % 60).toString().padStart(2, '0')},000 --> 00:00:${(n % 60).toString().padStart(2, '0')},900\n$line\n\n"); n++ } }
+        return b.toString()
+    }
+
+    @Test fun fullSizeFrenchAndSpanishStayLatin() {
+        val fr = srt(listOf("Tu es déjà là ? Je pensais que tu étais parti.", "Ça ne fait rien, à demain.", "Où est passée la clé de la Renault ?"), 120)
+        val es = srt(listOf("¿Dónde estabas? ¡No lo sé!", "Está aquí, en el salón.", "Mañana vamos a la playa, ¿sí?"), 120)
+        val pt = srt(listOf("Você não vai acreditar.", "Não sei o que é isso, coração.", "Está tudo bem, irmão."), 120)
+        for (text in listOf(fr, es, pt)) {
+            val bytes = text.toByteArray(Charset.forName("windows-1252"))
+            assertEquals("windows-1252", SubtitleStore.guessCodePage(bytes))
+            assertEquals(text, SubtitleStore.decodeText(bytes, null))
+        }
+    }
+
+    @Test fun arabicWithRlmMarksAndAStrayLatinLetterIsArabic() {
+        val ar = srt(listOf("\u200Fمرحبا بكم في هذا الفيلم الجميل جدا", "\u200Fكيف حالك اليوم يا صديقي العزيز", "قال لي: café"), 80)
+        val bytes = ar.toByteArray(Charset.forName("windows-1256"))
+        assertEquals("windows-1256", SubtitleStore.guessCodePage(bytes))
+        assertEquals(ar, SubtitleStore.decodeText(bytes, ""))
+    }
+
+    @Test fun russianAndGreekAreTheirOwnPages() {
+        val ru = srt(listOf("Привет, как дела? Всё хорошо, спасибо.", "Где ты был вчера вечером?", "Мы поедем на море завтра."), 60)
+        assertEquals("windows-1251", SubtitleStore.guessCodePage(ru.toByteArray(Charset.forName("windows-1251"))))
+        val el = srt(listOf("Γεια σου, τι κάνεις; Καλά, ευχαριστώ.", "Πού ήσουν χθες το βράδυ;", "Θα πάμε στη θάλασσα αύριο."), 60)
+        assertEquals("windows-1253", SubtitleStore.guessCodePage(el.toByteArray(Charset.forName("windows-1253"))))
+    }
+
     @Test fun utf16WithoutBomIsDetected() {
         val text = "1\n00:00:01,000 --> 00:00:02,000\nHello there, this is a subtitle line.\n"
         assertEquals(text, SubtitleStore.decodeText(text.toByteArray(Charsets.UTF_16LE), null))

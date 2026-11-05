@@ -90,7 +90,7 @@ export function isAndroidApp(): boolean {
 
 // ---- native fetch -------------------------------------------------------------------
 
-const pendingFetches = new Map<string, { resolve: (r: Response) => void; reject: (e: unknown) => void }>();
+const pendingFetches = new Map<string, { resolve: (r: Response) => void; reject: (e: unknown) => void; host: string }>();
 let fetchSeq = 0;
 // Ids are unique per page load: after a reload the counter restarts, and a late answer to a
 // request from the old page must not resolve a new request that happens to reuse its id.
@@ -108,12 +108,17 @@ function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
 // native requests failing in a row, with none succeeding, is the better signal on the phone.
 const NET_DOWN_AFTER = 3;
 let netFailuresInARow = 0;
+// A dead addon host or two failing over and over is not "offline": failures must come from at
+// least two different hosts.
+const failingHosts = new Set<string>();
 const netListeners = new Set<() => void>();
 let netProbe: number | null = null;
-function setNetFailures(n: number) {
-  const wasDown = netFailuresInARow >= NET_DOWN_AFTER;
+function setNetFailures(n: number, host?: string) {
+  const wasDown = nativeNetworkLooksDown();
   netFailuresInARow = n;
-  const down = netFailuresInARow >= NET_DOWN_AFTER;
+  if (n === 0) failingHosts.clear();
+  else if (host) failingHosts.add(host);
+  const down = nativeNetworkLooksDown();
   if (wasDown === down) return;
   netListeners.forEach((l) => l());
   // While it looks down, check now and then so the notice goes away once the network is back
@@ -129,7 +134,7 @@ function setNetFailures(n: number) {
 }
 /** True when the last few native requests all failed at the network level. */
 export function nativeNetworkLooksDown(): boolean {
-  return netFailuresInARow >= NET_DOWN_AFTER;
+  return netFailuresInARow >= NET_DOWN_AFTER && failingHosts.size >= 2;
 }
 export function subscribeNativeNetwork(cb: () => void): () => void {
   netListeners.add(cb);
@@ -149,7 +154,7 @@ if (typeof window !== "undefined") {
       return;
     }
     if (!r.ok) {
-      if (!/cancel/i.test(r.error)) setNetFailures(netFailuresInARow + 1);
+      if (!/cancel/i.test(r.error)) setNetFailures(netFailuresInARow + 1, p.host);
       p.reject(new TypeError(`Network request failed: ${r.error}`));
       return;
     }
@@ -187,7 +192,13 @@ export function androidFetch(url: string, init?: RequestInit & { timeoutMs?: num
       reject(new DOMException("Aborted", "AbortError"));
       return;
     }
-    pendingFetches.set(id, { resolve, reject });
+    let host = "";
+    try {
+      host = new URL(url).host;
+    } catch {
+      /* not a URL: the native side refuses it anyway */
+    }
+    pendingFetches.set(id, { resolve, reject, host });
     signal?.addEventListener("abort", () => {
       if (pendingFetches.delete(id)) {
         reject(new DOMException("Aborted", "AbortError"));
@@ -283,21 +294,41 @@ export function onNativePlayerEvent(cb: (e: NativePlayerEvent) => void): () => v
 
 // ---- back button interceptors --------------------------------------------------------
 
-const backInterceptors: Array<() => boolean> = [];
+type BackEntry = { fn: () => boolean; known: Set<Element> };
+const backInterceptors: BackEntry[] = [];
+const POPUPS = '[role="dialog"], [aria-modal="true"], [role="menu"]';
+
+/** Pop-ups actually on screen (some stay mounted while hidden). */
+export function visiblePopups(): Element[] {
+  if (typeof document === "undefined") return [];
+  return [...document.querySelectorAll(POPUPS)].filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+}
 
 /** Lets a screen handle the Android back gesture first (e.g. Settings: section -> list).
  *  The handler returns true when it consumed the back press. */
 export function pushAndroidBackHandler(fn: () => boolean): () => void {
-  backInterceptors.push(fn);
+  const entry: BackEntry = { fn, known: new Set(visiblePopups()) };
+  backInterceptors.push(entry);
   return () => {
-    const i = backInterceptors.lastIndexOf(fn);
+    const i = backInterceptors.lastIndexOf(entry);
     if (i >= 0) backInterceptors.splice(i, 1);
   };
 }
 
+/**
+ * Newest handler first. A pop-up that opened after a handler (a colour picker inside a Settings
+ * section, the avatar catalog inside the profile editor) closes before it: that handler and the
+ * older ones step aside, and the caller sends the pop-up an Escape.
+ */
 export function runAndroidBackHandlers(): boolean {
+  const open = visiblePopups();
   for (let i = backInterceptors.length - 1; i >= 0; i--) {
-    if (backInterceptors[i]()) return true;
+    const e = backInterceptors[i];
+    if (open.some((el) => !e.known.has(el))) return false;
+    if (e.fn()) return true;
   }
   return false;
 }

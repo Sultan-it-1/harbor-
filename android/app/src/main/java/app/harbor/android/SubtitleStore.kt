@@ -153,30 +153,44 @@ class SubtitleStore(private val dir: File, private val fileRoots: List<File> = l
         }
 
         /**
-         * No usable language tag: guess the legacy code page from the text itself. Each candidate
-         * is decoded and scored by how many letters land in its own script (Arabic for 1256,
-         * Cyrillic for 1251, Greek for 1253); mostly-ASCII text stays windows-1252.
+         * No usable language tag: guess the legacy code page from the text itself.
+         * - Latin text (French, Spanish…) keeps windows-1252: its accented letters sit inside
+         *   words made of ASCII letters ("déjà", "¿Dónde"), while Cyrillic, Greek and Arabic
+         *   words are made of high bytes only.
+         * - windows-1251 reads every byte from 0xC0 up as a Cyrillic letter, so Arabic text scores
+         *   the same in both: Arabic wins when its own reading is (nearly) as good, counting the
+         *   RLM/LRM marks subtitle editors add. Russian read as windows-1256 turns many of its
+         *   most common letters into Latin ones and falls far behind.
+         * - Greek and Cyrillic both fill 0xC0-0xFF: Greek's accented small letters (ά έ ή ί) read
+         *   as capitals in the middle of words in windows-1251, which Russian never has.
          */
         fun guessCodePage(b: ByteArray): String {
             var high = 0
-            for (x in b) if (x.toInt() and 0x80 != 0) high++
-            if (high < 16 || high < b.size / 50) return "windows-1252"
-            val candidates = listOf(
-                "windows-1256" to { c: Char -> c in '\u0600'..'\u06FF' },
-                "windows-1251" to { c: Char -> c in '\u0400'..'\u04FF' },
-                "windows-1253" to { c: Char -> c in '\u0370'..'\u03FF' },
-            )
-            var best = "windows-1252"
-            var bestScore = high / 3
-            for ((cs, inScript) in candidates) {
-                val text = String(b, Charset.forName(cs))
-                val score = text.count(inScript)
-                if (score > bestScore) {
-                    best = cs
-                    bestScore = score
-                }
+            var nextToLatin = 0
+            // Read as windows-1251: a capital right after a small letter, inside a word. Never in
+            // Russian; in Greek (windows-1253) these bytes are accented small letters (ά έ ή ί).
+            var midWordCaps = 0
+            fun u(i: Int) = if (i in b.indices) b[i].toInt() and 0xFF else 0
+            fun asciiLetter(i: Int) = u(i).let { it in 0x41..0x5A || it in 0x61..0x7A }
+            for (i in b.indices) {
+                val c = u(i)
+                if (c and 0x80 == 0) continue
+                high++
+                if (asciiLetter(i - 1) || asciiLetter(i + 1)) nextToLatin++
+                if (c in 0xC0..0xDF && u(i - 1) in 0xE0..0xFF) midWordCaps++
             }
-            return best
+            if (high < 16 || high < b.size / 50) return "windows-1252"
+            if (nextToLatin * 2 > high) return "windows-1252"
+            fun score(cs: String, inScript: (Char) -> Boolean) = String(b, Charset.forName(cs)).count(inScript)
+            val arabic = score("windows-1256") { it in '\u0600'..'\u06FF' || it == '\u200E' || it == '\u200F' }
+            val cyrillic = score("windows-1251") { it in '\u0400'..'\u04FF' }
+            val greek = score("windows-1253") { it in '\u0370'..'\u03FF' }
+            val floor = high / 3
+            if (arabic > floor && arabic * 100 >= cyrillic * 85) return "windows-1256"
+            if (greek > floor && midWordCaps * 50 >= high) return "windows-1253"
+            if (cyrillic > floor) return "windows-1251"
+            if (greek > floor) return "windows-1253"
+            return "windows-1252"
         }
 
         fun decodeText(b: ByteArray, lang: String?): String {

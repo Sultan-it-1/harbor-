@@ -381,7 +381,7 @@ function CategoryFab({
   }, [open]);
 
   return (
-    <div data-filter-fab className="phone-above-tabbar fixed bottom-16 end-5 z-40">
+    <div data-filter-fab className="phone-above-tabbar-2 fixed bottom-16 end-5 z-40">
       {open && (
         <div className="absolute bottom-full end-0 mb-2 max-h-[60vh] w-44 overflow-y-auto rounded-2xl border border-edge-soft/60 bg-canvas py-1.5 shadow-2xl">
           {CATEGORIES.map((c) => (

@@ -75,7 +75,7 @@ export function SourceDrawer({
           <span className="flex items-center gap-2">
             <AddonLogoStack addons={usedAddons} size="sm" max={5} />
             <span className="text-ink-subtle/80">
-              {addonCount} {t("addon")}{addonCount === 1 ? "" : "s"}
+              {addonCount === 1 ? t("1 addon") : t("{n} addons", { n: addonCount })}
             </span>
           </span>
         )}
