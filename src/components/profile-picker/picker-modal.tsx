@@ -34,10 +34,10 @@ export function ProfilePickerModal() {
           <X size={18} />
         </button>
       )}
-      {/* z-195: above the phone tab bar (z-190), so its last row stays tappable. The profile list
-          scrolls when it doesn't fit; the editor doesn't (a scroll box would clip its colour
-          pop-over). */}
-      <div className={`relative flex max-h-[calc(100dvh-3rem)] w-full max-w-[860px] flex-col items-center px-10 py-8 ${pickerView.kind === "list" ? "overflow-y-auto" : ""} animate-in fade-in zoom-in-95 slide-in-from-bottom-3 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]`}>
+      {/* z-195: above the phone tab bar (z-190), so its last row stays tappable. It scrolls when
+          it doesn't fit (the editor's Save/Delete sit at the bottom); the editor's colour panel
+          floats above it (portal) so the scroll box doesn't clip it. */}
+      <div className="relative flex max-h-[calc(100dvh-3rem)] w-full max-w-[860px] flex-col items-center overflow-y-auto px-10 py-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-3 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
         {pickerView.kind === "list" && (
           <ListView
             onCreate={() => setPickerView({ kind: "create" })}

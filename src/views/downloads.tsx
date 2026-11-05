@@ -465,6 +465,7 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
         {downloading ? (
           <>
             {ANDROID &&
+              d.code !== "relinking" &&
               (d.paused ? (
                 <RowBtn label={t("Resume download")} onClick={() => resumeDownload(d.id)}>
                   <Play size={16} strokeWidth={2.2} fill="currentColor" />

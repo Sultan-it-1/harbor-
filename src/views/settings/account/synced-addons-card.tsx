@@ -24,7 +24,8 @@ export function SyncedAddonsCard() {
       if (fresh) mod.forgetUserAddonsCache();
       const list = await mod.userAddons(authKey);
       setAddons(list);
-      setLastSynced(Date.now());
+      // Only a real read from the server counts as a sync (opening the card may use the cache).
+      if (fresh) setLastSynced(Date.now());
     } catch {
       setAddons(null);
     } finally {

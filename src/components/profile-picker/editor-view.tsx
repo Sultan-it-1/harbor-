@@ -425,7 +425,7 @@ export function EditorView({
             )}
           </div>
         </div>
-        <ColorPicker value={color} onChange={setColor} />
+        <ColorPicker value={color} onChange={setColor} portal />
       </div>
 
       {showAdvanced && (

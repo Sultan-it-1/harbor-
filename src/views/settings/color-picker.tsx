@@ -18,9 +18,12 @@ export const HARBOR_COLOR_SWATCHES = [
 export function ColorPicker({
   value,
   onChange,
+  portal = false,
 }: {
   value: string;
   onChange: (hex: string) => void;
+  /** Open the custom-colour panel above everything (inside a scroll box it would be clipped). */
+  portal?: boolean;
 }) {
   const isPreset = HARBOR_COLOR_SWATCHES.includes(value.toLowerCase());
   return (
@@ -49,6 +52,7 @@ export function ColorPicker({
           onChange={onChange}
           label={!isPreset ? value.toUpperCase() : t("Custom")}
           highlighted={!isPreset}
+          portal={portal}
         />
       </div>
       <span className="text-[11.5px] text-ink-subtle">

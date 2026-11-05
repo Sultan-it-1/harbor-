@@ -174,6 +174,12 @@ class SubtitleStore(private val dir: File, private val fileRoots: List<File> = l
             // Arabic, Persian or Urdu text. Capital Cyrillic or Greek never uses these bytes, though
             // windows-1256 reads every other capital byte (C0-DF) as an Arabic letter.
             var arabicCore = 0
+            // Capitals (C0-DF) and small letters (E0-FF) as windows-1251 sees them, and the capital
+            // bytes Greek has no use for: D2 is undefined in windows-1253 and C0/DA/DB are only
+            // ΐ Ϊ Ϋ, while Russian capitals use А Т Ъ Ы all the time.
+            var capitals = 0
+            var smalls = 0
+            var nonGreekCapitals = 0
             fun u(i: Int) = if (i in b.indices) b[i].toInt() and 0xFF else 0
             fun asciiLetter(i: Int) = u(i).let { it in 0x41..0x5A || it in 0x61..0x7A }
             for (i in b.indices) {
@@ -183,6 +189,8 @@ class SubtitleStore(private val dir: File, private val fileRoots: List<File> = l
                 if (asciiLetter(i - 1) || asciiLetter(i + 1)) nextToLatin++
                 if (c in 0xC0..0xDF && u(i - 1) in 0xE0..0xFF) midWordCaps++
                 if (c == 0xE1 || c in 0xE3..0xE6 || c == 0xEC || c == 0xED) arabicCore++
+                if (c in 0xC0..0xDF) capitals++ else if (c >= 0xE0) smalls++
+                if (c == 0xC0 || c == 0xD2 || c == 0xDA || c == 0xDB) nonGreekCapitals++
             }
             if (high < 16 || high < b.size / 50) return "windows-1252"
             if (nextToLatin * 2 > high) return "windows-1252"
@@ -193,6 +201,9 @@ class SubtitleStore(private val dir: File, private val fileRoots: List<File> = l
             val floor = high / 3
             if (arabic > floor && arabic * 100 >= cyrillic * 85 && arabicCore * 100 >= high * 15) return "windows-1256"
             if (greek > floor && midWordCaps * 50 >= high) return "windows-1253"
+            // Mostly capitals (sign tracks, hard-of-hearing tags): Greek when its capitals never
+            // use the bytes only Russian capitals need.
+            if (greek > floor && smalls * 4 < high && nonGreekCapitals * 100 < capitals * 2) return "windows-1253"
             if (cyrillic > floor) return "windows-1251"
             if (greek > floor) return "windows-1253"
             return "windows-1252"

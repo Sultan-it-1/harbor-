@@ -63,6 +63,11 @@ class SubtitleDecodeTest {
         assertEquals("windows-1251", SubtitleStore.guessCodePage(caps.toByteArray(Charset.forName("windows-1251"))))
     }
 
+    @Test fun allCapsGreekIsGreek() {
+        val caps = srt(listOf("ΔΕΝ ΞΕΡΩ ΤΙ ΝΑ ΣΟΥ ΠΩ.", "[ΧΤΥΠΑΕΙ ΤΟ ΤΗΛΕΦΩΝΟ]", "ΟΛΑ ΘΑ ΠΑΝΕ ΚΑΛΑ, ΠΙΣΤΕΨΕ ΜΕ."), 60)
+        assertEquals("windows-1253", SubtitleStore.guessCodePage(caps.toByteArray(Charset.forName("windows-1253"))))
+    }
+
     @Test fun russianAndGreekAreTheirOwnPages() {
         val ru = srt(listOf("Привет, как дела? Всё хорошо, спасибо.", "Где ты был вчера вечером?", "Мы поедем на море завтра."), 60)
         assertEquals("windows-1251", SubtitleStore.guessCodePage(ru.toByteArray(Charset.forName("windows-1251"))))
