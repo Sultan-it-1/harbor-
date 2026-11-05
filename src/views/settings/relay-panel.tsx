@@ -6,6 +6,7 @@ import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
 import { downloadText } from "@/lib/download-text";
 import { useRelayHealth } from "./relay-panel/use-relay-health";
+import { isRetiredRelay } from "@/lib/together/relay-version";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -34,9 +35,17 @@ export function TogetherRelayPanel({
   const hasUrl = !!settings.togetherRelayUrl;
   const isCfRelay = isCloudflareRelay(settings.togetherRelayUrl);
 
+  // Harbor's public relay has shut down: refuse it with a reason (saving it would just be undone).
+  const [draftNote, setDraftNote] = useState<string | null>(null);
   const commitDraftUrl = () => {
     const v = draftUrl.trim();
-    if (v) update({ togetherRelayUrl: v });
+    if (!v) return;
+    if (isRetiredRelay(v)) {
+      setDraftNote(t("That was Harbor's public relay, which has shut down. Enter the address of your own relay."));
+      return;
+    }
+    setDraftNote(null);
+    update({ togetherRelayUrl: v });
   };
   const isManaged = settings.togetherCfDeployed && !!settings.togetherCfToken && !!settings.togetherCfAccountId;
 
@@ -121,13 +130,13 @@ export function TogetherRelayPanel({
 
           <div className="flex flex-col gap-1 rounded-xl border border-edge-soft bg-canvas/40 p-1">
             <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5">
-              <div className="flex flex-col">
+              <div className="flex min-w-0 flex-col">
                 <span className="text-[13px] font-medium text-ink">{t("Watch Together")}</span>
                 <span className="text-[11.5px] text-ink-subtle">
                   {t("Synchronizes playback state between participants in the same room.")}
                 </span>
               </div>
-              <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-accent">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-accent">
                 {t("Active")}
               </span>
             </div>
@@ -310,7 +319,10 @@ export function TogetherRelayPanel({
             <input
               type="text"
               value={draftUrl}
-              onChange={(e) => setDraftUrl(e.target.value)}
+              onChange={(e) => {
+                setDraftUrl(e.target.value);
+                setDraftNote(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitDraftUrl();
               }}
@@ -326,6 +338,7 @@ export function TogetherRelayPanel({
               {t("Save")}
             </button>
           </div>
+          {draftNote && <p className="text-[12px] leading-snug text-danger">{draftNote}</p>}
           <p className="text-[11.5px] leading-relaxed text-ink-subtle">
             {t("Only enter URLs for relays you operate or trust. A relay only carries Watch Together sync messages (play, pause, seek). Nothing else passes through it.")}
           </p>

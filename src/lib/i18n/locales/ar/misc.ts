@@ -1258,9 +1258,7 @@ const misc: Record<string, string> = {
   "Choose image": "اختيار صورة",
   "Adding font...": "جارٍ إضافة الخط...",
   "Upload a font": "رفع خط",
-  "{n} minutes before": "قبل {n} دقيقة",
   "1 hour before": "قبل ساعة",
-  "{n} hours before": "قبل {n} ساعات",
 };
 
 export default misc;

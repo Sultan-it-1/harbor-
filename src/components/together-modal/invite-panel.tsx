@@ -35,7 +35,7 @@ export function InvitePanel({
         <p className="text-[13px] text-ink">{t("Start a room first.")}</p>
         <p className="text-[12px] leading-snug text-ink-muted">
           {t(
-            "Once you're in a room you can copy a link that joins anyone instantly: it sets the relay URL and the room code in one click.",
+            "Once you're in a room you can copy an invite link. Whoever pastes it into Watch Together gets your relay URL and room code set in one go.",
           )}
         </p>
         <button

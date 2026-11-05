@@ -50,7 +50,7 @@ export function SyncedAddonsCard() {
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-edge-soft bg-canvas/40 p-5">
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex items-end gap-5">
           <div className="flex flex-col">
             <span className="font-display text-[36px] font-medium leading-none tracking-tight text-ink">
@@ -68,7 +68,7 @@ export function SyncedAddonsCard() {
           <button
             onClick={() => void sync(true)}
             disabled={busy}
-            className="flex h-10 items-center gap-1.5 rounded-xl bg-ink px-4 text-[12.5px] font-semibold text-canvas transition-transform hover:scale-[1.02] disabled:opacity-60"
+            className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-ink px-4 text-[12.5px] font-semibold text-canvas transition-transform hover:scale-[1.02] disabled:opacity-60"
           >
             {busy ? <Loader2 size={13} className="animate-spin" /> : null}
             {busy ? t("Syncing…") : t("Sync now")}
@@ -78,7 +78,7 @@ export function SyncedAddonsCard() {
               requestAddonsTab("installed");
               setView("addons");
             }}
-            className="flex h-10 items-center gap-1.5 rounded-xl border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
+            className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
           >
             {t("Manage")}
             <ArrowRight size={12} strokeWidth={2.2} className="dir-icon" />

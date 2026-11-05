@@ -135,6 +135,7 @@ class NativePlayer(
     private var subStyle = SubStyle()
     private var shownLangs: MutableSet<String>? = null
     private var extView: SubtitleView? = null
+    private var shade: View? = null
     private var ext: ExternalSubs? = null
     /** The download of what's playing (when there is one): its saved subtitles, and where the
      *  save button puts new ones. */
@@ -457,7 +458,7 @@ class NativePlayer(
         if (inPip) {
             v.hideController()
             panel?.dismiss()
-            listOfNotNull(topBar, nextButton, unlockButton, indicator).forEach { it.visibility = View.GONE }
+            listOfNotNull(topBar, nextButton, unlockButton, indicator, shade).forEach { it.visibility = View.GONE }
         } else {
             updateChrome()
         }
@@ -535,19 +536,11 @@ class NativePlayer(
             setBufferedColor(Color.argb(110, 255, 255, 255))
         }
 
-        // One even shade over the whole picture while the controls show. The controls keep clear
-        // of the camera cutout and the gesture bar (applyChromeInsets pads them), but the shade
-        // used to stop at that padding too, leaving bright strips along those edges, and the
-        // bottom bar drew a second, almost black box of its own. Now: edge to edge, a little
-        // darker at the top and bottom where the text sits, no hard-edged box.
-        (pv.findViewById<View>(androidx.media3.ui.R.id.exo_controller) as? ViewGroup)?.clipToPadding = false
-        pv.findViewById<View>(androidx.media3.ui.R.id.exo_controls_background)?.background = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(
-                Color.argb(165, 0, 0, 0), Color.argb(110, 0, 0, 0), Color.argb(110, 0, 0, 0),
-                Color.argb(110, 0, 0, 0), Color.argb(175, 0, 0, 0),
-            ),
-        )
+        // media3's own shade lives inside the controller, which is padded clear of the camera
+        // cutout and the gesture bar, so it stopped short of those edges (bright strips there),
+        // and its bottom bar drew a second, almost black box. Both go; our own shade below covers
+        // the whole screen instead.
+        pv.findViewById<View>(androidx.media3.ui.R.id.exo_controls_background)?.background = null
         pv.findViewById<View>(androidx.media3.ui.R.id.exo_bottom_bar)?.background = null
 
         // Addon subtitles render in their own view above the video, below the controls.
@@ -555,6 +548,26 @@ class NativePlayer(
         (pv.overlayFrameLayout ?: pv).addView(sv, FrameLayout.LayoutParams(MainActivity.MATCH, MainActivity.MATCH))
         extView = sv
         ext = ExternalSubs(sv) { player?.currentPosition }
+
+        // One even shade over the whole picture while the controls show, edge to edge, a little
+        // darker at the top and bottom where the text sits. Above the video and subtitles, below
+        // the controls. It follows the controller's visibility (updateChrome), so it also stays
+        // through media3's short "progress bar only" phase after the controls time out: the top
+        // bar and the progress line never sit on bare video.
+        val shadeView = View(activity).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(
+                    Color.argb(165, 0, 0, 0), Color.argb(110, 0, 0, 0), Color.argb(110, 0, 0, 0),
+                    Color.argb(110, 0, 0, 0), Color.argb(175, 0, 0, 0),
+                ),
+            )
+            visibility = View.GONE
+            alpha = 0f
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        (pv.overlayFrameLayout ?: pv).addView(shadeView, FrameLayout.LayoutParams(MainActivity.MATCH, MainActivity.MATCH))
+        shade = shadeView
 
         pv.setOnTouchListener(PlayerGestures(activity, gestureCallbacks))
         pv.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { vis ->
@@ -673,6 +686,18 @@ class NativePlayer(
     private fun updateChrome() {
         val showing = isShowing && !locked && controllerVisible && panel?.isOpen != true
         topBar?.visibility = if (showing) View.VISIBLE else View.GONE
+        shade?.let { s ->
+            val on = isShowing && !locked && controllerVisible
+            if (on && s.visibility != View.VISIBLE) {
+                s.animate().cancel()
+                s.alpha = 0f
+                s.visibility = View.VISIBLE
+                s.animate().alpha(1f).setDuration(180).start()
+            } else if (!on && s.visibility == View.VISIBLE) {
+                s.animate().cancel()
+                s.animate().alpha(0f).setDuration(180).withEndAction { s.visibility = View.GONE }.start()
+            }
+        }
         nextButton?.visibility = if (showing && hasNext) View.VISIBLE else View.GONE
         titleView?.text = title
         subtitleView?.text = subtitleLine

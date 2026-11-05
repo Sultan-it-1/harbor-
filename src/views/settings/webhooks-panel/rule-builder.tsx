@@ -74,38 +74,38 @@ function defaultTrigger(event: WebhookTrigger["event"]): WebhookTrigger {
   }
 }
 
-function describeTrigger(t: WebhookTrigger, trackedPeople: TrackedPerson[]): string {
-  switch (t.event) {
-    case "newMovie": return "Any new movie";
-    case "newSeries": return "Any new series";
-    case "newAnime": return "Any new anime";
+function describeTrigger(trig: WebhookTrigger, trackedPeople: TrackedPerson[]): string {
+  switch (trig.event) {
+    case "newMovie": return t("Any new movie");
+    case "newSeries": return t("Any new series");
+    case "newAnime": return t("Any new anime");
     case "fromTrackedPerson": {
-      const ids = t.personIds ?? [];
-      if (ids.length === 0) return `Any of your ${trackedPeople.length} tracked people`;
+      const ids = trig.personIds ?? [];
+      if (ids.length === 0) return t("Any of your {n} tracked people", { n: trackedPeople.length });
       const names = ids
         .map((id) => trackedPeople.find((p) => p.id === id)?.name)
         .filter(Boolean) as string[];
-      return names.join(", ") || "Tracked people";
+      return names.join(", ") || t("Tracked people");
     }
     case "fromGenre":
-      return t.genreIds.length === 0
-        ? "Any genre"
-        : `${t.mediaType === "movie" ? "Movies" : "Series"}: ${t.genreIds
+      return trig.genreIds.length === 0
+        ? t("Any genre")
+        : `${trig.mediaType === "movie" ? t("Movies") : t("Series")}: ${trig.genreIds
             .map((id) => Object.entries(MOVIE_GENRES).find(([, gid]) => gid === id)?.[0])
             .filter(Boolean)
             .join(", ")}`;
     case "fromProvider":
-      return t.providerIds.length === 0
-        ? "Any streamer"
-        : t.providerIds.map((id) => PROVIDERS.find((p) => p.id === id)?.name).filter(Boolean).join(", ");
+      return trig.providerIds.length === 0
+        ? t("Any streamer")
+        : trig.providerIds.map((id) => PROVIDERS.find((p) => p.id === id)?.name).filter(Boolean).join(", ");
     case "fromCountry":
-      return t.countryCodes.length === 0
-        ? "Any country"
-        : t.countryCodes.map((c) => COUNTRIES.find((x) => x.code === c)?.name ?? c).join(", ");
-    case "fromTraktAnticipated": return "Trakt anticipated";
-    case "fromTraktWatchlist": return "Your Trakt watchlist";
+      return trig.countryCodes.length === 0
+        ? t("Any country")
+        : trig.countryCodes.map((c) => COUNTRIES.find((x) => x.code === c)?.name ?? c).join(", ");
+    case "fromTraktAnticipated": return t("Trakt anticipated");
+    case "fromTraktWatchlist": return t("Your Trakt watchlist");
     case "liveTvEvent":
-      return `Live TV · ${t.favoritesOnly ? "favorites" : "all channels"} · ${t.leadMinutes ?? 15} min lead`;
+      return `${t("Live TV")} · ${trig.favoritesOnly ? t("favorites") : t("all channels")} · ${t("{n} min lead", { n: trig.leadMinutes ?? 15 })}`;
   }
 }
 
@@ -207,7 +207,7 @@ export function RuleBuilder({
               </button>
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[13px] font-semibold text-ink">
-                  {r.name || EVENT_LABELS[r.trigger.event]}
+                  {r.name || t(EVENT_LABELS[r.trigger.event])}
                 </span>
                 <span className="truncate text-[11.5px] text-ink-subtle">
                   {describeTrigger(r.trigger, trackedPeople)} →{" "}
@@ -293,13 +293,13 @@ function RuleEditor({
             type="text"
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            placeholder={EVENT_LABELS[draft.trigger.event]}
+            placeholder={t(EVENT_LABELS[draft.trigger.event])}
             maxLength={80}
             className="h-11 w-full rounded-xl border border-edge bg-canvas px-3.5 text-[13px] text-ink placeholder:text-ink-subtle outline-none focus:border-ink"
           />
         </Field>
 
-        <Field label="WHEN">
+        <Field label={t("When")}>
           <select
             value={draft.trigger.event}
             onChange={(e) => setEvent(e.target.value as WebhookTrigger["event"])}
@@ -307,7 +307,7 @@ function RuleEditor({
           >
             {EVENT_ORDER.map((ev) => (
               <option key={ev} value={ev}>
-                {EVENT_LABELS[ev]}
+                {t(EVENT_LABELS[ev])}
               </option>
             ))}
           </select>
@@ -319,8 +319,8 @@ function RuleEditor({
               label={t("Media type")}
               value={draft.trigger.mediaType}
               options={[
-                { value: "movie", label: "Movies" },
-                { value: "tv", label: "Series" },
+                { value: "movie", label: t("Movies") },
+                { value: "tv", label: t("Series") },
               ]}
               onChange={(v) =>
                 setDraft({ ...draft, trigger: { ...(draft.trigger as Extract<WebhookTrigger, { event: "fromGenre" }>), mediaType: v as "movie" | "tv" } })
@@ -398,8 +398,8 @@ function RuleEditor({
               />
               <span className="text-[12.5px] text-ink">{t("Only my favorited channels")}</span>
             </label>
-            <label className="flex items-center gap-3">
-              <span className="w-[140px] shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+            <label className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <span className="w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle sm:w-[140px] sm:shrink-0">
                 {t("Heads up")}
               </span>
               <select
@@ -410,11 +410,18 @@ function RuleEditor({
                   const t = draft.trigger as Extract<WebhookTrigger, { event: "liveTvEvent" }>;
                   setDraft({ ...draft, trigger: { ...t, leadMinutes: Number(e.target.value) } });
                 }}
-                className="h-9 flex-1 rounded-lg border border-edge bg-canvas px-3 text-[12.5px] text-ink outline-none focus:border-ink"
+                className="h-9 w-full min-w-0 rounded-lg border border-edge bg-canvas px-3 text-[12.5px] text-ink outline-none focus:border-ink sm:w-auto sm:flex-1"
               >
                 {[5, 10, 15, 30, 60, 120].map((m) => (
                   <option key={m} value={m}>
-                    {m < 60 ? t("{n} minutes before", { n: m }) : m === 60 ? t("1 hour before") : t("{n} hours before", { n: m / 60 })}
+                    {({
+                      5: t("5 minutes before"),
+                      10: t("10 minutes before"),
+                      15: t("15 minutes before"),
+                      30: t("30 minutes before"),
+                      60: t("1 hour before"),
+                      120: t("2 hours before"),
+                    } as Record<number, string>)[m]}
                   </option>
                 ))}
               </select>
@@ -434,7 +441,7 @@ function RuleEditor({
         {draft.trigger.event === "fromTrackedPerson" && trackedPeople.length > 0 && (
           <TriggerSubFields>
             <SubChips
-              label="People (empty = all tracked)"
+              label={t("People (empty = all tracked)")}
               items={trackedPeople.map((p) => ({
                 key: String(p.id),
                 label: p.name,

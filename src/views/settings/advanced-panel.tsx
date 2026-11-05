@@ -98,6 +98,15 @@ export function AdvancedPanel() {
 
       {isTauri && (
         <Section
+          title={t("Player log")}
+          subtitle={t("If a stream or the video player misbehaves, export the player log. It saves to your Downloads folder.")}
+        >
+          <PlayerLogRow />
+        </Section>
+      )}
+
+      {isTauri && (
+        <Section
           title={t("Discord Rich Presence")}
           subtitle={t("Let your Discord friends see what you are watching, with the show poster and a live progress bar. Desktop only, and only your own Discord client is involved (nothing touches a Harbor server).")}
         >
@@ -573,6 +582,34 @@ function InfoLine({ label, value }: { label: string; value: string }) {
       </span>
       <span className="text-[13.5px] tabular-nums text-ink">{value}</span>
     </div>
+  );
+}
+
+function PlayerLogRow() {
+  const t = useT();
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [error, setError] = useState("");
+  const run = async () => {
+    setState("busy");
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke<string>("mpv_export_log");
+      setState("done");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setState("error");
+    }
+  };
+  return (
+    <ActionRow
+      label={t("Export player log")}
+      sub={state === "done" ? t("Saved to Downloads as harbor-mpv-log.txt") : state === "error" ? error : t("A text file with what the player reported while playing.")}
+      cta={state === "busy" ? t("Exporting") : state === "done" ? t("Exported") : t("Export")}
+      icon={state === "busy" ? <Loader2 size={14} className="animate-spin" /> : state === "done" ? <Check size={14} strokeWidth={2.6} /> : <Download size={14} />}
+      tone={state === "done" ? "success" : "neutral"}
+      onClick={() => void run()}
+      disabled={state === "busy"}
+    />
   );
 }
 

@@ -87,8 +87,8 @@ export function SimklPanel() {
           title={t("Connected")}
           subtitle={t("Harbor will mark what you finish as watched on Simkl and sync your plan-to-watch list.")}
         >
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               {simklAvatar ? (
                 <img
                   src={simklAvatar}
@@ -101,15 +101,15 @@ export function SimklPanel() {
                   <Check size={16} strokeWidth={2.4} />
                 </span>
               )}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[14px] font-medium text-ink">{username || t("Connected")}</span>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-[14px] font-medium text-ink [overflow-wrap:anywhere]">{username || t("Connected")}</span>
                 <span className="text-[12px] text-ink-subtle">{t("Authorized on this device")}</span>
               </div>
             </div>
             {username && (
               <button
                 onClick={() => openUrl(`https://simkl.com/${encodeURIComponent(username)}`)}
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
+                className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
               >
                 {t("Open profile")}
                 <ExternalLink size={11} strokeWidth={2.2} />

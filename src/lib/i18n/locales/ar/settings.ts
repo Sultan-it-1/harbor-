@@ -1791,6 +1791,19 @@ const settings: Record<string, string> = {
   "Drop a theme file here or click to browse.": "أفلت ملف سمة هنا أو اضغط للتصفّح.",
   "Zipped themes aren't supported yet. Drop the theme file directly.": "السمات المضغوطة غير مدعومة بعد. أفلت ملف السمة نفسه.",
   "Could not read file": "تعذّرت قراءة الملف",
+  "When": "متى",
+  "5 minutes before": "قبل 5 دقائق",
+  "10 minutes before": "قبل 10 دقائق",
+  "15 minutes before": "قبل 15 دقيقة",
+  "30 minutes before": "قبل 30 دقيقة",
+  "2 hours before": "قبل ساعتين",
+  "Player log": "سجل المشغّل",
+  "If a stream or the video player misbehaves, export the player log. It saves to your Downloads folder.": "إذا تعطّل بث أو تصرّف المشغّل بشكل غريب، صدّر سجل المشغّل. يُحفظ في مجلد التنزيلات.",
+  "Export player log": "تصدير سجل المشغّل",
+  "Saved to Downloads as harbor-mpv-log.txt": "حُفظ في التنزيلات باسم harbor-mpv-log.txt",
+  "A text file with what the player reported while playing.": "ملف نصي فيه ما سجّله المشغّل أثناء التشغيل.",
+  "Exporting": "جارٍ التصدير",
+  "Exported": "تم التصدير",
 };
 
 export default settings;

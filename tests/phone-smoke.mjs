@@ -50,7 +50,8 @@ const SHELL = ({ lang }) => {
   try {
     localStorage.setItem("harbor.onboarding", JSON.stringify({ onboarded: true, nudges: {} }));
     const cur = JSON.parse(localStorage.getItem("harbor.settings") || "{}");
-    localStorage.setItem("harbor.settings", JSON.stringify({ ...cur, uiLanguage: lang }));
+    // A saved relay address, so Settings > Harbor Relay shows its connected state too.
+    localStorage.setItem("harbor.settings", JSON.stringify({ ...cur, uiLanguage: lang, togetherRelayUrl: "wss://smoke-relay.example.workers.dev" }));
   } catch {}
 };
 
@@ -111,19 +112,25 @@ for (const lang of ["en", "ar"]) {
       const main = [...document.querySelectorAll("main")].find((m) => m.getBoundingClientRect().width > 0);
       const col = main?.firstElementChild;
       if (!col) return null;
-      const cs = getComputedStyle(col);
-      const room = col.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      let need = 0;
-      let what = "";
-      for (const c of col.children) {
-        const prev = c.style.width;
-        c.style.width = "min-content";
-        const w = c.getBoundingClientRect().width;
-        c.style.width = prev;
-        if (w > need) {
-          need = w;
-          what = (c.querySelector("h1, h2, h3") || c).textContent.trim().replace(/\s+/g, " ").slice(0, 40);
+      // Anything that sticks out past the screen edge (and gets cut off). Sideways-scrolling strips,
+      // text cut with "…" on purpose and absolutely placed decorations don't count.
+      const vw = window.innerWidth;
+      const rtl = document.documentElement.dir === "rtl";
+      const past = (r) => (rtl ? r.left < -1 : r.right > vw + 1);
+      const exempt = (e) => {
+        for (let p = e; p && p !== col; p = p.parentElement) {
+          const ps = getComputedStyle(p);
+          if (ps.textOverflow === "ellipsis" || ps.position === "absolute" || ps.position === "fixed") return true;
+          if (p !== e && /(auto|scroll)/.test(ps.overflowX)) return true;
         }
+        return false;
+      };
+      const cut = [];
+      for (const e of col.querySelectorAll("*")) {
+        const r = e.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0 || !past(r) || exempt(e)) continue;
+        if (e.parentElement && e.parentElement !== col && past(e.parentElement.getBoundingClientRect())) continue;
+        cut.push(`"${(e.innerText || e.getAttribute("aria-label") || e.tagName).trim().replace(/\s+/g, " ").slice(0, 40)}"`);
       }
       // Lines of a control's own text (icons and inputs inside it don't count).
       const lines = (el) => {
@@ -147,10 +154,21 @@ for (const lang of ["en", "ar"]) {
         if (!txt || txt.length > 28 || txt.includes("\n") || b.getBoundingClientRect().width === 0) continue;
         if (lines(b) >= 2) wrapped.push(`"${txt}"`);
       }
-      return { room: Math.round(room), need: Math.round(need), what, wrapped: [...new Set(wrapped)] };
+      // A single word split over two lines ("Sy|nc", "ACT|IVE") anywhere in the section.
+      const broken = [];
+      const tw = document.createTreeWalker(col, NodeFilter.SHOW_TEXT);
+      for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+        const word = n.textContent.trim();
+        if (word.length < 2 || word.length > 16 || /\s/.test(word)) continue;
+        const pe = n.parentElement;
+        if (!pe || pe.closest("input, textarea, select, [aria-hidden='true']")) continue;
+        if (lines(pe) >= 2 && pe.textContent.trim() === word) broken.push(`"${word}"`);
+      }
+      return { cut: [...new Set(cut)], wrapped: [...new Set(wrapped)], broken: [...new Set(broken)] };
     });
-    if (r && r.need > r.room + 1) failures.push(`${lang}/settings "${label}": "${r.what}" needs ${r.need}px, a 360px screen gives ${r.room}px`);
+    if (r && r.cut.length) failures.push(`${lang}/settings "${label}": cut off at the screen edge on a 360px phone: ${r.cut.slice(0, 6).join(", ")}`);
     if (r && r.wrapped.length) failures.push(`${lang}/settings "${label}": button text wraps onto two lines: ${r.wrapped.slice(0, 6).join(", ")}`);
+    if (r && r.broken.length) failures.push(`${lang}/settings "${label}": a word is split across two lines: ${r.broken.slice(0, 6).join(", ")}`);
     await page.evaluate(() => window.__harborAndroidBack?.());
     await page.waitForTimeout(500);
   }

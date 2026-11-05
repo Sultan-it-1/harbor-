@@ -32,6 +32,8 @@ export function TogetherPopover({
   const [draftName, setDraftName] = useState(displayName);
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<"default" | "link">("default");
+  // The pasted invite that pointed at Harbor's shut-down public relay (its note shows until edited).
+  const [retiredInvite, setRetiredInvite] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftName(displayName);
@@ -56,7 +58,10 @@ export function TogetherPopover({
       const room = params.get("harbor-room");
       if (relay && room) {
         // An old invite to Harbor's shut-down public relay leads nowhere: keep the relay you have.
-        if (isRetiredRelay(relay)) return;
+        if (isRetiredRelay(relay)) {
+          setRetiredInvite(value);
+          return;
+        }
         if (settings.togetherRelayUrl !== relay) {
           update({ togetherRelayUrl: relay });
         }
@@ -67,6 +72,13 @@ export function TogetherPopover({
     }
     joinSession(value);
   };
+
+  const retiredNote =
+    retiredInvite !== null && joinCode.trim() === retiredInvite ? (
+      <p className="text-[11.5px] leading-snug text-danger">
+        {t("This invite uses Harbor's old public relay, which has shut down. Ask for an invite to the sender's own relay.")}
+      </p>
+    ) : null;
 
   const handleCopy = async () => {
     if (!snapshot.room) return;
@@ -191,6 +203,7 @@ export function TogetherPopover({
               {t("Open Settings")}
             </button>
           </div>
+          {retiredNote}
         </div>
       )}
 
@@ -250,6 +263,7 @@ export function TogetherPopover({
             <p className="px-1 text-[10.5px] text-ink-subtle">
               {t("or paste an invite link")}
             </p>
+            {retiredNote}
           </div>
 
           {errored && snapshot.lastError && (

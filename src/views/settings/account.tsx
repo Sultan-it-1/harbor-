@@ -170,6 +170,7 @@ export function AccountStub() {
             <ColorPicker
               value={settings.harborColor}
               onChange={(c) => pushIdentity({ harborColor: c })}
+              portal
             />
           </div>
         </div>

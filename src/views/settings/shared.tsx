@@ -131,7 +131,7 @@ export function KeyField({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           {headerExtra}
           {!headerExtra && value.length > 0 && !showSave && (
             <span className="flex items-center gap-1.5 text-[11px] font-medium text-accent transition-colors">

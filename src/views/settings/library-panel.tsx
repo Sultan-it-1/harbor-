@@ -312,7 +312,7 @@ export function LibraryPanel({
               <button
                 type="button"
                 onClick={() => setTmdbGuide(true)}
-                className="flex items-center gap-1 rounded-full px-2 py-1 text-[11.5px] font-semibold text-accent transition-colors hover:bg-accent/10"
+                className="flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[11.5px] font-semibold text-accent transition-colors hover:bg-accent/10"
               >
                 <HelpCircle size={13} strokeWidth={2.4} />
                 {t("How to get this")}

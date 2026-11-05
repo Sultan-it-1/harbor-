@@ -239,10 +239,10 @@ export function Settings() {
       >
         {/* Phone: the page is exactly as wide as the screen whatever is inside it. inline-size
             containment stops content (a long address, a row that can't shrink) from making the
-            page wider and cut off at the right edge; long words and links wrap instead. */}
+            page wider and cut off at the right edge; long links and emails wrap instead. */}
         <div
           data-tauri-drag-region
-          className={`mx-auto flex w-full min-w-0 max-w-3xl flex-col ${phone ? "gap-7 px-4 [contain:inline-size] [overflow-wrap:anywhere]" : "gap-10 px-12"}`}
+          className={`mx-auto flex w-full min-w-0 max-w-3xl flex-col ${phone ? "gap-7 px-4 [contain:inline-size] [overflow-wrap:break-word]" : "gap-10 px-12"}`}
         >
           {phone && (
             <button

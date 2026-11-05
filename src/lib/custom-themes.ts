@@ -37,10 +37,21 @@ function readRaw(): CustomTheme[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((p) => isCustomTheme(p));
+    return parsed.filter((p) => isCustomTheme(p)).map(dropRetiredPreview);
   } catch {
     return [];
   }
+}
+
+// Themes downloaded from the old community store kept their cover on harbor.site, which has shut
+// down. Without that link the card falls back to its colours and offers "Add image" again.
+function dropRetiredPreview(theme: CustomTheme): CustomTheme {
+  if (typeof theme.previewImage !== "string" || !/^https?:\/\/([^/]*\.)?harbor\.site(\/|$)/i.test(theme.previewImage)) {
+    return theme;
+  }
+  const copy = { ...theme };
+  delete copy.previewImage;
+  return copy;
 }
 
 function writeRaw(themes: CustomTheme[]): void {

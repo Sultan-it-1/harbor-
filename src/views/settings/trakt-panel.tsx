@@ -87,8 +87,8 @@ export function TraktPanel() {
           title={t("Connected")}
           subtitle={t("Harbor will scrobble your playback to Trakt and sync your watchlist.")}
         >
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               {traktAvatar ? (
                 <img
                   src={traktAvatar}
@@ -101,8 +101,8 @@ export function TraktPanel() {
                   <Check size={16} strokeWidth={2.4} />
                 </span>
               )}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[14px] font-medium text-ink">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-[14px] font-medium text-ink [overflow-wrap:anywhere]">
                   {username ? `@${username}` : t("Connected")}
                 </span>
                 <span className="text-[12px] text-ink-subtle">
@@ -115,7 +115,7 @@ export function TraktPanel() {
                 onClick={() =>
                   openUrl(`https://trakt.tv/users/${encodeURIComponent(username)}`)
                 }
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
+                className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-edge-soft px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-edge hover:text-ink"
               >
                 {t("Open profile")}
                 <ExternalLink size={11} strokeWidth={2.2} />

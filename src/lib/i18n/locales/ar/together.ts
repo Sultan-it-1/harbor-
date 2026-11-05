@@ -81,6 +81,9 @@ const together: Record<string, string> = {
   "Anyone who pastes this link into Watch Together gets the relay URL and room code set automatically.": "من يلصق هذا الرابط في المشاهدة الجماعية يُضبط له رابط المرحّل ورمز الغرفة تلقائيًا.",
   "Redeploy it to get the latest Watch Together fixes.": "أعد نشره لتحصل على آخر إصلاحات المشاهدة الجماعية.",
   "A relay is a tiny Cloudflare Worker that passes play/pause/seek messages between you and your friends. No video data ever touches it. Deploy one from the Harbor desktop app (the free tier is plenty) and enter its URL in Settings, or paste a friend's invite link to use theirs.": "المرحّل عامل صغير على Cloudflare ينقل رسائل التشغيل والإيقاف والتقديم بينك وبين أصدقائك، ولا يمر عبره أي فيديو. انشره من نسخة Harbor على الكمبيوتر (الخطة المجانية تكفي) وضع رابطه في الإعدادات، أو الصق رابط دعوة من صديق لتستخدم مرحّله.",
+  "Once you're in a room you can copy an invite link. Whoever pastes it into Watch Together gets your relay URL and room code set in one go.": "بعد ما تدخل غرفة تقدر تنسخ رابط دعوة، ومن يلصقه في المشاهدة الجماعية يُضبط له رابط المرحّل ورمز الغرفة مرة وحدة.",
+  "This invite uses Harbor's old public relay, which has shut down. Ask for an invite to the sender's own relay.": "هذه الدعوة تستخدم المرحّل العام القديم لـ Harbor، وقد توقّف نهائياً. اطلب دعوة على مرحّل صاحبها الخاص.",
+  "That was Harbor's public relay, which has shut down. Enter the address of your own relay.": "هذا كان المرحّل العام لـ Harbor، وقد توقّف نهائياً. أدخل عنوان مرحّلك الخاص.",
 };
 
 export default together;

@@ -32,7 +32,7 @@ export function AvatarFan({
       <button
         type="button"
         onClick={onClick}
-        className="group flex flex-1 items-center gap-3 px-2.5 py-1.5 text-start transition-colors hover:bg-canvas/50"
+        className="group flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 px-2.5 py-1.5 text-start transition-colors hover:bg-canvas/50"
       >
         <span className="flex items-center">
           {picks.map((id, i) => {
@@ -55,7 +55,7 @@ export function AvatarFan({
             );
           })}
         </span>
-        <span className="text-start text-[12.5px] font-medium leading-tight text-ink-muted transition-colors group-hover:text-ink">
+        <span className="min-w-[7.5rem] flex-1 text-start text-[12.5px] font-medium leading-tight text-ink-muted transition-colors group-hover:text-ink">
           {label ?? t("or use one of our avatars")}
         </span>
       </button>
