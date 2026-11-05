@@ -134,8 +134,13 @@ jobs:
             SHA-256: `${{ env.HARBOR_APK_SHA256 }}`
           files: android/app/build/outputs/apk/release/harbor-android.apk
 
+      # A spare copy next to the run. The release above is the real download, so a full artifact
+      # quota (every build used to keep its ~30 MB APK for 90 days) must not fail the build, and the
+      # copy only stays 3 days.
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: harbor-android-apk
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+          retention-days: 3
