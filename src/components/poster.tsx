@@ -62,6 +62,23 @@ const ASPECT: Record<Ratio, string> = {
   wide: "aspect-[16/7]",
 };
 
+// The same shape as an in-flow spacer (padding-top is a share of the width). Some Android
+// WebViews (seen on Android 13 handhelds such as the Anbernic RG 476H) don't apply
+// aspect-ratio to the poster box, so every small cover collapsed to nothing and only the
+// big banner showed. The spacer gives the box its height in every WebView; where
+// aspect-ratio works the two agree, and a box sized by its className (h-full, inset-0)
+// clips it.
+const SPACER: Record<Ratio, string> = {
+  portrait: "150%",
+  landscape: "56.25%",
+  wide: "43.75%",
+};
+
+// oklch() needs Chrome 111+; older WebViews drop the whole background, so the placeholder
+// behind a poster that is still loading (or has none) was invisible there.
+const OKLCH =
+  typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("color", "oklch(0.5 0.1 0)");
+
 export function Poster({
   src,
   seed,
@@ -122,6 +139,7 @@ export function Poster({
       className={`harbor-poster your-card relative overflow-hidden rounded-[var(--poster-radius,12px)] ${ASPECT[ratio]} ${className}`}
       style={showPlate ? { background: gradient(hue) } : undefined}
     >
+      <div aria-hidden style={{ paddingTop: SPACER[ratio] }} />
       {current && near && (
         <img
           key={current}
@@ -153,6 +171,13 @@ function gradient(hue: number) {
   const a = hue;
   const b = (hue + 140) % 360;
   const c = (hue + 60) % 360;
+  if (!OKLCH) {
+    return `
+    radial-gradient(ellipse at 25% 30%, hsl(${a} 45% 34%) 0%, transparent 55%),
+    radial-gradient(ellipse at 75% 75%, hsl(${b} 35% 22%) 0%, transparent 55%),
+    linear-gradient(135deg, hsl(${c} 25% 11%), hsl(${b} 15% 5%))
+  `;
+  }
   return `
     radial-gradient(ellipse at 25% 30%, oklch(0.45 0.14 ${a}) 0%, transparent 55%),
     radial-gradient(ellipse at 75% 75%, oklch(0.32 0.10 ${b}) 0%, transparent 55%),
