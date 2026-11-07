@@ -1,5 +1,6 @@
 import { Link2, Play } from "lucide-react";
 import { useMemo } from "react";
+import { useReportNativeRow } from "@/views/native/native-sink";
 import { directUrlNotWebReady } from "@/lib/torrent/magnet";
 import { useView, type PlayerSrc } from "@/lib/view";
 import { t } from "@/lib/i18n/translate";
@@ -19,6 +20,17 @@ export function UrlCard({ raw, onClose }: { raw: string; onClose: () => void }) 
     onClose();
     openPlayer(src);
   };
+  // Android's native search screen: the same card (native-sink).
+  const native = useReportNativeRow("search:direct", 0, {
+    key: "direct",
+    title: "",
+    kind: "action",
+    metas: [],
+    cards: [{ icon: "link", kicker: t("Direct link"), title, sub: url, button: t("Play") }],
+    onOpen: onPlay,
+    onPlay,
+  });
+  if (native) return null;
 
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-accent/40 bg-accent/10 px-5 py-4">

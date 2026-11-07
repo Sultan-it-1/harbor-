@@ -5,6 +5,9 @@ import type { Meta } from "@/lib/cinemeta";
 import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
 import { MetaList } from "./meta-list";
+import { useView } from "@/lib/view";
+import { useReportNativeRow } from "@/views/native/native-sink";
+import type { NativeRowInput } from "@/views/native/native-screens";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -25,8 +28,8 @@ export function AiSearchSection({ query, onClose }: { query: string; onClose: ()
     setRanQuery("");
   }, [query]);
 
-  if (!settings.aiSearchKey.trim() || !query.trim()) return null;
-
+  const { openMeta } = useView();
+  const enabled = !!settings.aiSearchKey.trim() && !!query.trim();
   const run = async () => {
     const id = ++reqRef.current;
     setStatus("loading");
@@ -50,6 +53,50 @@ export function AiSearchSection({ query, onClose }: { query: string; onClose: ()
       setStatus("error");
     }
   };
+
+  // Android's native search screen: the same card and picks (native-sink).
+  const nativeRow: NativeRowInput | null = !enabled
+    ? null
+    : status === "done" && ranQuery === query && results.length > 0
+      ? {
+          key: "ai",
+          title: t("AI picks"),
+          kind: "list",
+          metas: results,
+          cards: results.map((m) => ({
+            title: m.name,
+            sub: [m.releaseInfo, m.imdbRating ? `★ ${m.imdbRating}` : null].filter(Boolean).join("  ·  ") || null,
+            img: [m.poster, /^tt\d+/.test(m.id) ? `https://images.metahub.space/poster/medium/${m.id.split(":")[0]}/img` : null].filter(
+              (u): u is string => !!u,
+            ),
+          })),
+          onOpen: (i) => {
+            const m = results[i];
+            if (!m) return;
+            onClose();
+            openMeta(m);
+          },
+        }
+      : {
+          key: "ai",
+          title: "",
+          kind: "action",
+          metas: [],
+          cards: [
+            status === "loading"
+              ? { tone: "plain" as const, title: t("Asking AI…"), busy: true }
+              : status === "error"
+                ? { tone: "danger" as const, title: t("AI search failed. Tap to retry."), sub: error }
+                : status === "done"
+                  ? { tone: "plain" as const, title: t("AI didn't find anything for that. Try rephrasing.") }
+                  : { icon: "sparkles", kicker: t("AI search"), title: t("Ask AI to find titles for \"{query}\"", { query }) },
+          ],
+          onOpen: () => {
+            if (status === "idle" || status === "error") void run();
+          },
+        };
+  const native = useReportNativeRow("search:ai", 1, nativeRow);
+  if (native || !enabled) return null;
 
   return (
     <div className="mb-8">

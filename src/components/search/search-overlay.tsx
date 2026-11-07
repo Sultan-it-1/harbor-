@@ -3,7 +3,6 @@ import { PHONE_TABBAR_H } from "@/chrome/phone-tabbar";
 import { Search, X, Loader2, CornerDownLeft, CalendarRange, Tag } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Meta } from "@/lib/cinemeta";
-import { useSettings } from "@/lib/settings";
 import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
 import { NativeRowSinkContext, useNativeRowSink } from "@/views/native/native-sink";
 import { createPortal } from "react-dom";
@@ -31,7 +30,6 @@ export function SearchOverlay() {
   const { open, setOpen, query, setQuery, results, status, clear, recordRecent } = useSearch();
   const inputRef = useRef<HTMLInputElement>(null);
   const { openFilter, openMeta, openPerson, openAddonDetail, openPlayer } = useView();
-  const { settings } = useSettings();
   const t = useT();
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -58,7 +56,6 @@ export function SearchOverlay() {
   }, [open]);
   const tq = query.trim();
   const directNow = !!tq && (isMagnetInput(tq) || isDirectVideoUrl(tq));
-  const aiNow = !!tq && !!settings.aiSearchKey.trim();
   const closeSearch = () => {
     if (tq && results) recordRecent(query);
     setOpen(false);
@@ -77,10 +74,10 @@ export function SearchOverlay() {
       out.push({
         key: "intent",
         title: "",
+        kind: "action",
         metas: [],
-        cards: [],
-        tools: [{ id: "intent", label: `${t("Browse")} · ${intent.label}` }],
-        onTool: () => {
+        cards: [{ title: intent.label, kicker: t("Browse"), icon: intent.kind === "year" ? "calendar" : "tag" }],
+        onOpen: () => {
           if (intent.kind === "genre") {
             const id = (intent.mediaType === "movie" ? MOVIE_GENRES : TV_GENRES)[intent.genre];
             if (typeof id === "number") done(() => openFilter({ kind: "genre", mediaType: intent.mediaType, name: intent.genre, id }));
@@ -249,13 +246,20 @@ export function SearchOverlay() {
   );
   const native = useNativeBrowsePage("search", {
     active: open,
-    blocked: directNow || aiNow,
+    blocked: false,
     hidden: guideOpen,
     noTogether: true,
     t,
     search: nativeSearch,
-    rows: tq ? resultRows : sinkRows,
-    message: !tq
+    // A magnet or video link: its card (the sink); otherwise Browse, the AI card (the sink), the rest.
+    rows: !tq
+      ? sinkRows
+      : directNow
+        ? sinkRows
+        : resultRows[0]?.key === "intent"
+          ? [resultRows[0], ...sinkRows, ...resultRows.slice(1)]
+          : [...sinkRows, ...resultRows],
+    message: !tq || directNow
       ? null
       : stillSearching
         ? { text: resultsIn ? t("Searching more sources…") : t("Looking…") }
@@ -271,11 +275,12 @@ export function SearchOverlay() {
   if (native) {
     return createPortal(
       <>
-        {!tq && (
-          <NativeRowSinkContext.Provider value={sink}>
-            <EmptyState onClose={closeSearch} onOpenGuide={() => setGuideOpen(true)} />
-          </NativeRowSinkContext.Provider>
-        )}
+        <NativeRowSinkContext.Provider value={sink}>
+          {!tq && <EmptyState onClose={closeSearch} onOpenGuide={() => setGuideOpen(true)} />}
+          {tq && isMagnetInput(tq) && <MagnetCard raw={tq} onClose={closeSearch} />}
+          {tq && !isMagnetInput(tq) && isDirectVideoUrl(tq) && <UrlCard raw={tq} onClose={closeSearch} />}
+          {tq && !directNow && <AiSearchSection query={tq} onClose={closeSearch} />}
+        </NativeRowSinkContext.Provider>
         {guideOpen && <GuideModal onClose={() => setGuideOpen(false)} />}
       </>,
       document.body,

@@ -397,6 +397,12 @@ class NativeHome(
             if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
             for (r in m.rows) {
+                if (r.kind == HomeRow.Kind.ACTION) {
+                    // Cards that do one thing (Browse a genre, Ask AI, play a link), no heading.
+                    val base = stableId(r.key) shl 20
+                    r.items.forEachIndexed { i, _ -> out.add(Section(T_ACTION, base + i, r, start = i)) }
+                    continue
+                }
                 if (r.kind == HomeRow.Kind.WINNERS) {
                     // An award's category: its heading, then a line for each winner (year, title).
                     out.add(Section(T_ROW, stableId(r.key), r))
@@ -485,6 +491,7 @@ class NativeHome(
             T_LISTITEM -> ListItemHolder()
             T_QUEUE -> QueueHolder()
             T_WINNER -> WinnerHolder()
+            T_ACTION -> ActionHolder()
             T_CALBAR -> CalendarBarHolder()
             T_CALENDAR -> CalendarHolder()
             T_DL_TOP -> DownloadsTopHolder()
@@ -520,6 +527,7 @@ class NativeHome(
                 is DownloadGroupHolder -> m.downloads?.groups?.getOrNull(items[position].start)?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
+                is ActionHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is WinnerHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
             }
         }
@@ -1094,6 +1102,117 @@ class NativeHome(
             year.setTextColor(c.tint ?: colors.accent)
             title.text = c.title
             title.setTextColor(colors.ink)
+        }
+    }
+
+    /**
+     * A card that does one thing, as the search page draws them: a round icon, a small label in
+     * the accent colour, the title, a line under it, and a button at the end (Play) or a spinner.
+     * A tap on the card sends {a:"open"}, on its button {a:"play"}.
+     */
+    private inner class ActionHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val card = itemView as LinearLayout
+        private val iconBox = FrameLayout(ctx)
+        private val iconView = ImageView(ctx)
+        private val kicker = label("", 11f, bold = true, lines = 1)
+        private val title = label("", 15f, bold = true, lines = 1)
+        private val sub = label("", 12.5f, lines = 2)
+        private val button = LinearLayout(ctx)
+        private val buttonIcon = ImageView(ctx)
+        private val buttonText = label("", 15f, bold = true, lines = 1)
+        private val spinner = android.widget.ProgressBar(ctx).apply { isIndeterminate = true }
+        private var rowKey = ""
+        private var index = -1
+
+        init {
+            card.orientation = LinearLayout.HORIZONTAL
+            card.gravity = Gravity.CENTER_VERTICAL
+            card.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = gutter
+                marginEnd = gutter
+                bottomMargin = dp(20)
+            }
+            card.minimumHeight = dp(56)
+            card.setPaddingRelative(dp(20), dp(12), dp(16), dp(12))
+            card.isClickable = true
+            card.isFocusable = true
+            card.setOnClickListener { act("open", row = rowKey, i = index) }
+            iconBox.addView(iconView, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER))
+            card.addView(iconBox, LinearLayout.LayoutParams(dp(40), dp(40)))
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(kicker)
+            texts.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) })
+            texts.addView(sub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) })
+            card.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(14); marginEnd = dp(12) })
+            button.orientation = LinearLayout.HORIZONTAL
+            button.gravity = Gravity.CENTER
+            button.setPaddingRelative(dp(20), 0, dp(22), 0)
+            button.isClickable = true
+            button.isFocusable = true
+            button.setOnClickListener { act("play", row = rowKey, i = index) }
+            button.addView(buttonIcon, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(8) })
+            button.addView(buttonText)
+            card.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
+            card.addView(spinner, LinearLayout.LayoutParams(dp(20), dp(20)))
+        }
+
+        fun bind(r: HomeRow, i: Int, c: HomeCard) {
+            rowKey = r.key
+            index = i
+            val rtl = model?.rtl == true
+            val tone = c.tone ?: "accent"
+            val toneColor = when (tone) {
+                "danger" -> 0xFFE5484D.toInt()
+                "plain" -> colors.ink
+                else -> colors.accent
+            }
+            card.background = focusable(
+                when (tone) {
+                    "plain" -> rounded(withAlpha(colors.surface, 0.4f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+                    else -> rounded(withAlpha(toneColor, 0.1f), dp(16).toFloat(), dp(1), withAlpha(toneColor, 0.4f))
+                },
+            )
+            card.contentDescription = listOfNotNull(c.kicker, c.title).joinToString(" ")
+            val res = when (c.icon) {
+                "magnet" -> R.drawable.ic_magnet
+                "link" -> R.drawable.ic_link_2
+                "alert" -> R.drawable.ic_circle_alert
+                "sparkles" -> R.drawable.ic_sparkles
+                "calendar" -> R.drawable.ic_calendar
+                "tag" -> R.drawable.ic_tag
+                else -> 0
+            }
+            iconBox.visibility = if (res != 0) View.VISIBLE else View.GONE
+            if (res != 0) {
+                iconView.setImageDrawable(icon(res, if (tone == "plain") colors.subtle else toneColor))
+                val disc = if (tone == "plain") withAlpha(colors.ink, 0.06f) else withAlpha(toneColor, 0.2f)
+                iconBox.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(disc)
+                }
+            }
+            kicker.text = c.kicker?.let { if (rtl) it else it.uppercase() } ?: ""
+            kicker.visibility = if (c.kicker.isNullOrBlank()) View.GONE else View.VISIBLE
+            kicker.letterSpacing = if (rtl) 0f else 0.18f
+            kicker.setTextColor(if (tone == "danger") colors.ink else colors.accent)
+            title.text = c.title
+            title.visibility = if (c.title.isBlank()) View.GONE else View.VISIBLE
+            title.setTextColor(colors.ink)
+            title.setTypeface(null, if (c.kicker.isNullOrBlank() && tone == "plain") Typeface.NORMAL else Typeface.BOLD)
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (c.kicker.isNullOrBlank() && tone == "plain") 14f else 15f)
+            sub.text = c.sub ?: ""
+            sub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
+            sub.setTextColor(if (tone == "danger") colors.muted else colors.subtle)
+            button.visibility = if (c.button != null) View.VISIBLE else View.GONE
+            button.isEnabled = !c.busy
+            button.alpha = if (c.busy) 0.6f else 1f
+            button.background = focusable(rounded(colors.ink, dp(22).toFloat()))
+            buttonIcon.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
+            buttonIcon.visibility = if (c.busy) View.GONE else View.VISIBLE
+            buttonText.text = c.button ?: ""
+            buttonText.setTextColor(colors.canvas)
+            spinner.visibility = if (c.busy && c.button == null) View.VISIBLE else View.GONE
+            spinner.indeterminateTintList = android.content.res.ColorStateList.valueOf(colors.muted)
         }
     }
 
@@ -3788,6 +3907,7 @@ class NativeHome(
         private const val T_CALENDAR = 22
         private const val T_DL_TOP = 23
         private const val T_DL_GROUP = 24
+        private const val T_ACTION = 25
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

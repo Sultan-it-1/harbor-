@@ -98,6 +98,10 @@ class HomeModel(
                             kicker = c.str("kicker"),
                             play = c.optBoolean("play", false),
                             emblem = c.optBoolean("emblem", false),
+                            icon = c.str("icon"),
+                            tone = c.str("tone"),
+                            button = c.str("button"),
+                            busy = c.optBoolean("busy", false),
                             desc = c.str("desc"),
                         )
                     }
@@ -134,6 +138,7 @@ class HomeModel(
                             "people" -> HomeRow.Kind.PEOPLE
                             "list" -> HomeRow.Kind.LIST
                             "winners" -> HomeRow.Kind.WINNERS
+                            "action" -> HomeRow.Kind.ACTION
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -434,7 +439,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -486,6 +491,12 @@ class HomeCard(
     val emblem: Boolean = false,
     /** An episode's overview (two lines). */
     val desc: String? = null,
+    /** An action card ([HomeRow.Kind.ACTION]): its icon, look ("accent", "plain", "danger"),
+     *  the button at its end (sends {a:"play"}) and a spinner while it works. */
+    val icon: String? = null,
+    val tone: String? = null,
+    val button: String? = null,
+    val busy: Boolean = false,
 )
 
 /** A row's controls in the page's editor. [numerals] / [hero]: 1 on, 0 off, -1 not offered. */

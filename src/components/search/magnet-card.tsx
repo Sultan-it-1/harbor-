@@ -10,6 +10,8 @@ import {
 } from "@/lib/torrent/stremio-stream";
 import { useView, type PlayerSrc } from "@/lib/view";
 import { t } from "@/lib/i18n/translate";
+import { useReportNativeRow } from "@/views/native/native-sink";
+import type { NativeRowInput } from "@/views/native/native-screens";
 
 type Mode = "idle" | "starting" | "picking" | "error";
 
@@ -20,20 +22,10 @@ export function MagnetCard({ raw, onClose }: { raw: string; onClose: () => void 
   const [files, setFiles] = useState<TorrentFile[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  if (!parsed) {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl border border-edge-soft bg-elevated/60 px-5 py-4">
-        <AlertCircle size={22} className="shrink-0 text-ink-subtle" />
-        <span className="text-[14px] text-ink-muted">
-          {t("That does not look like a valid magnet link or infohash.")}
-        </span>
-      </div>
-    );
-  }
-
-  const title = parsed.name ?? "Magnet stream";
+  const title = parsed?.name ?? "Magnet stream";
 
   const startPlay = (fileIdx: number | null, name?: string) => {
+    if (!parsed) return;
     const src: PlayerSrc = {
       meta: { id: `magnet:${parsed.infoHash}`, type: "movie", name: title },
       url: buildTorrentStreamUrl({
@@ -50,6 +42,7 @@ export function MagnetCard({ raw, onClose }: { raw: string; onClose: () => void 
   };
 
   const onPlay = async () => {
+    if (!parsed) return;
     setMode("starting");
     setError(null);
     const ready = await awaitCastServerReady(8000);
@@ -67,6 +60,60 @@ export function MagnetCard({ raw, onClose }: { raw: string; onClose: () => void 
     }
     startPlay(videos[0]?.idx ?? null, videos[0]?.name);
   };
+
+  // Android's native search screen: the same card (native-sink); its files to pick, when there
+  // are several, listed under it.
+  const nativeRow: NativeRowInput = !parsed
+    ? {
+        key: "direct",
+        title: "",
+        kind: "action",
+        metas: [],
+        cards: [{ icon: "alert", tone: "plain", title: t("That does not look like a valid magnet link or infohash.") }],
+      }
+    : mode === "picking"
+      ? {
+          key: "direct",
+          title: `${files.length} ${t("playable files")}`,
+          kind: "winners",
+          metas: [],
+          cards: files.map((f) => ({ title: f.name, sub: formatSize(f.length) })),
+          onOpen: (i) => {
+            const f = files[i];
+            if (f) startPlay(f.idx, f.name);
+          },
+        }
+      : {
+          key: "direct",
+          title: "",
+          kind: "action",
+          metas: [],
+          cards: [
+            {
+              icon: "magnet",
+              kicker: t("Torrent link"),
+              title: parsed.name ?? "Magnet stream",
+              sub: error ?? t("Streams directly from peers over your own connection."),
+              button: mode === "starting" ? t("Starting") : t("Play"),
+              busy: mode === "starting",
+            },
+          ],
+          onOpen: () => void onPlay(),
+          onPlay: () => void onPlay(),
+        };
+  const native = useReportNativeRow("search:direct", 0, nativeRow);
+  if (native) return null;
+
+  if (!parsed) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-edge-soft bg-elevated/60 px-5 py-4">
+        <AlertCircle size={22} className="shrink-0 text-ink-subtle" />
+        <span className="text-[14px] text-ink-muted">
+          {t("That does not look like a valid magnet link or infohash.")}
+        </span>
+      </div>
+    );
+  }
 
   if (mode === "picking") {
     return (

@@ -455,7 +455,7 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action";
   /** Choices under the title (a series' seasons) and what picking one does. */
   chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
   onRowChip?: (id: string) => void;
@@ -539,6 +539,12 @@ export type NativeCardInput = {
   progress?: number;
   watched?: boolean;
   desc?: string | null;
+  /** An "action" row's card: its icon (magnet, link, alert, sparkles, calendar, tag), look
+   *  (accent, plain, danger), the button at its end (onPlay) and a spinner while it works. */
+  icon?: string | null;
+  tone?: "accent" | "plain" | "danger";
+  button?: string | null;
+  busy?: boolean;
 };
 
 /** The page's row editor (Discover, Movies, Shows): the page-rows customisation it edits. */
@@ -607,6 +613,10 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
         progress: c.progress ?? 0,
         watched: !!c.watched,
         desc: c.desc ?? null,
+        icon: c.icon ?? null,
+        tone: c.tone ?? null,
+        button: c.button ?? null,
+        busy: !!c.busy,
       })),
       chips: r.chips ?? null,
       tools: r.tools ?? [],
