@@ -691,16 +691,23 @@ export function DetailView({
   // lists, downloads and seasons).
   const { topKind, openPerson, openCollection } = useView();
   const nativeOn = useNativeScreensEnabled();
-  // Series too once their seasons are known (the list then hands its row over, native-sink);
-  // anime, live channels and addon-only series (no seasons) keep the page for now.
+  // Series too (their episode list hands its row over, native-sink): TMDB's seasons, or the
+  // addon's / Cinemeta's videos when TMDB has none. Live channels keep the page for now.
   const nativeBlocked =
     (meta.type !== "movie" && meta.type !== "series" && meta.type !== "anime") ||
     detectingAnime ||
     !!liveContext ||
-    layoutEdit ||
-    (!isAnime && isSeries && !loading && (!detail || detail.seasons.length === 0));
+    layoutEdit;
   const [episodesSink, episodesRows] = useNativeRowSink(nativeOn && !nativeBlocked);
   const showEpisodes = !!detail && !isAnime && isSeries && detail.seasons.length > 0;
+  const cinemetaVideos = cinemetaFull?.videos;
+  const showCinemetaEpisodes =
+    !liveContext &&
+    (!detail || detail.seasons.length === 0) &&
+    !isAnime &&
+    isSeries &&
+    !!cinemetaVideos &&
+    (addonNative ? cinemetaVideos.length > 0 : cinemetaVideos.some((v) => v.season != null && v.season > 0 && v.episode != null));
   // Anime: its own episode list (the franchise's parts, Kitsu episodes), handed over the same way.
   const showAnimeEpisodes = !!detail && isAnime && (animeEpisodes.length > 1 || franchise.length > 1);
   const [awardsOpen, setAwardsOpen] = useState(false);
@@ -911,8 +918,8 @@ export function DetailView({
     [isAnime, watchProviders, streamers, t],
   );
   const nativeAllRows = useMemo(
-    () => [...(watchOnRow ? [watchOnRow] : []), ...(showEpisodes || showAnimeEpisodes ? episodesRows : []), ...nativeRows],
-    [watchOnRow, showEpisodes, showAnimeEpisodes, episodesRows, nativeRows],
+    () => [...(watchOnRow ? [watchOnRow] : []), ...(showEpisodes || showAnimeEpisodes || showCinemetaEpisodes ? episodesRows : []), ...nativeRows],
+    [watchOnRow, showEpisodes, showAnimeEpisodes, showCinemetaEpisodes, episodesRows, nativeRows],
   );
   const native = useNativeBrowsePage("detail", {
     active: topKind === "meta",
@@ -999,6 +1006,11 @@ export function DetailView({
               year={releaseYearNum}
             />
           </WebSheet>
+        )}
+        {showCinemetaEpisodes && cinemetaVideos && (
+          <NativeRowSinkContext.Provider value={episodesSink}>
+            <CinemetaEpisodes meta={playMeta} videos={cinemetaVideos} />
+          </NativeRowSinkContext.Provider>
         )}
         {showAnimeEpisodes && detail && (
           <NativeRowSinkContext.Provider value={episodesSink}>

@@ -13,6 +13,10 @@ import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 import { EpisodeDownloadButton } from "./episode-download-button";
 import { uiLocale } from "@/lib/i18n/locale";
+import { useAuth } from "@/lib/auth";
+import { useDebridClients } from "@/lib/debrid/registry";
+import { seasonJobKey, startSeasonDownload, stopSeasonDownload, useSeasonDownload } from "@/lib/download/season-download";
+import { useReportNativeRow } from "@/views/native/native-sink";
 
 type Translator = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -94,8 +98,99 @@ export function CinemetaEpisodes({
     setActive(pickDefaultSeason(meta.id, grouped.map((g) => g.seasonNumber)));
   }, [meta.id, grouped.length]);
 
-  if (grouped.length === 0) return null;
   const activeEps = grouped.find((g) => g.seasonNumber === active)?.episodes ?? [];
+
+  // Android: the title's page is drawn natively; this list hands its row over (native-sink) as
+  // the page shows it: "Episodes" with the count, the seasons, Download season (Stop while it
+  // runs), then each episode (its picture with the number and the watched check, the name,
+  // "S1 E3 · date"). A tap plays it, its download button picks a source to save, a long-press
+  // opens the page's watched menu over the screen.
+  const { openPicker } = useView();
+  const { settings } = useSettings();
+  const { authKey } = useAuth();
+  const debrids = useDebridClients();
+  const playEps = activeEps.map((ep, i) => ({
+    season: ep.season ?? 0,
+    episode: ep.episode ?? ep.number ?? (ep.season == null ? i + 1 : 1),
+    name: ep.name || ep.title || undefined,
+    videoId: ep.id || undefined,
+    still: ep.thumbnail || undefined,
+  }));
+  const dlKey = seasonJobKey(meta.id, playEps);
+  const dlProgress = useSeasonDownload(dlKey);
+  const dlRunning = !!dlProgress && !dlProgress.finished;
+  const nativeEpisodes = useReportNativeRow(
+    "episodes",
+    0,
+    grouped.length === 0
+      ? null
+      : {
+          key: "episodes",
+          title: t("Episodes"),
+          sub: activeEps.length === 1 ? t("{n} episode", { n: 1 }) : t("{n} episodes", { n: activeEps.length }),
+          kind: "episodes",
+          noInfo: true,
+          metas: [],
+          chips:
+            grouped.length > 1
+              ? { key: "season", items: grouped.map((g) => ({ id: String(g.seasonNumber), label: seasonLabel(t, g.seasonNumber), on: g.seasonNumber === active })) }
+              : null,
+          tools: playEps.length > 0 ? [dlRunning ? { id: "stopdl", label: t("Stop") } : { id: "download", label: t("Download season") }] : [],
+          cards: activeEps.map((ep, i) => {
+            const pe = playEps[i];
+            const aired = formatAired(ep.released ?? ep.firstAired ?? null);
+            return {
+              title: ep.name || ep.title || aired || t("Episode {n}", { n: pe.episode }),
+              sub: [ep.season != null ? `S${ep.season} E${pe.episode}` : null, aired].filter(Boolean).join("  ·  "),
+              img: ep.thumbnail ? [ep.thumbnail] : [],
+              rank: ep.season != null ? pe.episode : 0,
+              watched: manualWatchedState(meta.id, pe.season, pe.episode) === true,
+              play: true,
+            };
+          }),
+          onOpen: (i) => {
+            const pe = playEps[i];
+            if (pe) openPicker(meta, pe, { autoPlay: settings.instantPlay });
+          },
+          onRowChip: (id) => {
+            const n = Number(id);
+            if (!Number.isFinite(n)) return;
+            userPickedRef.current = true;
+            setLastSeason(meta.id, n);
+            setActive(n);
+          },
+          onTool: (id) => {
+            if (id === "download") {
+              const q = playEps.length === 1 ? t("Download 1 episode?") : t("Download {n} episodes?", { n: playEps.length });
+              if (window.confirm(q)) startSeasonDownload(dlKey, { meta, episodes: playEps, authKey, settings, debrids });
+            } else if (id === "stopdl") {
+              stopSeasonDownload(dlKey);
+            }
+          },
+          onAction: (a, i) => {
+            const pe = playEps[i];
+            if (!pe) return false;
+            if (a === "dl") openPicker(meta, pe, { intent: "download" });
+            else if (a === "hold") {
+              setWatchedMenu({
+                x: window.innerWidth / 2,
+                y: window.innerHeight / 2,
+                season: pe.season,
+                episode: pe.episode,
+                watched: manualWatchedState(meta.id, pe.season, pe.episode) === true,
+              });
+            }
+            return true;
+          },
+        },
+  );
+  if (nativeEpisodes) {
+    return watchedMenu ? (
+      <EpisodeWatchedMenu metaId={meta.id} target={watchedMenu} allEpisodes={allEpisodesOrdered} onClose={() => setWatchedMenu(null)} />
+    ) : null;
+  }
+
+  if (grouped.length === 0) return null;
 
   return (
     <div data-episodes className="flex scroll-mt-24 flex-col gap-6">
