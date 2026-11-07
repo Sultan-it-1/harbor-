@@ -3,6 +3,7 @@ import { ArrowRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DoneStep } from "@/components/onboarding/done-step";
 import { Dots } from "@/components/onboarding/dots";
+import { LanguageStep } from "@/components/onboarding/language-step";
 import { LayoutStep } from "@/components/onboarding/layout-step";
 import { SplashStep } from "@/components/onboarding/splash-step";
 import { StreamingStep } from "@/components/onboarding/streaming-step";
@@ -13,18 +14,40 @@ import { WelcomeStep } from "@/components/onboarding/welcome-step";
 import { useT } from "@/lib/i18n";
 import { useOnboarding } from "@/lib/onboarding";
 
-type StepId = "splash" | "welcome" | "layout" | "tmdb" | "stremio" | "streaming" | "subtitles" | "done";
-// The "layout" step compares two desktop home layouts; the phone app has its own layout, so the
-// step is skipped there.
+type StepId = "splash" | "language" | "welcome" | "layout" | "tmdb" | "stremio" | "streaming" | "subtitles" | "done";
+// The language comes first, so the rest of the setup is in the chosen one. The "layout" step
+// compares two desktop home layouts; the phone app has its own layout, so the step is skipped there.
 const STEPS: StepId[] = isPhoneLayout()
-  ? ["splash", "welcome", "tmdb", "stremio", "streaming", "subtitles", "done"]
-  : ["splash", "welcome", "layout", "tmdb", "stremio", "streaming", "subtitles", "done"];
+  ? ["splash", "language", "welcome", "tmdb", "stremio", "streaming", "subtitles", "done"]
+  : ["splash", "language", "welcome", "layout", "tmdb", "stremio", "streaming", "subtitles", "done"];
+
+// Where the setup is, for this session: choosing a language reloads the page (its content then
+// comes in that language), and the setup must carry on from where it was, not start over.
+const STEP_KEY = "harbor.onboarding.step";
+
+function savedStep(): number {
+  try {
+    const v = Number(sessionStorage.getItem(STEP_KEY));
+    return Number.isInteger(v) && v > 0 && v < STEPS.length ? v : 0;
+  } catch {
+    return 0;
+  }
+}
 
 export function OnboardingModal() {
   const { onboarded, finishOnboarding } = useOnboarding();
   const t = useT();
-  const [stepIdx, setStepIdx] = useState(0);
+  const [stepIdx, setStepIdx] = useState(savedStep);
   const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (onboarded) sessionStorage.removeItem(STEP_KEY);
+      else sessionStorage.setItem(STEP_KEY, String(stepIdx));
+    } catch {
+      /* not remembered: a reload starts the setup over */
+    }
+  }, [stepIdx, onboarded]);
 
   useEffect(() => {
     if (!onboarded) document.body.style.overflow = "hidden";
@@ -83,6 +106,7 @@ export function OnboardingModal() {
               }
             >
               <div key={step} className="animate-step-in">
+                {step === "language" && <LanguageStep />}
                 {step === "welcome" && <WelcomeStep />}
                 {step === "layout" && <LayoutStep />}
                 {step === "tmdb" && <TmdbStep />}

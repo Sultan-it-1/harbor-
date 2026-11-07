@@ -320,6 +320,7 @@ const misc: Record<string, string> = {
   "· This title is too new and no source has it cached yet.": "· هذا العمل جديد جدًا ولم يقم أي مصدر بتخزينه مؤقتًا بعد.",
   "Browse streams manually": "تصفح المصادر يدويًا",
   Exit: "خروج",
+  "You can change it any time in Settings.": "تقدر تغيّرها متى ما تبي من الإعدادات.",
   "Debrid is down": "Debrid معطل",
   "No streaming sources yet": "لا توجد مصادر بث بعد",
   "· Install a stream addon (Torrentio, Comet, MediaFusion).": "· تثبيت إضافة بث (Torrentio، Comet، MediaFusion).",
