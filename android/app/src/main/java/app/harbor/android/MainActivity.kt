@@ -3,6 +3,7 @@ package app.harbor.android
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -13,6 +14,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Base64
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -49,6 +51,8 @@ import java.security.SecureRandom
  *                                                 -> window.__harborNativeEvent(eventJson)
  *   window.HarborAndroid.saveFile(id, name, mime, base64) -> window.__harborFileSaved(id, "1"|"0")
  *   native back button                            -> window.__harborAndroidBack(): boolean
+ *   window.HarborAndroid.homeSet(modelJson) / homeShow(on, bottom, width)
+ *                                                 -> window.__harborNativeHome(actionJson)  (NativeHome)
  *
  * Bridge security: the Java object is injected as `__harborNative` into every frame (Android
  * can't limit addJavascriptInterface to one frame), and each method wants a per-launch secret
@@ -63,6 +67,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var fetcher: NativeFetch
     private lateinit var downloads: Downloads
     private lateinit var images: ImageCache
+    private lateinit var nativeImages: NativeImages
+    private lateinit var home: NativeHome
     private lateinit var assets: WebAssets
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -152,18 +158,25 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) captureLink(intent)
 
         assets = WebAssets(this, bridgeScript())
-        images = ImageCache(this, minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels))
+        val shortSide = minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
+        images = ImageCache(this, shortSide)
+        nativeImages = NativeImages(images.store, shortSide)
         webView = buildWebView()
         // A process kept alive by the download service may still have WebView timers paused from
         // an earlier activity (pauseTimers is process-wide): a new page must start with them on.
         webView.resumeTimers()
         root.addView(webView, 0, FrameLayout.LayoutParams(MATCH, MATCH))
+        // The native Home sits over the page (and under the player, added next); hidden until the
+        // page asks for it.
+        home = NativeHome(this, nativeImages) { action -> sendToJs("__harborNativeHome", action.toString()) }
+        root.addView(home.root, 1, FrameLayout.LayoutParams(MATCH, MATCH))
         player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
         val ua = webView.settings.userAgentString
         fetcher.userAgent = ua
         player.userAgent = ua
         downloads.userAgent = ua
         images.userAgent = ua
+        nativeImages.userAgent = ua
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = onBack()
@@ -289,6 +302,7 @@ class MainActivity : ComponentActivity() {
             old.destroy()
         } catch (_: Exception) {
         }
+        home.show(false, 0)
         webView = buildWebView()
         webView.resumeTimers()
         webPaused = false
@@ -314,6 +328,20 @@ class MainActivity : ComponentActivity() {
         // configChanges), so the page and a playing video survive them.
         webView.settings.textZoom = textZoomFor(newConfig)
         if (player.isShowing) root.post { player.applyChromeInsets() }
+    }
+
+    /**
+     * D-pad / controller (handhelds, TV boxes): while the native Home is on screen, arrow keys move
+     * through its rows instead of going to the page hidden underneath.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode in DPAD_KEYS &&
+            ::home.isInitialized && home.isShowing && !home.root.hasFocus() &&
+            !(::player.isInitialized && player.isShowing) && home.takeFocus()
+        ) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /** Home pressed while a video plays: continue in picture-in-picture. */
@@ -556,6 +584,7 @@ class MainActivity : ComponentActivity() {
     /** Android is short of memory: the page drops pages it keeps mounted and its caches. */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
+        nativeImages.trim(severe = level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE || (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN && !home.isShowing))
         if (pageLoaded) webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('harbor:trim-memory',{detail:$level}))", null)
     }
 
@@ -747,6 +776,28 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun dlWifiOnly(t: String): Boolean = ok(t) && guard("dlWifiOnly", true) { downloads.wifiOnly }
+
+        // ---- native Home (see NativeHome.kt) ----
+        /** What Home shows (HomeModel JSON); drawn natively while [homeShow] has it on. */
+        @JavascriptInterface
+        fun homeSet(t: String, json: String) {
+            if (ok(t)) onUi("homeSet") { home.setModel(json) }
+        }
+
+        /**
+         * Native Home on (Home on screen, nothing over it) or off. [bottomCss] is the page's tab bar
+         * height and [cssWidth] the page's width, both in CSS pixels (to turn them into screen ones).
+         */
+        @JavascriptInterface
+        fun homeShow(t: String, on: Boolean, bottomCss: Double, cssWidth: Double) {
+            if (!ok(t)) return
+            onUi("homeShow") {
+                val scale = if (cssWidth > 0 && webView.width > 0) webView.width / cssWidth else resources.displayMetrics.density.toDouble()
+                val hadFocus = home.root.hasFocus()
+                home.show(on, (bottomCss * scale).toInt())
+                if (!home.isShowing && hadFocus) webView.requestFocus()
+            }
+        }
     }
 
     companion object {
@@ -757,6 +808,9 @@ class MainActivity : ComponentActivity() {
         /** The raw bridge object's name; the page only ever uses the wrapped window.HarborAndroid. */
         private const val BRIDGE_NAME = "__harborNative"
         private const val MIN_WEBVIEW_MAJOR = 111
+        private val DPAD_KEYS = setOf(
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+        )
         private const val REFUSED = "{\"ok\":false,\"error\":\"refused\"}"
         private val BLOCKED_SCHEMES = setOf("file", "content", "javascript", "data", "about", "blob", "android-app")
         private const val URI_GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION or

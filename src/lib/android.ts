@@ -36,6 +36,9 @@ type HarborAndroidApi = {
   setSecure?(on: boolean): void;
   /** Ask where to save a file (system "save as" screen). Answer: window.__harborFileSaved(id, "1"|"0"). */
   saveFile?(id: string, name: string, mime: string, base64: string): boolean;
+  /** Native Home (android/…/NativeHome.kt): what it shows, and whether it is on screen. */
+  homeSet?(json: string): void;
+  homeShow?(on: boolean, bottomCss: number, cssWidth: number): void;
 };
 
 export type NativePlayerEvent =
@@ -74,6 +77,8 @@ declare global {
     /** Called by the shell when a link arrives while the page is running (see takeLink). */
     __harborDeepLinkCheck?: () => void;
     __harborFileSaved?: (id: string, ok: string) => void;
+    /** Taps on the native Home (see src/views/home/native-home.ts). */
+    __harborNativeHome?: (json: string) => void;
   }
 }
 

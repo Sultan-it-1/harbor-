@@ -21,7 +21,8 @@ import java.util.concurrent.Executors
 class ImageCache(context: Context, private val screenShortSidePx: Int) {
     @Volatile var userAgent: String = "HarborAndroid"
 
-    private val store = ImageStore(File(context.cacheDir, "images"))
+    /** Also read by the native screens (NativeImages), so both share one cache. */
+    val store = ImageStore(File(context.cacheDir, "images"))
 
     init {
         Executors.newSingleThreadExecutor { r -> Thread(r, "harbor-img-sweep").apply { isDaemon = true } }

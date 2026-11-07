@@ -103,7 +103,7 @@ export function PhoneTabBar() {
   return (
     <>
       {moreOpen && (
-        <div className="fixed inset-0 z-[180] flex flex-col justify-end bg-black/55" onClick={() => setMoreOpen(false)}>
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-[180] flex flex-col justify-end bg-black/55" onClick={() => setMoreOpen(false)}>
           <div
             className="rounded-t-3xl border-t border-edge bg-surface px-4 pt-3"
             style={{ paddingBottom: `calc(${PHONE_TABBAR_H + 12}px + env(safe-area-inset-bottom))` }}

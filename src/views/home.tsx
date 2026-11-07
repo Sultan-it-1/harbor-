@@ -50,7 +50,8 @@ import { useSimkl } from "@/lib/simkl/provider";
 import { useMediaFavorites, type MediaEntry } from "@/lib/media-favorites";
 import { useLocalWatchlist } from "@/lib/local-watchlist";
 import { useScrollMemory, useView } from "@/lib/view";
-import { CustomizableRows } from "./home/customizable-rows";
+import { CustomizableRows, homeRowMetas, makeWatchedTest } from "./home/customizable-rows";
+import { useNativeHome, type NativeHomeRow } from "./home/native-home";
 import { CustomizeBar } from "./home/customize-bar";
 import { CWSection } from "./home/cw-section";
 import { useCwAdvance } from "./home/hooks/use-cw-advance";
@@ -66,6 +67,8 @@ import type { HomeRow } from "./home/home-types";
 import { RowSkeleton } from "./home/row-skeleton";
 import { AddSourceModal } from "@/components/add-source-modal";
 import type { SourceRow } from "@/lib/custom-sources";
+
+const NO_METAS: Meta[] = [];
 
 export function Home({ active = true }: { active?: boolean }) {
   const { authKey, user } = useAuth();
@@ -614,6 +617,38 @@ export function Home({ active = true }: { active?: boolean }) {
         : [],
     [settings.tmdbKey, settings.streaming],
   );
+
+  // Android: Home drawn natively (see ./home/native-home.ts); the page's own Home stays empty.
+  const isWatched = useMemo(() => makeWatchedTest(traktWatched, localWatched), [traktWatched, localWatched]);
+  const nativeRows = useMemo<NativeHomeRow[]>(() => {
+    const out: NativeHomeRow[] = [];
+    for (const row of visibleRows) {
+      if (homeRowsCustom.hidden.includes(row.key)) continue;
+      const metas = homeRowMetas(row, { hideWatched: settings.hideWatchedInCatalogs, homeLanguages: settings.homeLanguages, isWatched });
+      const ranked = (homeRowsCustom.numerals ?? []).includes(row.key) && metas.length >= 10;
+      out.push({ row, metas, ranked });
+    }
+    return out;
+  }, [visibleRows, homeRowsCustom, settings.hideWatchedInCatalogs, settings.homeLanguages, isWatched]);
+  const nativeTop10 = settings.homeMode !== "classic" && top10.length >= 10 && !homeRowsCustom.hidden.includes("top10") ? top10 : NO_METAS;
+  const nativeHome = useNativeHome({
+    active,
+    editMode,
+    setEditMode,
+    t,
+    heroSlides,
+    showHero: settings.homeMode !== "classic" && !homeRowsCustom.hidden.includes("hero"),
+    cwItems,
+    signedIn: !!authKey,
+    top10: nativeTop10,
+    top10Title: rows[0] ? (rows[0].name.toLowerCase().includes("top") ? t(rows[0].name) : t("Top 10 {name}", { name: t(rows[0].name) })) : "",
+    rows: nativeRows,
+    onLoadMore: loadMore,
+    resetTick: homeResetTick,
+  });
+  if (nativeHome) {
+    return <main ref={scrollCb} aria-hidden="true" className="flex-1 overflow-hidden" />;
+  }
 
   const phoneLayout = isPhoneLayout();
   return (

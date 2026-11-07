@@ -339,7 +339,7 @@ function downscaleTmdb(url?: string): string | undefined {
   return url.replace(/\/t\/p\/(original|w1280|w780|w500)\//, "/t/p/w300/");
 }
 
-function formatRemaining(t: (key: string, vars?: Record<string, string | number>) => string, ms: number) {
+export function formatRemaining(t: (key: string, vars?: Record<string, string | number>) => string, ms: number) {
   const minutes = Math.max(0, Math.round(ms / 60000));
   if (minutes < 60) return t("{m}m left", { m: minutes });
   const h = Math.floor(minutes / 60);

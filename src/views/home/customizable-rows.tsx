@@ -23,6 +23,44 @@ function metaTitleKey(meta: { id?: string }): string | null {
   return null;
 }
 
+/** Whether a title counts as watched, from Trakt history and the local playback history. */
+export function makeWatchedTest(
+  watchedSet?: Set<string>,
+  localWatched?: WatchedSet,
+): (m: { id: string; name?: string }) => boolean {
+  const watchedTitleKeys = new Set<string>();
+  if (watchedSet) {
+    for (const k of watchedSet) {
+      const parts = k.split(":");
+      if (parts.length >= 2) watchedTitleKeys.add(`${parts[0]}:${parts[1]}`);
+    }
+  }
+  return (m) => {
+    const key = metaTitleKey(m);
+    if (key != null && watchedTitleKeys.has(key)) return true;
+    if (localWatched) {
+      if (localWatched.ids.has(m.id)) return true;
+      const tk = watchTitleKey(m.name);
+      if (tk && localWatched.titles.has(tk)) return true;
+    }
+    return false;
+  };
+}
+
+/** The titles a Home row shows: the Home-languages and hide-watched settings applied. */
+export function homeRowMetas(
+  row: HomeRow,
+  opts: { hideWatched?: boolean; homeLanguages?: string[]; isWatched: (m: { id: string; name?: string }) => boolean },
+) {
+  let metas = row.metas.filter((m) => typeof m.id === "string");
+  const langs = opts.homeLanguages;
+  if (langs && langs.length > 0) {
+    metas = metas.filter((m) => !m.originalLanguage || langs.includes(m.originalLanguage));
+  }
+  if (opts.hideWatched) metas = metas.filter((m) => !opts.isWatched(m));
+  return metas;
+}
+
 function RowTitle({ row }: { row: HomeRow }) {
   const t = useT();
   const { openGrid } = useView();
@@ -80,35 +118,13 @@ export function CustomizableRows({
 }) {
   const { openGrid } = useView();
   const t = useT();
-  const watchedTitleKeys = useMemo(() => {
-    const out = new Set<string>();
-    if (!watchedSet) return out;
-    for (const k of watchedSet) {
-      const parts = k.split(":");
-      if (parts.length >= 2) out.add(`${parts[0]}:${parts[1]}`);
-    }
-    return out;
-  }, [watchedSet]);
-  const isWatched = (m: { id: string; name?: string }) => {
-    const key = metaTitleKey(m);
-    if (key != null && watchedTitleKeys.has(key)) return true;
-    if (localWatched) {
-      if (localWatched.ids.has(m.id)) return true;
-      const tk = watchTitleKey(m.name);
-      if (tk && localWatched.titles.has(tk)) return true;
-    }
-    return false;
-  };
+  const isWatched = useMemo(() => makeWatchedTest(watchedSet, localWatched), [watchedSet, localWatched]);
   return (
     <>
       {rows.map((row, rowIndex) => {
         const hidden = customization.hidden.includes(row.key);
         if (hidden && !editMode) return null;
-        let metas = row.metas.filter((m) => typeof m.id === "string");
-        if (homeLanguages && homeLanguages.length > 0) {
-          metas = metas.filter((m) => !m.originalLanguage || homeLanguages.includes(m.originalLanguage));
-        }
-        if (hideWatched) metas = metas.filter((m) => !isWatched(m));
+        const metas = homeRowMetas(row, { hideWatched, homeLanguages, isWatched });
         if (
           (hideWatched || (homeLanguages && homeLanguages.length > 0)) &&
           metas.length === 0 &&

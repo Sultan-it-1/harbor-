@@ -28,6 +28,7 @@ import { useT } from "@/lib/i18n";
 import { RegionField } from "./region-cascade";
 import { ExtLink, KeyField, Section, ToggleRow } from "./shared";
 import { TmdbGuideModal } from "./tmdb-tutorial-modal";
+import { nativeHomeAvailable } from "@/views/home/native-home";
 import { t } from "@/lib/i18n/translate";
 
 export type LibraryKey = "tmdb" | "omdb" | "rpdb" | "fanart" | "tvdb";
@@ -119,6 +120,14 @@ export function LibraryPanel({
           value={settings.homeMode}
           onChange={(v) => update({ homeMode: v })}
         />
+        {nativeHomeAvailable() && (
+          <ToggleRow
+            label={t("Native Home screen")}
+            sub={t("Draws Home and its poster rows with Android's own views instead of the web page: smoother, and posters show even on devices whose WebView can't draw them. Turn it off to use the web Home.")}
+            value={settings.nativeHome}
+            onChange={(v) => update({ nativeHome: v })}
+          />
+        )}
         <ToggleRow
           label={t("Show every addon row")}
           sub={t("By default, addon rails that duplicate the built-in ones (Trending, Popular, Top Rated, etc.) are merged so you don't see the same row twice. Turn this on to show every one, duplicates and all.")}

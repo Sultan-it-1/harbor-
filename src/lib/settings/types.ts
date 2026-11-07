@@ -193,6 +193,8 @@ export type Settings = {
   nextEpisodeLeadSec: number;
   autoPlayNextEpisode: boolean;
   hideWatchedInCatalogs: boolean;
+  /** Android app: Home and its poster rows drawn natively (NativeHome) instead of in the page. */
+  nativeHome: boolean;
   showPlaylistsTab: boolean;
   sportsLeagues: string[];
   hideSpoilers: boolean;

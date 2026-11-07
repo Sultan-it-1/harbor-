@@ -175,6 +175,7 @@ export const DEFAULT: Settings = {
   nextEpisodeLeadSec: -1,
   autoPlayNextEpisode: true,
   hideWatchedInCatalogs: false,
+  nativeHome: true,
   showPlaylistsTab: false,
   sportsLeagues: [],
   hideSpoilers: false,
