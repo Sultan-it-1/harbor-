@@ -1,5 +1,5 @@
 import { ArrowLeft, Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/back-to-top";
 import { CollectionCard } from "@/components/collection-card";
 import { HarborLoader } from "@/components/harbor-loader";
@@ -10,6 +10,8 @@ import { useSettings } from "@/lib/settings";
 import { useScrollMemory, useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 import { useCategoryFeed } from "./collections/use-category-feed";
+import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
+import { useCollectionTiles } from "@/views/native/native-sections";
 
 const FEED_QUERY = "collection";
 
@@ -20,7 +22,7 @@ function stripSuffix(name: string): string {
 export function CollectionsView() {
   const t = useT();
   const { settings } = useSettings();
-  const { goBack } = useView();
+  const { goBack, topKind, openCollection } = useView();
   const scrollRef = useRef<HTMLElement>(null);
   useScrollMemory("collections", scrollRef);
 
@@ -78,19 +80,15 @@ export function CollectionsView() {
     return () => io.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (done || !remoteQuery) return;
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting || loadingRef.current) return;
+  // The next page of results (the sentinel asks on the page; the native screen near its end).
+  const loadNextHits = useCallback(() => {
+    if (done || !remoteQuery || loadingRef.current) return;
         loadingRef.current = true;
         setLoading(true);
         const next = page + 1;
         const epoch = queryEpoch.current;
         const delay = searchActive && next === 1 ? 350 : 0;
-        const timer = window.setTimeout(() => {
+        window.setTimeout(() => {
           if (queryEpoch.current !== epoch) return;
           tmdbSearchCollections(settings.tmdbKey, remoteQuery, next)
             .then(({ hits: batch, totalPages }) => {
@@ -116,13 +114,103 @@ export function CollectionsView() {
               setLoading(false);
             });
         }, delay);
-        return () => window.clearTimeout(timer);
+  }, [remoteQuery, page, done, searchActive, settings.tmdbKey, curatedNames]);
+
+  useEffect(() => {
+    if (done || !remoteQuery) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadNextHits();
       },
       { rootMargin: "1200px 0px" },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [remoteQuery, page, done, searchActive, settings.tmdbKey, curatedNames]);
+  }, [remoteQuery, done, loadNextHits]);
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the heading, the
+  // search held at the top, the categories, then the collection cards two across. The first page
+  // of results is asked for at once (there is no sentinel on screen).
+  const nativeOn = useNativeScreensEnabled();
+  useEffect(() => {
+    if (nativeOn && remoteQuery && page === 0 && hits.length === 0 && !done && !loading) loadNextHits();
+  }, [nativeOn, remoteQuery, page, hits.length, done, loading, loadNextHits]);
+  useEffect(() => {
+    if (nativeOn && !searchActive && category !== "All" && catFeed.hits.length === 0 && !catFeed.done && !catFeed.loading) catFeed.pull();
+  }, [nativeOn, searchActive, category, catFeed]);
+  const curatedTiles = useCollectionTiles(searchActive ? [] : curated, nativeOn, settings.tmdbKey, t);
+  const feedTiles = useCollectionTiles(
+    !searchActive && category !== "All" ? catFeed.hits : [],
+    nativeOn,
+    settings.tmdbKey,
+    t,
+  );
+  const hitTiles = useCollectionTiles(
+    remoteQuery ? hits.map((h) => ({ id: h.id, name: stripSuffix(h.name), backdrop: h.backdrop })) : [],
+    nativeOn,
+    settings.tmdbKey,
+    t,
+  );
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [];
+    const grid = (key: string, note: string, tiles: { cards: NativeRowInput["cards"]; ids: number[] }, more?: () => void) => {
+      if (!tiles.cards || tiles.cards.length === 0) return;
+      out.push({
+        key,
+        title: "",
+        note,
+        metas: [],
+        kind: "tile",
+        grid: true,
+        min: 140,
+        ratio: 9 / 16,
+        cards: tiles.cards,
+        more,
+        onOpen: (i) => {
+          const id = tiles.ids[i];
+          if (id != null && id > 0) openCollection(id);
+        },
+      });
+    };
+    if (!searchActive) {
+      const label = category === "All" ? t("Featured") : t(category);
+      grid(
+        "curated",
+        curated.length === 1 ? t("{label} · {n} collection", { label, n: curated.length }) : t("{label} · {n} collections", { label, n: curated.length }),
+        curatedTiles,
+      );
+      if (category !== "All") grid("feed", t("More {category}", { category: t(category) }), feedTiles, catFeed.done ? undefined : catFeed.pull);
+    }
+    if (remoteQuery) {
+      grid(
+        "hits",
+        searchActive ? t('Results for "{query}"', { query: query.trim() }) : t("Every collection"),
+        hitTiles,
+        done ? undefined : loadNextHits,
+      );
+    }
+    return out;
+  }, [searchActive, category, curated, curatedTiles, feedTiles, hitTiles, catFeed.done, catFeed.pull, remoteQuery, query, done, loadNextHits, openCollection, t]);
+  const nativeChips = useMemo(
+    () => (searchActive ? null : [{ key: "cat", items: ["All", ...COLLECTION_CATEGORIES].map((c) => ({ id: c, label: t(c), on: c === category })) }]),
+    [searchActive, category, t],
+  );
+  const native = useNativeBrowsePage("collections", {
+    active: topKind === "collections",
+    t,
+    back: true,
+    header: { title: t("Collections"), subtitle: t("Every saga in one place. Search anything: if it exists, it's here."), size: 40 },
+    search: { key: "collections", hint: t("Search every collection on TMDB..."), text: query, busy: loading, onQuery: setQuery },
+    chips: nativeChips,
+    onChip: (_g, id) => setCategory(id),
+    rows: nativeRows,
+    message:
+      searchActive && hits.length === 0 && done ? { text: t("Nothing matched. Try the franchise's first film name.") } : null,
+    empty: { text: t("Loading…") },
+  });
+  if (native) return <main ref={scrollRef} aria-hidden="true" className="absolute inset-0 z-30 overflow-hidden bg-canvas" />;
 
   return (
     <main ref={scrollRef} className="absolute inset-0 z-30 overflow-y-auto bg-canvas">

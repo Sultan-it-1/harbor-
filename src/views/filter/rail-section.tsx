@@ -8,9 +8,10 @@ import { tmdbDiscover } from "@/lib/providers/tmdb";
 import { useSettings } from "@/lib/settings";
 import type { MetaFilter } from "@/lib/view";
 import type { StandardRail } from "./rails-config";
+import { useReportNativeRow } from "@/views/native/native-sink";
 import { MAX_PAGES, MIN_INITIAL_FILL, SpotlightGateContext } from "./spotlight-gate";
 
-export function RailSection({ filter, rail }: { filter: MetaFilter; rail: StandardRail }) {
+export function RailSection({ filter, rail, order = 0 }: { filter: MetaFilter; rail: StandardRail; order?: number }) {
   const t = useT();
   const { settings } = useSettings();
   const gate = useContext(SpotlightGateContext);
@@ -100,6 +101,13 @@ export function RailSection({ filter, rail }: { filter: MetaFilter; rail: Standa
       });
   };
 
+  // Android: the page draws the row natively (see @/views/native/native-sink).
+  const native = useReportNativeRow(
+    owner,
+    order,
+    items && items.length > 0 ? { key: owner, title: t(rail.title), sub: t(rail.kicker), metas: items, more: onEndReached } : null,
+  );
+  if (native) return null;
   if (items && items.length === 0) return null;
 
   const title = (

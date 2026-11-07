@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   tmdbCollection,
   tmdbSearchCollections,
@@ -57,6 +57,8 @@ export function useCategoryFeed(params: {
   done: boolean;
   loading: boolean;
   sentinelRef: React.RefObject<HTMLDivElement | null>;
+  /** The next pull (the sentinel does it on the page; the native screen near its end). */
+  pull: () => void;
 } {
   const { tmdbKey, category, active, excludeNames, stripSuffix } = params;
   const [hits, setHits] = useState<CategoryHit[]>([]);
@@ -76,13 +78,8 @@ export function useCategoryFeed(params: {
     loadingRef.current = false;
   }, [category, active]);
 
-  useEffect(() => {
-    if (!active || done) return;
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting || loadingRef.current) return;
+  const pull = useCallback(() => {
+    if (!active || done || loadingRef.current) return;
         loadingRef.current = true;
         setLoading(true);
         void (async () => {
@@ -126,12 +123,21 @@ export function useCategoryFeed(params: {
           loadingRef.current = false;
           setLoading(false);
         })();
+  }, [active, done, category, tmdbKey, excludeNames, stripSuffix]);
+
+  useEffect(() => {
+    if (!active || done) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) pull();
       },
       { rootMargin: "1200px 0px" },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [active, done, category, tmdbKey, excludeNames, stripSuffix]);
+  }, [active, done, pull]);
 
-  return { hits, done, loading, sentinelRef };
+  return { hits, done, loading, sentinelRef, pull };
 }

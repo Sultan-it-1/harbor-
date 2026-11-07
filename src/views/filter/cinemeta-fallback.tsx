@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { useReportNativeRow } from "@/views/native/native-sink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PickCard } from "@/components/pick-card";
 import { type Meta, topMovies, topSeries } from "@/lib/cinemeta";
@@ -75,6 +76,16 @@ export function CinemetaFallback({ filter }: { filter: MetaFilter }) {
     return () => io.disconnect();
   }, [loadMore, exhausted, items.length]);
 
+  // Android: the page draws the grid natively (see @/views/native/native-sink), three across like
+  // the page's.
+  const native = useReportNativeRow(
+    "cinemeta",
+    0,
+    filter.kind === "genre" && items.length > 0
+      ? { key: "cinemeta", title: "", metas: items, grid: true, min: 96, more: exhausted ? undefined : () => void loadMore() }
+      : null,
+  );
+  if (native && filter.kind === "genre") return null;
   if (filter.kind !== "genre") {
     return (
       <div className="rounded-2xl border border-dashed border-edge bg-canvas/30 p-8 text-center">

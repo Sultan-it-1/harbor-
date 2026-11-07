@@ -14,6 +14,7 @@ import {
 } from "@/lib/providers/tmdb";
 import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
+import { useReportNativeRow } from "@/views/native/native-sink";
 import { SPOTLIGHT_SELF_TIMEOUT_MS, SpotlightGateContext } from "./spotlight-gate";
 
 const DIRECTOR_JOBS = new Set(["Director"]);
@@ -87,9 +88,11 @@ function isCameo(c: PersonCredit): boolean {
 export function SpotlightSection({
   spotlight,
   genreId,
+  order = 0,
 }: {
   spotlight: Spotlight;
   genreId: number;
+  order?: number;
 }) {
   const t = useT();
   const { settings } = useSettings();
@@ -177,6 +180,26 @@ export function SpotlightSection({
     };
   }, [settings.tmdbKey, personId, personLookupDone, genreId, spotlight, claim, reportDone]);
 
+  // Android: the page draws the row natively (see @/views/native/native-sink): the person's card
+  // first, then their titles.
+  const key = `spotlight:${spotlight.name}`;
+  const native = useReportNativeRow(
+    key,
+    order,
+    items && items.length > 0
+      ? {
+          key,
+          title: t("{name}'s {sub}", { name: spotlight.name, sub: t(spotlight.sub) }),
+          sub: t("Spotlight"),
+          metas: items,
+          lead: { title: spotlight.name, sub: t(spotlight.sub), img: profileUrl ? [profileUrl] : [] },
+          onLead: () => {
+            if (personId != null) openPerson(personId);
+          },
+        }
+      : null,
+  );
+  if (native) return null;
   if (items && items.length === 0) return null;
 
   const title = (

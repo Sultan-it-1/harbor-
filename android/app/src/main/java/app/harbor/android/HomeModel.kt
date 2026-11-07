@@ -35,6 +35,14 @@ class HomeModel(
     val edit: Boolean = false,
     /** Home's editor offers "Add source" (custom sources). */
     val addSource: Boolean = false,
+    /** A page opened over another (a title's grid, a genre…): the Back pill's label, at the top. */
+    val back: String? = null,
+    /** A search field under the heading that stays at the top while the page scrolls. */
+    val search: HomeSearch? = null,
+    /** A line of small text over the rows ("Showing the closest matches"). */
+    val note: String? = null,
+    /** A centred message with an optional button (no search results…): sends {a:"message"}. */
+    val message: HomeMessage? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -96,8 +104,9 @@ class HomeModel(
                             renamed = e.optBoolean("renamed", false),
                         )
                     }
-                    // In the editor a row shows even with nothing in it (hidden, or not loaded).
-                    if (items.isEmpty() && ed == null) return@mapNotNull null
+                    // In the editor a row shows even with nothing in it (hidden, or not loaded); a
+                    // row led by a spotlight card shows with only that card.
+                    if (items.isEmpty() && ed == null && r.optJSONObject("lead") == null) return@mapNotNull null
                     HomeRow(
                         key = key,
                         title = r.str("title") ?: "",
@@ -116,6 +125,13 @@ class HomeModel(
                         edit = ed,
                         note = r.str("note"),
                         critic = r.optJSONObject("critic")?.let { parseCritic(it) },
+                        sub = r.str("sub"),
+                        grid = r.optBoolean("grid", false),
+                        min = r.optInt("min", 0),
+                        ratio = r.optDouble("ratio", 0.0).toFloat().takeIf { !it.isNaN() && it > 0f } ?: 0f,
+                        lead = r.optJSONObject("lead")?.let { l ->
+                            HomeCard(title = l.str("title") ?: "", images = l.optJSONArray("img").strings(), rating = null, sub = l.str("sub"), progress = 0f, rank = 0)
+                        },
                     )
                 },
                 cwEmpty = cw?.let { (it.str("title") ?: "") to (it.str("text") ?: "") },
@@ -123,8 +139,22 @@ class HomeModel(
                 showTogether = o.optBoolean("together", false),
                 badgesTop = o.optBoolean("badgesTop", false),
                 header = head?.let { h ->
-                    HomeHeader(kicker = h.str("kicker"), title = h.str("title") ?: "", subtitle = h.str("subtitle"))
-                        .takeIf { it.title.isNotEmpty() || it.kicker != null || it.subtitle != null }
+                    HomeHeader(
+                        kicker = h.str("kicker"),
+                        title = h.str("title") ?: "",
+                        subtitle = h.str("subtitle"),
+                        logo = h.str("logo"),
+                        tint = HomeColors.parseHex(h.str("tint")),
+                        count = h.str("count"),
+                        icon = h.str("icon"),
+                        size = h.optDouble("size", 0.0).toFloat().takeIf { !it.isNaN() && it > 0f },
+                        body = h.str("body"),
+                        backdrop = h.optJSONArray("backdrop").strings(),
+                        switch = h.optJSONArray("switch").objects().mapNotNull { c ->
+                            val id = c.str("id") ?: return@mapNotNull null
+                            HomeChip(id = id, label = c.str("label") ?: id, on = c.optBoolean("on", false))
+                        },
+                    ).takeIf { it.title.isNotEmpty() || it.kicker != null || it.subtitle != null || it.logo != null }
                 },
                 chips = o.optJSONArray("chips").objects().mapNotNull { g ->
                     val key = g.str("key") ?: return@mapNotNull null
@@ -137,6 +167,15 @@ class HomeModel(
                 empty = empty?.str("text")?.let { empty.str("title") to it },
                 edit = o.optBoolean("edit", false),
                 addSource = o.optBoolean("addSource", false),
+                back = o.str("back"),
+                search = o.optJSONObject("search")?.let { q ->
+                    HomeSearch(key = q.str("key") ?: "", hint = q.str("hint") ?: "", text = q.str("text") ?: "", busy = q.optBoolean("busy", false))
+                },
+                note = o.str("note"),
+                message = o.optJSONObject("message")?.let { g ->
+                    HomeMessage(title = g.str("title"), text = g.str("text"), action = g.str("action"))
+                        .takeIf { it.title != null || it.text != null }
+                },
             )
         }
 
@@ -219,6 +258,16 @@ class HomeRow(
     val note: String? = null,
     /** CRITIC: everything its card shows. */
     val critic: CriticInfo? = null,
+    /** A second, small line under the title (a genre page's "TRENDING NOW"). */
+    val sub: String? = null,
+    /** Drawn as a grid down the page (a list's "See all", a collection) instead of a strip. */
+    val grid: Boolean = false,
+    /** A grid's narrowest card, in dp (as many across as fit). 0 = the usual. */
+    val min: Int = 0,
+    /** Tiles: height / width (16:9 collection cards = 0.5625). 0 = the usual 4:5. */
+    val ratio: Float = 0f,
+    /** A wide card before the others (a genre's spotlight on a person): sends {a:"lead"}. */
+    val lead: HomeCard? = null,
 ) {
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
@@ -330,7 +379,33 @@ class HomeColors(
     }
 }
 
-class HomeHeader(val kicker: String?, val title: String, val subtitle: String?)
+class HomeHeader(
+    val kicker: String?,
+    val title: String,
+    val subtitle: String?,
+    /** A picture instead of the title (a streaming service's logo). */
+    val logo: String? = null,
+    /** A glow of this colour behind the heading (the service's colour). */
+    val tint: Int? = null,
+    /** Small text after the title ("120 titles"). */
+    val count: String? = null,
+    /** A small icon before the kicker ("tag", "calendar", "clock", "globe", "languages", "building", "tv"). */
+    val icon: String? = null,
+    /** The title's size in sp (30 when not given). */
+    val size: Float? = null,
+    /** A paragraph under the subtitle (a collection's overview). */
+    val body: String? = null,
+    /** A picture behind the heading (a collection's backdrop). */
+    val backdrop: List<String> = emptyList(),
+    /** The title opens a list of these (a genre page: the other genres): sends {a:"chip", row:"switch", what:id}. */
+    val switch: List<HomeChip> = emptyList(),
+)
+
+/** A search field; typing sends {a:"query", text}. A new [key] (another list) starts it afresh. */
+class HomeSearch(val key: String, val hint: String, val text: String, val busy: Boolean)
+
+/** A centred message; [action] is a button's label (sends {a:"message"}). */
+class HomeMessage(val title: String?, val text: String?, val action: String?)
 
 /** One row of choices; tapping one sends {a:"chip", row:key, what:id}. */
 class HomeChips(val key: String, val items: List<HomeChip>)

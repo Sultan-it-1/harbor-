@@ -52,6 +52,20 @@ class NativeHome(
     private val list = RecyclerView(ctx)
     private val sections = SectionsAdapter()
     private val togetherButton = FrameLayout(ctx)
+    /** A page opened over another: "Back" at the top (like the page's own pill). */
+    private val backButton = LinearLayout(ctx)
+    private val backText = label("", 13.5f, lines = 1)
+    private val backIcon = ImageView(ctx)
+    /** The search field: under the heading, then held at the top while the page scrolls. */
+    private val searchBar = FrameLayout(ctx)
+    private val searchBox = LinearLayout(ctx)
+    private val searchIcon = ImageView(ctx)
+    private val searchField = android.widget.EditText(ctx)
+    private val searchBusy = android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleSmall)
+    private val searchClear = ImageView(ctx)
+    private var searchKey: String? = null
+    private var searchQuiet = false
+    private val searchSend = Runnable { act("query", text = searchField.text?.toString() ?: "") }
     private val cardPool = RecyclerView.RecycledViewPool()
     private val rowScroll = HashMap<String, Parcelable?>()
     private val askedMore = HashMap<String, Int>()
@@ -82,6 +96,7 @@ class NativeHome(
         cardPool.setMaxRecycledViews(C_TILE, 16)
         cardPool.setMaxRecycledViews(C_LOGO, 12)
         cardPool.setMaxRecycledViews(C_FEATURE, 2)
+        cardPool.setMaxRecycledViews(C_LEAD, 2)
         root.addView(list, FrameLayout.LayoutParams(MATCH, MATCH))
 
         togetherButton.apply {
@@ -95,6 +110,65 @@ class NativeHome(
         root.addView(togetherButton, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP or Gravity.END).apply {
             topMargin = dp(12)
             marginEnd = dp(12)
+        })
+
+        backButton.apply {
+            visibility = View.GONE
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            setPaddingRelative(dp(12), 0, dp(20), 0)
+            setOnClickListener { act("back") }
+            addView(backIcon, LinearLayout.LayoutParams(dp(15), dp(15)).apply { marginEnd = dp(8) })
+            addView(backText)
+        }
+        root.addView(backButton, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40), Gravity.TOP or Gravity.START).apply {
+            topMargin = dp(14)
+            marginStart = dp(16)
+        })
+
+        searchBox.apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPaddingRelative(dp(14), 0, dp(6), 0)
+            addView(searchIcon, LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(10) })
+            searchField.background = null
+            searchField.setSingleLine(true)
+            searchField.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f)
+            searchField.setPadding(0, 0, 0, 0)
+            searchField.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            searchField.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            searchField.setOnEditorActionListener { v, _, _ ->
+                hideKeyboard(v)
+                true
+            }
+            searchField.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(e: android.text.Editable?) {
+                    searchClear.visibility = if (e.isNullOrEmpty()) View.GONE else View.VISIBLE
+                    if (searchQuiet) return
+                    // Sent once typing pauses (the page filters the whole list each time).
+                    root.removeCallbacks(searchSend)
+                    root.postDelayed(searchSend, 220)
+                }
+            })
+            addView(searchField, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            addView(searchBusy, LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginStart = dp(6) })
+            searchClear.setPadding(dp(6), dp(6), dp(6), dp(6))
+            searchClear.isClickable = true
+            searchClear.isFocusable = true
+            searchClear.visibility = View.GONE
+            searchClear.setOnClickListener { searchField.setText("") }
+            addView(searchClear, LinearLayout.LayoutParams(dp(30), dp(30)).apply { marginStart = dp(2) })
+        }
+        searchBar.visibility = View.GONE
+        searchBar.setPadding(dp(16), dp(8), dp(16), dp(8))
+        searchBar.addView(searchBox, FrameLayout.LayoutParams(MATCH, dp(44)))
+        root.addView(searchBar, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) = placeSearch()
         })
 
         // New width (rotation, split screen): card sizes follow it.
@@ -129,6 +203,16 @@ class NativeHome(
             togetherButton.background = rounded(withAlpha(colors.canvas, 0.72f), dp(22).toFloat())
             togetherButton.contentDescription = m.label("together", "Watch together")
             togetherButton.visibility = if (m.showTogether) View.VISIBLE else View.GONE
+            backButton.visibility = if (m.back != null) View.VISIBLE else View.GONE
+            if (m.back != null) {
+                backText.text = m.back
+                backText.setTextColor(colors.muted)
+                backIcon.setImageDrawable(icon(R.drawable.ic_arrow_left, colors.muted))
+                backIcon.scaleX = if (m.rtl) -1f else 1f
+                backButton.contentDescription = m.back
+                backButton.background = focusable(rounded(withAlpha(colors.canvas, 0.85f), dp(20).toFloat(), dp(1), withAlpha(colors.ink, 0.1f)))
+            }
+            bindSearch(m)
             sections.submit(m)
             if (lastTop != Int.MIN_VALUE && m.top != lastTop) list.scrollToPosition(0)
             lastTop = m.top
@@ -138,6 +222,56 @@ class NativeHome(
             show(false, 0)
             act("failed")
         }
+    }
+
+    private fun bindSearch(m: HomeModel) {
+        val q = m.search
+        if (q == null) {
+            searchBar.visibility = View.GONE
+            searchKey = null
+            if (searchField.hasFocus()) hideKeyboard(searchField)
+            return
+        }
+        searchBar.visibility = View.VISIBLE
+        searchBar.setBackgroundColor(withAlpha(colors.canvas, 0.9f))
+        searchBox.background = rounded(colors.surface, dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.1f))
+        searchIcon.setImageDrawable(icon(R.drawable.ic_search, colors.subtle))
+        searchClear.setImageDrawable(icon(R.drawable.ic_x, colors.subtle))
+        searchClear.contentDescription = m.label("clear", "Clear")
+        searchField.setTextColor(colors.ink)
+        searchField.setHintTextColor(colors.subtle)
+        searchField.hint = q.hint
+        searchField.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+        searchBusy.visibility = if (q.busy) View.VISIBLE else View.GONE
+        // Another list: its own text. The same one: what's typed stays (the page answers late).
+        if (q.key != searchKey) {
+            searchKey = q.key
+            root.removeCallbacks(searchSend)
+            searchQuiet = true
+            searchField.setText(q.text)
+            searchQuiet = false
+        }
+    }
+
+    /** The search field under the heading, or held at the top once the heading has scrolled away. */
+    private fun placeSearch() {
+        if (searchBar.visibility != View.VISIBLE) return
+        val pos = sections.positionOf(T_SEARCH)
+        if (pos < 0) return
+        val pinned = dp(60).toFloat()
+        val v = list.findViewHolderForAdapterPosition(pos)?.itemView
+        val first = (list.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
+        searchBar.translationY = when {
+            v != null -> max(pinned, v.top.toFloat())
+            first != RecyclerView.NO_POSITION && first > pos -> pinned
+            else -> list.height.toFloat()
+        }
+    }
+
+    private fun hideKeyboard(v: View) {
+        v.clearFocus()
+        (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+            ?.hideSoftInputFromWindow(v.windowToken, 0)
     }
 
     /** On (Home on screen, nothing over it) or off; [bottomPx] = room kept for the page's tab bar. */
@@ -160,6 +294,7 @@ class NativeHome(
             root.visibility = View.VISIBLE
             root.animate().alpha(1f).setDuration(120).start()
         } else {
+            if (searchField.hasFocus()) hideKeyboard(searchField)
             root.visibility = View.GONE
         }
     }
@@ -197,7 +332,16 @@ class NativeHome(
 
     // ---- outer list: hero, Customize, rows -----------------------------------------------------
 
-    private class Section(val type: Int, val id: Long, val row: HomeRow? = null, val chipsIndex: Int = -1)
+    private class Section(val type: Int, val id: Long, val row: HomeRow? = null, val chipsIndex: Int = -1, val start: Int = 0)
+
+    /** How many of [row]'s cards fit across a grid line. */
+    private fun gridCols(row: HomeRow): Int {
+        val tile = row.kind == HomeRow.Kind.TILE
+        val min = if (row.min > 0) dp(row.min) else if (tile) dp(260) else dp(140)
+        val gapX = dp(16)
+        val avail = width() - 2 * dp(16)
+        return max(if (tile) 1 else 2, (avail + gapX) / (min + gapX))
+    }
 
     private inner class SectionsAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private var items: List<Section> = emptyList()
@@ -209,21 +353,49 @@ class NativeHome(
         fun submit(m: HomeModel) {
             val out = ArrayList<Section>()
             if (m.header != null) out.add(Section(T_HEADER, -6))
+            if (m.search != null) out.add(Section(T_SEARCH, -8))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
             if (m.showCustomize || m.edit) out.add(Section(T_TOOLS, -2))
             else if (m.hero.isNotEmpty()) out.add(Section(T_GAP, -5))
             m.chips.forEachIndexed { i, _ -> out.add(Section(T_CHIPS, -100L - i, chipsIndex = i)) }
+            if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
-            for (r in m.rows) out.add(Section(T_ROW, stableId(r.key), r))
-            if (m.rows.isEmpty() && m.empty != null) out.add(Section(T_EMPTY, -7))
+            for (r in m.rows) {
+                if (!r.grid) {
+                    out.add(Section(T_ROW, stableId(r.key), r))
+                    continue
+                }
+                // A grid: its title, then one line of cards after another.
+                val base = stableId(r.key) shl 20
+                if (r.title.isNotBlank() || !r.note.isNullOrBlank()) out.add(Section(T_GRID_TITLE, base - 1, r))
+                val cols = gridCols(r)
+                val type = if (r.kind == HomeRow.Kind.TILE) T_GRID_TILE else T_GRID_POSTER
+                var start = 0
+                var line = 0L
+                while (start < r.items.size) {
+                    out.add(Section(type, base + line, r, start = start))
+                    start += cols
+                    line++
+                }
+            }
+            if (m.message != null) out.add(Section(T_MESSAGE, -10))
+            if (m.rows.isEmpty() && m.message == null && m.empty != null) out.add(Section(T_EMPTY, -7))
             out.add(Section(T_END, -4))
             items = out
             // Text at the top (no hero, or a heading above it): keep it clear of the floating
-            // Watch together button.
-            val top = if (m.hero.isEmpty() || m.header != null) dp(64) else 0
+            // Watch together and Back buttons. A heading with a picture behind it starts at the
+            // very top itself.
+            val top = when {
+                m.header?.backdrop?.isNotEmpty() == true -> 0
+                m.hero.isEmpty() || m.header != null -> dp(64)
+                else -> 0
+            }
             if (list.paddingTop != top) list.setPadding(0, top, 0, 0)
             notifyDataSetChanged()
+            list.post { placeSearch() }
         }
+
+        fun positionOf(type: Int): Int = items.indexOfFirst { it.type == type }
 
         override fun getItemCount() = items.size
         override fun getItemViewType(position: Int) = items[position].type
@@ -237,6 +409,11 @@ class NativeHome(
             T_CHIPS -> ChipsHolder()
             T_ROW -> RowHolder()
             T_GAP -> SpacerHolder(dp(28))
+            T_SEARCH -> SpacerHolder(dp(60))
+            T_NOTE, T_GRID_TITLE -> NoteHolder()
+            T_MESSAGE -> MessageHolder()
+            T_GRID_POSTER -> GridLineHolder(C_POSTER)
+            T_GRID_TILE -> GridLineHolder(C_TILE)
             else -> SpacerHolder(dp(28))
         }
 
@@ -253,6 +430,13 @@ class NativeHome(
                 is HeaderHolder -> m.header?.let { holder.bind(it) }
                 is ChipsHolder -> m.chips.getOrNull(items[position].chipsIndex)?.let { holder.bind(it) }
                 is RowHolder -> items[position].row?.let { holder.bind(it) }
+                is NoteHolder -> if (items[position].type == T_NOTE) {
+                    holder.bindNote(m.note ?: "")
+                } else {
+                    items[position].row?.let { r -> r.note?.takeIf { it.isNotBlank() }?.let { holder.bindNote(it) } ?: holder.bindTitle(r.title) }
+                }
+                is MessageHolder -> m.message?.let { holder.bind(it) }
+                is GridLineHolder -> items[position].row?.let { holder.bind(it, items[position].start) }
             }
         }
 
@@ -337,35 +521,172 @@ class NativeHome(
     }
 
     /** A page's heading (Shows, Library): small kicker, big title, a line under it. */
-    private inner class HeaderHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
-        private val col = itemView as LinearLayout
+    private inner class HeaderHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val frame = itemView as FrameLayout
+        /** A collection's backdrop behind it, darkened towards the text. */
+        private val backdrop = NetImage(ctx)
+        private val shadeUp = View(ctx)
+        private val shadeSide = View(ctx)
+        private val col = LinearLayout(ctx)
+        private val kickerLine = LinearLayout(ctx)
+        private val iconBox = FrameLayout(ctx)
+        private val iconView = ImageView(ctx)
         private val kicker = label("", 11f, bold = true)
+        private val titleLine = LinearLayout(ctx)
+        private val logo = NetImage(ctx)
         private val title = label("", 30f, lines = 2)
+        private val chevron = FrameLayout(ctx)
+        private val chevronIcon = ImageView(ctx)
+        private val count = label("", 14f, lines = 1)
         private val subtitle = label("", 14f, lines = 3)
+        private val body = label("", 15f, lines = 3)
 
         init {
+            frame.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            backdrop.scaleType = ImageView.ScaleType.CENTER_CROP
+            frame.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
+            frame.addView(shadeUp, FrameLayout.LayoutParams(MATCH, MATCH))
+            frame.addView(shadeSide, FrameLayout.LayoutParams(MATCH, MATCH))
             col.orientation = LinearLayout.VERTICAL
-            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
-            col.setPaddingRelative(gutter, 0, gutter, dp(18))
-            kicker.letterSpacing = 0.28f
+            frame.addView(col, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+            kickerLine.orientation = LinearLayout.HORIZONTAL
+            kickerLine.gravity = Gravity.CENTER_VERTICAL
+            iconBox.addView(iconView, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
+            kickerLine.addView(iconBox, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(10) })
+            kickerLine.addView(kicker)
+            col.addView(kickerLine)
+
+            titleLine.orientation = LinearLayout.HORIZONTAL
+            titleLine.gravity = Gravity.CENTER_VERTICAL
             title.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
-            col.addView(kicker)
-            col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
-            col.addView(subtitle, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+            titleLine.addView(logo, LinearLayout.LayoutParams(0, dp(56)))
+            titleLine.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            chevron.addView(chevronIcon, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER))
+            titleLine.addView(chevron, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(12) })
+            titleLine.addView(count, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(14) })
+            col.addView(titleLine, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+            subtitle.setLineSpacing(0f, 1.2f)
+            col.addView(subtitle, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            body.setLineSpacing(0f, 1.25f)
+            col.addView(body, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
         }
 
         fun bind(h: HomeHeader) {
-            kicker.text = h.kicker?.uppercase() ?: ""
-            kicker.visibility = if (h.kicker.isNullOrBlank()) View.GONE else View.VISIBLE
+            val rtl = model?.rtl == true
+            // A picture behind: it starts at the very top (the list has no top room then).
+            val hasBackdrop = h.backdrop.isNotEmpty()
+            col.setPaddingRelative(gutter, if (hasBackdrop) dp(150) else 0, gutter, dp(18))
+            backdrop.visibility = if (hasBackdrop) View.VISIBLE else View.GONE
+            shadeUp.visibility = backdrop.visibility
+            shadeSide.visibility = backdrop.visibility
+            if (hasBackdrop) {
+                images.load(backdrop, h.backdrop, width(), dp(420))
+                shadeUp.background = GradientDrawable(
+                    GradientDrawable.Orientation.BOTTOM_TOP,
+                    intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.7f), withAlpha(colors.canvas, 0.1f)),
+                )
+                shadeSide.background = GradientDrawable(
+                    if (rtl) GradientDrawable.Orientation.RIGHT_LEFT else GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(withAlpha(colors.canvas, 0.9f), withAlpha(colors.canvas, 0.25f), Color.TRANSPARENT),
+                )
+            } else {
+                images.clear(backdrop)
+            }
+            // A glow of the service's colour from the top (like the page's).
+            val tint = h.tint
+            frame.background = if (tint != null && !hasBackdrop) {
+                GradientDrawable().apply {
+                    gradientType = GradientDrawable.RADIAL_GRADIENT
+                    gradientRadius = width() * 0.9f
+                    setGradientCenter(if (rtl) 0.7f else 0.3f, 0f)
+                    colors = intArrayOf(withAlpha(tint, 0.22f), Color.TRANSPARENT)
+                }
+            } else {
+                null
+            }
+
+            val iconRes = when (h.icon) {
+                "tag" -> R.drawable.ic_tag
+                "calendar" -> R.drawable.ic_calendar
+                "clock" -> R.drawable.ic_clock
+                "globe" -> R.drawable.ic_globe
+                "languages" -> R.drawable.ic_languages
+                "building" -> R.drawable.ic_building_2
+                "tv" -> R.drawable.ic_tv
+                else -> 0
+            }
+            iconBox.visibility = if (iconRes != 0) View.VISIBLE else View.GONE
+            if (iconRes != 0) {
+                iconView.setImageDrawable(icon(iconRes, colors.muted))
+                iconBox.background = rounded(withAlpha(colors.surface, 0.7f), dp(12).toFloat())
+            }
+            kicker.text = h.kicker?.let { if (rtl) it else it.uppercase() } ?: ""
             kicker.setTextColor(colors.subtle)
             // Arabic has no letter case and its letters must stay joined.
-            kicker.letterSpacing = if (model?.rtl == true) 0f else 0.28f
+            kicker.letterSpacing = if (rtl) 0f else if (iconRes != 0) 0.22f else 0.28f
+            kicker.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (iconRes != 0) 12.5f else 11f)
+            kickerLine.visibility = if (h.kicker.isNullOrBlank() && iconRes == 0) View.GONE else View.VISIBLE
+
+            // The title, or the service's logo in its place.
+            val logoUrl = h.logo
+            if (logoUrl != null) {
+                val llp = logo.layoutParams as LinearLayout.LayoutParams
+                val lw = (width() * 0.6f).toInt()
+                if (llp.width != lw) {
+                    llp.width = lw
+                    logo.layoutParams = llp
+                }
+                logo.visibility = View.VISIBLE
+                logo.scaleType = if (rtl) ImageView.ScaleType.FIT_END else ImageView.ScaleType.FIT_START
+                images.load(logo, listOf(logoUrl), lw, dp(56), alpha = true) { ok ->
+                    title.visibility = if (ok) View.GONE else View.VISIBLE
+                }
+            } else {
+                logo.visibility = View.GONE
+                images.clear(logo)
+            }
             title.text = h.title
-            title.visibility = if (h.title.isBlank()) View.GONE else View.VISIBLE
+            title.visibility = if (h.title.isBlank() || logoUrl != null) View.GONE else View.VISIBLE
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, h.size ?: 30f)
             title.setTextColor(colors.ink)
+            title.maxWidth = ((width() - 2 * gutter) * if (h.switch.isNotEmpty() || h.count != null) 0.72f else 1f).toInt()
+
+            // A genre page: the title opens the other genres.
+            val switching = h.switch.isNotEmpty()
+            chevron.visibility = if (switching) View.VISIBLE else View.GONE
+            if (switching) {
+                chevronIcon.setImageDrawable(icon(R.drawable.ic_chevron_down, colors.muted))
+                chevron.background = rounded(Color.TRANSPARENT, dp(20).toFloat(), dp(1), withAlpha(colors.ink, 0.12f))
+            }
+            titleLine.isClickable = switching
+            titleLine.isFocusable = switching
+            titleLine.setOnClickListener(if (switching) View.OnClickListener { pickSwitch(h) } else null)
+
+            count.text = h.count ?: ""
+            count.visibility = if (h.count.isNullOrBlank()) View.GONE else View.VISIBLE
+            count.setTextColor(colors.subtle)
             subtitle.text = h.subtitle ?: ""
             subtitle.visibility = if (h.subtitle.isNullOrBlank()) View.GONE else View.VISIBLE
             subtitle.setTextColor(colors.muted)
+            body.text = h.body ?: ""
+            body.visibility = if (h.body.isNullOrBlank()) View.GONE else View.VISIBLE
+            body.setTextColor(colors.muted)
+        }
+
+        /** The other genres, to switch to one. */
+        private fun pickSwitch(h: HomeHeader) {
+            val names = h.switch.map { it.label }.toTypedArray()
+            val on = h.switch.indexOfFirst { it.on }
+            try {
+                android.app.AlertDialog.Builder(ctx)
+                    .setSingleChoiceItems(names, on) { d, i ->
+                        d.dismiss()
+                        h.switch.getOrNull(i)?.let { act("chip", row = "switch", what = it.id) }
+                    }
+                    .show()
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -400,6 +721,123 @@ class NativeHome(
                     setOnClickListener { act("chip", row = g.key, what = c.id) }
                 }
                 strip.addView(chip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)).apply { marginEnd = dp(8) })
+            }
+        }
+    }
+
+    /** A line of small text (a note over the rows), or a grid's title in small capitals. */
+    private inner class NoteHolder : RecyclerView.ViewHolder(TextView(ctx)) {
+        private val text = itemView as TextView
+
+        init {
+            text.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            text.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+        }
+
+        fun bindNote(s: String) {
+            text.text = s
+            text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            text.typeface = Typeface.DEFAULT
+            text.letterSpacing = 0f
+            text.setTextColor(colors.muted)
+            text.setPaddingRelative(dp(16), 0, dp(16), dp(16))
+        }
+
+        fun bindTitle(s: String) {
+            val rtl = model?.rtl == true
+            text.text = if (rtl) s else s.uppercase()
+            text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            text.typeface = Typeface.DEFAULT_BOLD
+            text.letterSpacing = if (rtl) 0f else 0.2f
+            text.setTextColor(colors.subtle)
+            text.setPaddingRelative(dp(16), dp(4), dp(16), dp(14))
+        }
+    }
+
+    /** A centred message (no search results…) with an optional button. */
+    private inner class MessageHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private val title = label("", 15f, bold = true)
+        private val text = label("", 13f)
+        private val button = label("", 13.5f, bold = true, lines = 1)
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER_HORIZONTAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.setPadding(dp(24), dp(48), dp(24), dp(48))
+            for (v in listOf(title, text)) {
+                v.gravity = Gravity.CENTER
+                v.textAlignment = View.TEXT_ALIGNMENT_CENTER
+            }
+            col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            col.addView(text, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+            button.gravity = Gravity.CENTER
+            button.setPaddingRelative(dp(16), 0, dp(16), 0)
+            button.isClickable = true
+            button.isFocusable = true
+            button.setOnClickListener { act("message") }
+            col.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { topMargin = dp(16) })
+        }
+
+        fun bind(g: HomeMessage) {
+            title.text = g.title ?: ""
+            title.visibility = if (g.title.isNullOrBlank()) View.GONE else View.VISIBLE
+            title.setTextColor(colors.ink)
+            text.text = g.text ?: ""
+            text.visibility = if (g.text.isNullOrBlank()) View.GONE else View.VISIBLE
+            text.setTextColor(colors.subtle)
+            button.text = g.action ?: ""
+            button.visibility = if (g.action.isNullOrBlank()) View.GONE else View.VISIBLE
+            button.setTextColor(colors.ink)
+            button.background = focusable(rounded(colors.surface, dp(20).toFloat(), dp(1), withAlpha(colors.ink, 0.1f)))
+        }
+    }
+
+    /** One line of a grid: as many cards across as fit, the same cards as the rows'. */
+    private inner class GridLineHolder(private val cardKind: Int) : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val line = itemView as LinearLayout
+        private val cells = ArrayList<CardHolder>()
+
+        init {
+            line.orientation = LinearLayout.HORIZONTAL
+            line.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            line.setPaddingRelative(dp(16), 0, dp(16), if (cardKind == C_POSTER) dp(22) else dp(16))
+        }
+
+        fun bind(row: HomeRow, start: Int) {
+            val cols = gridCols(row)
+            val gapX = dp(16)
+            val w = (width() - 2 * dp(16) - (cols - 1) * gapX) / cols
+            while (cells.size < cols) {
+                val h = CardHolder(cardKind)
+                cells.add(h)
+                line.addView(h.itemView)
+            }
+            while (cells.size > cols) {
+                line.removeViewAt(cells.size - 1)
+                cells.removeAt(cells.size - 1)
+            }
+            for (i in 0 until cols) {
+                val h = cells[i]
+                val idx = start + i
+                h.itemView.layoutParams = LinearLayout.LayoutParams(w, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    marginEnd = if (i < cols - 1) gapX else 0
+                }
+                if (idx < row.items.size) {
+                    h.fixedPos = idx
+                    h.fixedWidth = w
+                    h.itemView.visibility = View.VISIBLE
+                    h.bind(row, row.items[idx])
+                } else {
+                    h.itemView.visibility = View.INVISIBLE
+                    images.clear(h.image)
+                }
+            }
+            // Near the end: the next page (once per length, like the rows).
+            if (row.more && start + cols * 4 >= row.items.size && askedMore[row.key] != row.items.size) {
+                askedMore[row.key] = row.items.size
+                act("more", row = row.key)
             }
         }
     }
@@ -658,6 +1096,8 @@ class NativeHome(
         private val header = LinearLayout(ctx)
         private val title = label("", 17f, bold = true, lines = 1)
         private val seeAll = label("", 12.5f, lines = 1)
+        /** The small line under the title (a genre page's "TRENDING NOW"). */
+        private val sub = label("", 11f, bold = true, lines = 1)
         private val strip = RecyclerView(ctx)
         private val layout = LinearLayoutManager(ctx, RecyclerView.HORIZONTAL, false).apply { initialPrefetchItemCount = 5 }
         private val cards = CardsAdapter()
@@ -674,10 +1114,15 @@ class NativeHome(
             header.orientation = LinearLayout.HORIZONTAL
             header.gravity = Gravity.CENTER_VERTICAL
             header.setPaddingRelative(gutter, 0, gutter, 0)
-            header.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            header.minimumHeight = dp(40)
+            val titles = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            titles.addView(title)
+            sub.visibility = View.GONE
+            titles.addView(sub, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) })
+            header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             header.addView(seeAll)
             header.setOnClickListener { boundKey?.let { k -> act("all", row = k) } }
-            col.addView(header, LinearLayout.LayoutParams(MATCH, dp(40)).apply { bottomMargin = dp(6) })
+            col.addView(header, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) })
             controls.orientation = LinearLayout.HORIZONTAL
             controls.gravity = Gravity.CENTER_VERTICAL
             controls.visibility = View.GONE
@@ -715,6 +1160,10 @@ class NativeHome(
             }
             title.text = row.title
             title.setTextColor(colors.ink)
+            sub.text = row.sub?.let { if (m.rtl) it else it.uppercase() } ?: ""
+            sub.visibility = if (row.sub.isNullOrBlank()) View.GONE else View.VISIBLE
+            sub.letterSpacing = if (m.rtl) 0f else 0.18f
+            sub.setTextColor(colors.subtle)
             val ed = if (m.edit) row.edit else null
             val hidden = ed?.hidden == true
             // The end of the title line: "See all", or the row's small note (Critics' Pick).
@@ -846,8 +1295,8 @@ class NativeHome(
             notifyDataSetChanged()
         }
 
-        override fun getItemCount() = row?.items?.size ?: 0
-        override fun getItemViewType(position: Int) = when (row?.kind) {
+        override fun getItemCount() = (row?.items?.size ?: 0) + (if (row?.lead != null) 1 else 0)
+        override fun getItemViewType(position: Int) = if (row?.lead != null && position == 0) C_LEAD else when (row?.kind) {
             HomeRow.Kind.CW -> C_CW
             HomeRow.Kind.RANK -> C_RANK
             HomeRow.Kind.TILE -> C_TILE
@@ -859,7 +1308,10 @@ class NativeHome(
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = CardHolder(viewType)
         override fun onBindViewHolder(holder: CardHolder, position: Int) {
             val r = row ?: return
-            holder.bind(r, r.items[position])
+            val lead = r.lead
+            if (lead == null) holder.bind(r, r.items[position])
+            else if (position == 0) holder.bind(r, lead)
+            else holder.bind(r, r.items[position - 1])
         }
 
         override fun onViewRecycled(holder: CardHolder) = images.clear(holder.image)
@@ -883,7 +1335,10 @@ class NativeHome(
         private val check = FrameLayout(ctx)
         /** Tiles and the feature card: their name (and a line under it) on the picture. */
         private val overlay = LinearLayout(ctx)
-        private val bigTitle = label("", if (kind == C_FEATURE) 24f else 17f, lines = 2)
+        private val bigTitle = label("", if (kind == C_FEATURE) 24f else if (kind == C_LEAD) 26f else 17f, lines = 2)
+        /** In a grid line (not a strip): which card this is, and its width. */
+        var fixedPos = -1
+        var fixedWidth = 0
         private val bigSub = label("", if (kind == C_FEATURE) 13.5f else 11.5f, lines = if (kind == C_FEATURE) 3 else 1)
         private var row: HomeRow? = null
         private val titleBelow get() = kind == C_POSTER || kind == C_RANK || kind == C_CW
@@ -929,6 +1384,18 @@ class NativeHome(
                     box.addView(play, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER))
                 }
                 C_RANK -> Unit
+                C_LEAD -> {
+                    // A spotlight on a person (a genre page): the photo, a small label over the name.
+                    box.addView(shade, FrameLayout.LayoutParams(MATCH, MATCH))
+                    overlay.orientation = LinearLayout.VERTICAL
+                    overlay.setPaddingRelative(dp(16), 0, dp(16), dp(14))
+                    bigSub.typeface = Typeface.DEFAULT_BOLD
+                    overlay.addView(bigSub)
+                    bigTitle.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                    bigTitle.setShadowLayer(dp(10).toFloat(), 0f, dp(2).toFloat(), 0x66000000)
+                    overlay.addView(bigTitle, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+                    box.addView(overlay, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+                }
                 C_TILE, C_FEATURE -> {
                     box.addView(shade, FrameLayout.LayoutParams(MATCH, MATCH))
                     overlay.orientation = LinearLayout.VERTICAL
@@ -943,6 +1410,15 @@ class NativeHome(
                         overlay.addView(stats, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
                     }
                     overlay.addView(bigSub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+                    if (kind == C_TILE) {
+                        // A collection's "7 FILMS" pill in its corner.
+                        kicker.setPaddingRelative(dp(9), dp(3), dp(9), dp(3))
+                        kicker.visibility = View.GONE
+                        box.addView(kicker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+                            marginStart = dp(12)
+                            topMargin = dp(10)
+                        })
+                    }
                     if (kind == C_FEATURE) {
                         featurePlay.orientation = LinearLayout.HORIZONTAL
                         featurePlay.gravity = Gravity.CENTER
@@ -1009,25 +1485,33 @@ class NativeHome(
 
         private fun tap(what: String) {
             val r = row ?: return
-            val p = bindingAdapterPosition
-            if (p == RecyclerView.NO_POSITION) return
+            if (kind == C_LEAD) {
+                if (what == "open") act("lead", row = r.key)
+                return
+            }
+            val p = if (fixedPos >= 0) fixedPos else bindingAdapterPosition.let {
+                if (it == RecyclerView.NO_POSITION) return else it - (if (r.lead != null) 1 else 0)
+            }
+            if (p < 0) return
             act(what, row = r.key, i = p)
         }
 
         fun bind(r: HomeRow, c: HomeCard) {
             row = r
-            val w = when (kind) {
+            val w = if (fixedWidth > 0) fixedWidth else when (kind) {
                 C_CW -> cwWidth()
                 C_RANK -> rankWidth()
                 C_TILE -> tileWidth()
                 C_LOGO -> logoWidth()
                 C_FEATURE -> featureWidth()
+                C_LEAD -> dp(280)
                 else -> posterWidth()
             }
             val posterW = w
             val h = when (kind) {
                 C_CW -> w * 9 / 16
-                C_TILE -> w * 4 / 5
+                C_LEAD -> dp(216)
+                C_TILE -> if (r.ratio > 0f) (w * r.ratio).toInt() else w * 4 / 5
                 C_LOGO -> dp(80)
                 C_FEATURE -> max(min(w * 10 / 16, dp(440)), dp(300))
                 else -> w * 3 / 2
@@ -1077,9 +1561,12 @@ class NativeHome(
                 val pad = if (c.emblem) dp(14) else 0
                 image.setPadding(pad, pad, pad, 0)
             }
+            if (kind == C_LEAD) image.scaleType = ImageView.ScaleType.CENTER_CROP
             images.load(image, c.images, posterW, h, alpha = kind == C_LOGO || c.emblem) { ok ->
                 // A logo that didn't come: its name instead.
                 if (kind == C_LOGO) bigTitle.visibility = if (ok) View.GONE else View.VISIBLE
+                // A face: framed from its upper part (the page's "center 22%").
+                if (kind == C_LEAD && ok) image.post { cropAt(image, 0.22f) }
             }
             title.text = c.title
             title.setTextColor(colors.ink)
@@ -1115,6 +1602,23 @@ class NativeHome(
                     rankNumber.text = if (c.rank > 0) c.rank.toString() else ""
                     rankNumber.setTextColor(colors.accent)
                 }
+                C_LEAD -> {
+                    shade.background = GradientDrawable(
+                        GradientDrawable.Orientation.BOTTOM_TOP,
+                        intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.65f), Color.TRANSPARENT, Color.TRANSPARENT),
+                    )
+                    frame.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(colors.surface, colors.canvas)).apply {
+                        cornerRadius = dp(12).toFloat()
+                    }
+                    val rtl = model?.rtl == true
+                    bigSub.text = c.sub?.let { if (rtl) it else it.uppercase() } ?: ""
+                    bigSub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
+                    bigSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    bigSub.letterSpacing = if (rtl) 0f else 0.22f
+                    bigSub.setTextColor(colors.accent)
+                    bigTitle.text = c.title
+                    bigTitle.setTextColor(colors.ink)
+                }
                 C_TILE, C_FEATURE -> {
                     // Tiles: the picture washed with the tile's colour all over (more at the bottom,
                     // under the name); an emblem stays clear. The feature card: like the hero, the
@@ -1128,6 +1632,15 @@ class NativeHome(
                             else -> intArrayOf(withAlpha(base, 0.95f), withAlpha(base, 0.6f), withAlpha(base, 0.45f))
                         },
                     )
+                    if (kind == C_TILE) {
+                        val rtl = model?.rtl == true
+                        kicker.text = c.kicker?.let { if (rtl) it else it.uppercase() } ?: ""
+                        kicker.visibility = if (c.kicker.isNullOrBlank()) View.GONE else View.VISIBLE
+                        kicker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                        kicker.letterSpacing = if (rtl) 0f else 0.16f
+                        kicker.setTextColor(withAlpha(Color.WHITE, 0.85f))
+                        kicker.background = rounded(0x66000000, dp(12).toFloat())
+                    }
                     bigTitle.text = c.title
                     bigTitle.setTextColor(Color.WHITE)
                     bigSub.text = c.sub ?: ""
@@ -1626,6 +2139,22 @@ class NativeHome(
         return Color.HSVToColor(floatArrayOf(hue.toFloat(), 0.45f, 0.28f))
     }
 
+    /** Fills [v] with its picture like CENTER_CROP, but lined up at [fy] of its height (0 = top). */
+    private fun cropAt(v: ImageView, fy: Float) {
+        val d = v.drawable ?: return
+        val vw = v.width.toFloat()
+        val vh = v.height.toFloat()
+        val dw = d.intrinsicWidth.toFloat()
+        val dh = d.intrinsicHeight.toFloat()
+        if (vw <= 0f || vh <= 0f || dw <= 0f || dh <= 0f) return
+        val scale = max(vw / dw, vh / dh)
+        val m = android.graphics.Matrix()
+        m.setScale(scale, scale)
+        m.postTranslate((vw - dw * scale) / 2f, (vh - dh * scale) * fy)
+        v.scaleType = ImageView.ScaleType.MATRIX
+        v.imageMatrix = m
+    }
+
     private fun withAlpha(color: Int, a: Float): Int = (color and 0x00FFFFFF) or ((a.coerceIn(0f, 1f) * 255).toInt() shl 24)
 
     /** [color] moved [f] of the way to [other]. */
@@ -1654,6 +2183,12 @@ class NativeHome(
         private const val T_HEADER = 7
         private const val T_CHIPS = 8
         private const val T_EMPTY = 9
+        private const val T_SEARCH = 10
+        private const val T_NOTE = 11
+        private const val T_MESSAGE = 12
+        private const val T_GRID_TITLE = 13
+        private const val T_GRID_POSTER = 14
+        private const val T_GRID_TILE = 15
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101
@@ -1662,6 +2197,7 @@ class NativeHome(
         private const val C_TILE = 104
         private const val C_LOGO = 105
         private const val C_FEATURE = 106
+        private const val C_LEAD = 107
         /** The hero turns to its next slide after this long. */
         private const val HERO_TURN_MS = 15_000L
     }

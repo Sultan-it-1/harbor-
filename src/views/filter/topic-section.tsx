@@ -5,6 +5,7 @@ import type { Meta } from "@/lib/cinemeta";
 import { type Topic } from "@/lib/feed/genre-topics";
 import { useT } from "@/lib/i18n";
 import { useDedupOnSeenIds } from "@/lib/feed/seen-ids";
+import { useReportNativeRow } from "@/views/native/native-sink";
 import { tmdbDiscover, tmdbResolveKeywordIds } from "@/lib/providers/tmdb";
 import { useSettings } from "@/lib/settings";
 import { MAX_PAGES, MIN_INITIAL_FILL, SpotlightGateContext } from "./spotlight-gate";
@@ -12,9 +13,11 @@ import { MAX_PAGES, MIN_INITIAL_FILL, SpotlightGateContext } from "./spotlight-g
 export function TopicSection({
   topic,
   mediaType,
+  order = 0,
 }: {
   topic: Topic;
   mediaType: "movie" | "tv";
+  order?: number;
 }) {
   const t = useT();
   const { settings } = useSettings();
@@ -126,6 +129,14 @@ export function TopicSection({
       });
   };
 
+  // Android: the page draws the row natively (see @/views/native/native-sink).
+  const key = `topic:${mediaType}:${topic.id}`;
+  const native = useReportNativeRow(
+    key,
+    order,
+    items && items.length > 0 ? { key, title: t(topic.title), sub: t(topic.kicker), metas: items, more: onEndReached } : null,
+  );
+  if (native) return null;
   if (items && items.length === 0) return null;
 
   const title = (

@@ -464,6 +464,36 @@ export type NativeRowInput = {
   onAll?: () => void;
   /** The wide card's Play button. */
   onPlay?: (i: number) => void;
+  /** A small second line under the title (a genre page's "TRENDING NOW"). */
+  sub?: string | null;
+  /** Drawn as a grid down the page instead of a strip ([min]: narrowest card in dp). */
+  grid?: boolean;
+  min?: number;
+  /** Tiles: height / width (16:9 = 0.5625). */
+  ratio?: number;
+  /** A wide card before the others (a spotlight on a person) and what a tap on it does. */
+  lead?: { title: string; sub?: string | null; img?: string[] } | null;
+  onLead?: () => void;
+};
+
+/** A page's heading (see HomeHeader in HomeModel.kt). */
+export type NativeHeader = {
+  kicker?: string | null;
+  title: string;
+  subtitle?: string | null;
+  /** A picture instead of the title (a service's logo). */
+  logo?: string | null;
+  /** A glow of this colour behind it (#rrggbb). */
+  tint?: string | null;
+  /** Small text after the title ("120 titles"). */
+  count?: string | null;
+  icon?: "tag" | "calendar" | "clock" | "globe" | "languages" | "building" | "tv" | null;
+  /** The title's size in sp (30 by default). */
+  size?: number;
+  body?: string | null;
+  backdrop?: string[];
+  /** The title opens these (sends the chip group "switch"). */
+  switch?: Array<{ id: string; label: string; on: boolean }>;
 };
 
 /** A tile / logo / feature card. */
@@ -518,9 +548,14 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
       title: r.title,
       kind: r.kind ?? "tile",
       all: !!r.seeAll || !!r.onAll,
-      more: false,
+      more: !!r.grid && !!r.more,
       note: r.note ?? null,
       critic: r.critic ?? null,
+      sub: r.sub ?? null,
+      grid: !!r.grid,
+      min: r.min ?? 0,
+      ratio: r.ratio ?? 0,
+      lead: r.lead ? { title: r.lead.title, sub: r.lead.sub ?? null, img: (r.lead.img ?? []).filter(isUrlOrData) } : null,
       items: r.cards.map((c) => ({
         title: c.title,
         img: (c.img ?? []).filter(isUrlOrData),
@@ -540,6 +575,10 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
     kind: r.rank ? "rank" : "poster",
     all: !!r.seeAll,
     more: !r.rank && !!r.more,
+    sub: r.sub ?? null,
+    grid: !!r.grid,
+    min: r.min ?? 0,
+    lead: r.lead ? { title: r.lead.title, sub: r.lead.sub ?? null, img: (r.lead.img ?? []).filter(isUrlOrData) } : null,
     items: r.rank ? shown.map(cards.rank) : shown.map(cards.poster),
   };
 }
@@ -555,7 +594,15 @@ export type NativePageInput = {
   blocked?: boolean;
   t: T;
   hero?: { metas: Meta[]; rank?: string | null } | null;
-  header?: { kicker?: string | null; title: string; subtitle?: string | null } | null;
+  header?: NativeHeader | null;
+  /** A page opened over another: the Back pill at the top. */
+  back?: boolean;
+  /** A search field under the heading, held at the top while the page scrolls. */
+  search?: { key: string; hint: string; text: string; busy?: boolean; onQuery: (text: string) => void } | null;
+  /** A line of small text over the rows. */
+  note?: string | null;
+  /** A centred message with an optional button (no results…). */
+  message?: { title?: string | null; text?: string | null; action?: string | null; onAction?: () => void } | null;
   cw?: { title: string; items: LibraryItem[] } | null;
   rows: NativeRowInput[];
   customize?: { label: string; onTap: () => void } | null;
@@ -577,7 +624,7 @@ export type NativePageInput = {
  */
 export function useNativeBrowsePage(page: string, input: NativePageInput): boolean {
   const { settings } = useSettings();
-  const { openPicker, openGrid, openPerson } = useView();
+  const { openPicker, openGrid, openPerson, goBack } = useView();
   const enabled = useNativeScreensEnabled();
   const inUse = enabled && !input.blocked;
   const cards = useNativeCards();
@@ -588,7 +635,15 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     rows: new Map(),
   });
 
-  const { t, hero, header, cw, rows, customize, chips, empty, resetTick, editor } = input;
+  const { t, hero, header, cw, rows, customize, chips, empty, resetTick, editor, back, note } = input;
+  const searchKey = input.search?.key;
+  const searchHint = input.search?.hint;
+  const searchText = input.search?.text;
+  const searchBusy = !!input.search?.busy;
+  const msgTitle = input.message?.title ?? null;
+  const msgText = input.message?.text ?? null;
+  const msgAction = input.message?.action ?? null;
+  const hasMessage = !!input.message;
   const customizeLabel = customize?.label;
   const editing = !!editor?.on;
   const editCustom = editor?.custom;
@@ -629,8 +684,12 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       empty: empty ?? null,
       customize: !!customizeLabel,
       edit: editing,
+      back: back ? t("common.back") : null,
+      search: searchKey != null ? { key: searchKey, hint: searchHint ?? "", text: searchText ?? "", busy: searchBusy } : null,
+      note: note ?? null,
+      message: hasMessage ? { title: msgTitle, text: msgText, action: msgAction } : null,
     };
-  }, [inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys]);
+  }, [inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -697,6 +756,18 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           if (id > 0) openPerson(id);
           return;
         }
+        case "back":
+          goBack();
+          return;
+        case "query":
+          cur.search?.onQuery(a.text ?? "");
+          return;
+        case "lead":
+          p.rows.get(a.row ?? "")?.onLead?.();
+          return;
+        case "message":
+          cur.message?.onAction?.();
+          return;
         case "link":
           if (a.text && /^https?:\/\//.test(a.text)) openUrl(a.text);
           return;

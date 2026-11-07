@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PickCard } from "@/components/pick-card";
 import type { Meta } from "@/lib/cinemeta";
 import { tmdbCollection, type TmdbCollection } from "@/lib/providers/tmdb";
 import { useSettings } from "@/lib/settings";
-import { useScrollMemory } from "@/lib/view";
+import { useScrollMemory, useView } from "@/lib/view";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 import { useT } from "@/lib/i18n";
 
 export function CollectionView({ collectionId }: { collectionId: number }) {
@@ -38,6 +39,39 @@ export function CollectionView({ collectionId }: { collectionId: number }) {
 
   const grid = "grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7";
   const years = data ? yearRange(data.parts) : null;
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the backdrop
+  // behind the heading (kicker, name, films and years, overview), then the films three across.
+  const { topKind } = useView();
+  const nativeHeader = useMemo(() => {
+    const n = data?.parts.length ?? 0;
+    const films = n > 0 ? (n === 1 ? t("{n} film", { n }) : t("{n} films", { n })) : null;
+    return {
+      kicker: t("Collection"),
+      title: data?.name ?? t("Collection"),
+      subtitle: [films, years].filter(Boolean).join(" · ") || null,
+      body: data?.overview ?? null,
+      backdrop: data?.backdrop ? [data.backdrop] : [],
+      size: 34,
+    };
+  }, [data, years, t]);
+  const nativeRows = useMemo<NativeRowInput[]>(
+    () => (data && data.parts.length > 0 ? [{ key: "films", title: t("Films"), metas: data.parts, grid: true, min: 96 }] : []),
+    [data, t],
+  );
+  const native = useNativeBrowsePage("collection", {
+    active: topKind === "collection",
+    t,
+    back: true,
+    header: nativeHeader,
+    rows: nativeRows,
+    empty: loading
+      ? { text: t("Loading…") }
+      : !settings.tmdbKey
+        ? { text: t("Add a TMDB key in Settings to browse collections.") }
+        : { text: t("No films found in this collection.") },
+  });
+  if (native) return <main ref={scrollRef} aria-hidden="true" className="relative flex min-h-0 flex-1 flex-col overflow-hidden" />;
 
   return (
     <main ref={scrollRef} data-rail-flush className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">

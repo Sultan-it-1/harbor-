@@ -15,14 +15,14 @@ export function Rails({ filter }: { filter: MetaFilter }) {
   }
   return (
     <>
-      {rails.map((r) => {
+      {rails.map((r, i) => {
         if (r.kind === "spotlight") {
-          return <SpotlightSection key={r.id} spotlight={r.spotlight} genreId={r.genreId} />;
+          return <SpotlightSection key={r.id} spotlight={r.spotlight} genreId={r.genreId} order={i} />;
         }
         if (r.kind === "topic") {
-          return <TopicSection key={r.id} topic={r.topic} mediaType={r.mediaType} />;
+          return <TopicSection key={r.id} topic={r.topic} mediaType={r.mediaType} order={i} />;
         }
-        return <RailSection key={r.id} filter={filter} rail={r} />;
+        return <RailSection key={r.id} filter={filter} rail={r} order={i} />;
       })}
     </>
   );

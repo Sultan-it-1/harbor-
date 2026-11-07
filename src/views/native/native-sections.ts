@@ -21,7 +21,7 @@ import { collectionNameMatches, tmdbCollection, tmdbDiscover, tmdbSearchCollecti
 import { SERVICES } from "@/lib/providers/streaming";
 import type { StreamingService } from "@/lib/settings";
 import { useView } from "@/lib/view";
-import { cssColorToHex, type NativeRowInput, type T } from "./native-screens";
+import { cssColorToHex, type NativeCardInput, type NativeRowInput, type T } from "./native-screens";
 
 type View = ReturnType<typeof useView>;
 
@@ -317,11 +317,24 @@ function hexA(hex: string, a: number): string {
 
 type Resolved = { id: number; backdrop: string | null; count: number } | null;
 
-export function useCollectionsRow(key: string, title: string, enabled: boolean, tmdbKey: string, t: T, view: View): NativeRowInput {
-  const list = COLLECTIONS_CATALOG.slice(0, 24);
+/** A collection card's data: what's already known, the rest looked up (once per session). */
+export type CollectionTileInput = { id: number; name: string; backdrop?: string | null; count?: number | null };
+
+/**
+ * Collection cards as the page's CollectionCard draws them: the backdrop on the collection's own
+ * colour, "7 FILMS" in the corner, the name at the bottom. Backdrops and counts not known yet are
+ * looked up a few at a time (shared with every other collection card). [ids]: what a tap opens.
+ */
+export function useCollectionTiles(
+  list: CollectionTileInput[],
+  enabled: boolean,
+  tmdbKey: string,
+  t: T,
+): { cards: NativeCardInput[]; ids: number[] } {
+  const keyOf = (c: CollectionTileInput) => `${c.id}|${c.name}`;
   const resolved = useFetchedOnce<Resolved>(
     "coll",
-    list.map((c) => `${c.id}|${c.name}`),
+    list.filter((c) => !(c.backdrop && c.count != null)).map(keyOf),
     enabled && !!tmdbKey,
     async (k) => {
       const [idStr, ...rest] = k.split("|");
@@ -335,27 +348,37 @@ export function useCollectionsRow(key: string, title: string, enabled: boolean, 
       return c ? { id: c.id, backdrop: c.backdrop ?? null, count: c.parts.length } : null;
     },
   );
+  const cards: NativeCardInput[] = [];
+  const ids: number[] = [];
+  for (const c of list) {
+    const r = resolved[keyOf(c)];
+    const backdrop = c.backdrop ?? r?.backdrop ?? null;
+    const count = c.count ?? r?.count ?? null;
+    cards.push({
+      title: c.name,
+      kicker: count != null ? t("{count} films", { count }) : t("Collection"),
+      img: backdrop ? [backdrop] : [],
+      tint: cssColorToHex(`oklch(0.42 0.13 ${((c.id || c.name.length * 37) * 47) % 360})`),
+    });
+    ids.push(r?.id ?? c.id);
+  }
+  return { cards, ids };
+}
+
+export function useCollectionsRow(key: string, title: string, enabled: boolean, tmdbKey: string, t: T, view: View): NativeRowInput {
+  const list = COLLECTIONS_CATALOG.slice(0, 24);
+  const { cards, ids } = useCollectionTiles(list, enabled, tmdbKey, t);
   return {
     key,
     title,
     metas: [],
     kind: "tile",
-    cards: list.map((c) => {
-      const r = resolved[`${c.id}|${c.name}`];
-      return {
-        title: c.name,
-        sub: r ? t("{count} films", { count: r.count }) : t("Collection"),
-        img: r?.backdrop ? [r.backdrop] : [],
-        tint: cssColorToHex(`oklch(0.42 0.13 ${((c.id || c.name.length * 37) * 47) % 360})`),
-      };
-    }),
+    ratio: 9 / 16,
+    cards,
     onAll: () => view.openCollections(),
     onOpen: (i) => {
-      const c = list[i];
-      if (!c) return;
-      const r = resolved[`${c.id}|${c.name}`];
-      const id = r?.id ?? c.id;
-      if (id > 0) view.openCollection(id);
+      const id = ids[i];
+      if (id != null && id > 0) view.openCollection(id);
     },
   };
 }
@@ -400,6 +423,15 @@ function rasterLogo(src: string): Promise<string | null> {
     logoCache.set(src, p);
   }
   return p;
+}
+
+/** A service's logo as a picture the native screen can show (white, like the Your Streaming row). */
+export function useServiceLogo(service: StreamingService, enabled: boolean): string | null {
+  const logos = useFetchedOnce("svc", [service], enabled, (svc) => {
+    const logo = SERVICES[svc as StreamingService]?.logo;
+    return logo ? rasterLogo(logo) : Promise.resolve(null);
+  });
+  return (logos[service] as string | null | undefined) ?? null;
 }
 
 export function useServicesRow(services: StreamingService[], enabled: boolean, t: T, view: View): NativeRowInput | null {

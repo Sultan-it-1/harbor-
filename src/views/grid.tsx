@@ -9,6 +9,7 @@ import { useSearch } from "@/lib/search-context";
 import { hasQuery, smartFilter } from "@/lib/smart-search";
 import { layoutHasGlobalBack } from "@/lib/theme";
 import { useScrollMemory, useView, type GridSpec } from "@/lib/view";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 
 const PAGE_CAP = 40;
 const PHONE = isPhoneLayout();
@@ -24,7 +25,7 @@ function dedupe(list: Meta[]): Meta[] {
 
 export function GridView({ grid }: { grid: GridSpec }) {
   const t = useT();
-  const { goBack } = useView();
+  const { goBack, topKind } = useView();
   const { setQuery: setGlobalQuery, setOpen: setGlobalOpen } = useSearch();
   const scrollRef = useRef<HTMLElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -106,6 +107,61 @@ export function GridView({ grid }: { grid: GridSpec }) {
     setGlobalQuery(query.trim());
     setGlobalOpen(true);
   };
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the title and its
+  // count, the search field held at the top, the posters two or more across, the next page near
+  // the end. The page then stays empty underneath.
+  const nativeRows = useMemo<NativeRowInput[]>(
+    () => [{ key: "grid", title: "", metas: shown, grid: true, min: 140, more: searching || done ? undefined : loadNext }],
+    [shown, searching, done, loadNext],
+  );
+  const nativeHeader = useMemo(
+    () => ({
+      title: grid.title,
+      size: 26,
+      count: result
+        ? t("{shown} of {total} titles", { shown: result.items.length, total })
+        : t("{n} titles", { n: total }),
+    }),
+    [grid.title, result, total, t],
+  );
+  const nativeSearch = useMemo(
+    () => ({
+      key: `grid:${grid.title}`,
+      hint: t("Search in {title}", { title: grid.title }),
+      text: query,
+      busy: searching && !done,
+      onQuery: setQuery,
+    }),
+    [grid.title, query, searching, done, t],
+  );
+  const noMatch = searching && shown.length === 0;
+  const nothing = done && !searching && metas.length === 0;
+  const native = useNativeBrowsePage("grid", {
+    active: topKind === "grid",
+    t,
+    back: true,
+    header: nativeHeader,
+    search: nativeSearch,
+    rows: nativeRows,
+    note:
+      result?.partial && result.items.length > 0
+        ? t("No title has every word. Showing the closest matches.")
+        : searching && !done && shown.length > 0
+          ? t("Searching all titles… {n} checked", { n: total })
+          : null,
+    message: noMatch
+      ? {
+          title: t('No titles match "{query}"', { query: query.trim() }),
+          text: done ? t("Checked all {n} titles in this list.", { n: total }) : t("Still checking the rest of the list…"),
+          action: t('Search everywhere for "{query}"', { query: query.trim() }),
+          onAction: searchEverywhere,
+        }
+      : nothing
+        ? { text: t("Nothing here yet.") }
+        : null,
+  });
+  if (native) return <main ref={scrollRef} aria-hidden="true" className="absolute inset-0 z-30 overflow-hidden bg-canvas" />;
 
   return (
     <main ref={scrollRef} className="absolute inset-0 z-30 overflow-y-auto bg-canvas">

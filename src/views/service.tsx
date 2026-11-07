@@ -9,7 +9,9 @@ import type { Meta } from "@/lib/cinemeta";
 import { SERVICES, providerIdsFor } from "@/lib/providers/streaming";
 import { safeFetch } from "@/lib/safe-fetch";
 import { useSettings, type StreamingService } from "@/lib/settings";
-import { useScrollMemory } from "@/lib/view";
+import { useScrollMemory, useView } from "@/lib/view";
+import { cssColorToHex, useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
+import { useServiceLogo } from "@/views/native/native-sections";
 import { useT } from "@/lib/i18n";
 
 type Category = {
@@ -112,6 +114,66 @@ export function ServiceView({ service }: { service: StreamingService }) {
     const seen = new Set<string>();
     return all.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
   }, [bucket]);
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the service's
+  // glow, logo and line, the categories, then its Top 10s and rows (All) or one grid. The next
+  // batch comes when a row's (or the grid's) end comes near. The page stays empty underneath.
+  const { topKind } = useView();
+  const nativeOn = useNativeScreensEnabled();
+  const logo = useServiceLogo(service, nativeOn);
+  const more = useCallback(() => {
+    if (!fetching && !loading && hasMore) setBatch((b) => b + 1);
+  }, [fetching, loading, hasMore]);
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    if (loading) return [];
+    if (category.id !== "all") return [{ key: "grid", title: "", metas: merged, grid: true, min: 140, more }];
+    const out: NativeRowInput[] = [];
+    const add = (list: Meta[], top: string, rest: string, only: string, key: string) => {
+      if (list.length >= 10) {
+        out.push({ key: `${key}-top`, title: top, metas: list.slice(0, 10), rank: true });
+        if (list.length > 10) out.push({ key: `${key}-more`, title: rest, metas: list.slice(10), more });
+      } else if (list.length > 0) {
+        out.push({ key, title: only, metas: list, more });
+      }
+    };
+    add(bucket.movies, t("Top 10 Movies on {name}", { name: meta.name }), t("More Movies"), t("Movies on {name}", { name: meta.name }), "movies");
+    add(bucket.series, t("Top 10 Series on {name}", { name: meta.name }), t("More Series"), t("Series on {name}", { name: meta.name }), "series");
+    return out;
+  }, [loading, category.id, merged, bucket, more, meta.name, t]);
+  const nativeHeader = useMemo(
+    () => ({
+      kicker: t("Popular on"),
+      title: meta.name,
+      logo,
+      tint: cssColorToHex(meta.tint),
+      subtitle: t("The most-watched movies and series on {name} right now in {region}.", { name: meta.name, region: settings.region }),
+    }),
+    [t, meta.name, meta.tint, logo, settings.region],
+  );
+  const nativeChips = useMemo(
+    () => [{ key: "cat", items: CATEGORIES.map((c) => ({ id: c.id, label: t(c.label), on: c.id === category.id })) }],
+    [t, category.id],
+  );
+  const native = useNativeBrowsePage("service", {
+    active: topKind === "service",
+    t,
+    back: true,
+    header: nativeHeader,
+    chips: nativeChips,
+    onChip: (_g, id) => {
+      const c = CATEGORIES.find((x) => x.id === id);
+      if (c) setCategory(c);
+    },
+    rows: nativeRows,
+    empty: loading
+      ? { text: t("Loading…") }
+      : {
+          text: settings.tmdbKey
+            ? t("Nothing matched this filter. Try another category or change your region in Settings.")
+            : t("Add a TMDB key in Settings → Library to power this view."),
+        },
+  });
+  if (native) return <main ref={scrollRef} aria-hidden="true" className="absolute inset-0 overflow-hidden" />;
 
   return (
     <main ref={scrollRef} className="absolute inset-0 overflow-y-auto pb-14">

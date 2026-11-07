@@ -124,7 +124,27 @@ function GenreSwitcher({
   );
 }
 
-function describe(
+/** The heading's icon by name, for the native screen (the same icons as describe's). */
+export function filterIconName(f: MetaFilter): "tag" | "calendar" | "clock" | "globe" | "languages" | "building" | "tv" {
+  switch (f.kind) {
+    case "year":
+      return "calendar";
+    case "runtime":
+      return "clock";
+    case "studio":
+      return "building";
+    case "country":
+      return "globe";
+    case "language":
+      return "languages";
+    case "network":
+      return "tv";
+    default:
+      return "tag";
+  }
+}
+
+export function describe(
   f: MetaFilter,
   t: (key: string, vars?: Record<string, string | number>) => string,
 ): {
