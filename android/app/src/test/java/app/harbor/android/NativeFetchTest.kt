@@ -80,10 +80,17 @@ class NativeFetchTest {
     @Test
     fun cancellingAQueuedRequestDropsIt() {
         val f = fetcher()
-        val s = server { _, _, _, out -> MiniHttpServer.respond(out, 200, mapOf("Content-Length" to "0")) }
+        // The server answers only after the cancel: a local server answering at once could deliver
+        // the reply before the test got to cancel it (a race in the test, not in NativeFetch).
+        val release = CountDownLatch(1)
+        val s = server { _, _, _, out ->
+            release.await(5, TimeUnit.SECONDS)
+            MiniHttpServer.respond(out, 200, mapOf("Content-Length" to "0"))
+        }
         f.cancel("never-sent") // unknown id: no-op
         request(f, "q", "${s.base}/q")
         f.cancel("q")
+        release.countDown()
         Thread.sleep(500)
         // Either it was dropped before starting, or broken while running: never answered.
         assertNull(results["q"])
