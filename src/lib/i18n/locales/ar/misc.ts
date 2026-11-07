@@ -905,6 +905,7 @@ const misc: Record<string, string> = {
   "Next review": "المراجعة التالية",
   "Open review source": "فتح مصدر المراجعة",
   "Read full": "اقرأ كاملاً",
+  "A standout this week.": "عمل لافت هذا الأسبوع.",
   "Scroll cast left": "تمرير الممثلين يساراً",
   "Scroll cast right": "تمرير الممثلين يميناً",
   "Previous featured": "المميّز السابق",

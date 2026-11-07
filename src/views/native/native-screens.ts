@@ -18,6 +18,7 @@ import { useSettings } from "@/lib/settings";
 import { episodeFromVideoId, isAnimeCwItem, libraryMetaType, type LibraryItem } from "@/lib/stremio";
 import { useTogether } from "@/lib/together/provider";
 import { useView, type PlayEpisode } from "@/lib/view";
+import { openUrl } from "@/lib/window";
 import { subscribeWatchlist, toggleWatchlist, watchlistHas } from "@/lib/watchlist";
 import { isTitleWatched, useWatchedMarksVersion } from "@/lib/watched-marks";
 import {
@@ -221,6 +222,12 @@ export function useNativeScreen(
 
 // ---- what the cards show ----
 
+/** MetaHub's poster for an IMDb id (tt…), as Stremio shows it. */
+function metahubPoster(id: string): string | undefined {
+  const tt = /^(tt\d+)/.exec(id)?.[1];
+  return tt ? `https://images.metahub.space/poster/medium/${tt}/img` : undefined;
+}
+
 function isUrl(u: string | null | undefined): u is string {
   return typeof u === "string" && /^https?:\/\//.test(u);
 }
@@ -246,7 +253,10 @@ export function useNativeCards() {
   return useMemo(() => {
     void watchedVer;
     void watchlistVer;
-    const img = (m: Meta) => [rpdbPoster(settings.rpdbKey, m.id, m.poster), m.poster].filter(isUrl);
+    // The next address is tried when one fails: an IMDb title also has MetaHub's poster (a dead
+    // addon's picture, or none at all, still shows one).
+    const img = (m: Meta) =>
+      [...new Set([rpdbPoster(settings.rpdbKey, m.id, m.poster), m.poster, metahubPoster(m.id)])].filter(isUrl);
     return {
       poster: (m: Meta) => ({
         title: m.name,
@@ -282,6 +292,10 @@ export function nativeLabels(t: T, customize: string) {
     year: t("Year"),
     runtime: t("Runtime"),
     watched: t("Watched"),
+    readFull: t("Read full"),
+    director: t("Director"),
+    close: t("Close"),
+    source: t("Open review source"),
   };
 }
 
@@ -435,8 +449,13 @@ export type NativeRowInput = {
   seeAll?: { title: string; fetcher: (page: number) => Promise<Meta[]>; initial?: Meta[] };
   /** Load more when the row's end comes near. */
   more?: () => void;
-  /** Not titles: genre / language / award / collection tiles, service logos, one wide card. */
-  kind?: "tile" | "logo" | "feature";
+  /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
+   *  Critics' Pick. */
+  kind?: "tile" | "logo" | "feature" | "critic";
+  /** A small line at the end of the title (Critics' Pick: "Loved by reviewers today"). */
+  note?: string | null;
+  /** Critics' Pick: everything its card shows (see CriticInfo in HomeModel.kt). */
+  critic?: Record<string, unknown> | null;
   /** The cards of a [kind] row (its [metas], if any, are what a tap opens). */
   cards?: NativeCardInput[];
   /** What a tap on card [i] does, instead of opening its title. */
@@ -500,6 +519,8 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
       kind: r.kind ?? "tile",
       all: !!r.seeAll || !!r.onAll,
       more: false,
+      note: r.note ?? null,
+      critic: r.critic ?? null,
       items: r.cards.map((c) => ({
         title: c.title,
         img: (c.img ?? []).filter(isUrlOrData),
@@ -556,7 +577,7 @@ export type NativePageInput = {
  */
 export function useNativeBrowsePage(page: string, input: NativePageInput): boolean {
   const { settings } = useSettings();
-  const { openPicker, openGrid } = useView();
+  const { openPicker, openGrid, openPerson } = useView();
   const enabled = useNativeScreensEnabled();
   const inUse = enabled && !input.blocked;
   const cards = useNativeCards();
@@ -670,6 +691,14 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "chip":
           if (a.row && a.what) cur.onChip?.(a.row, a.what);
+          return;
+        case "person": {
+          const id = Number(a.what);
+          if (id > 0) openPerson(id);
+          return;
+        }
+        case "link":
+          if (a.text && /^https?:\/\//.test(a.text)) openUrl(a.text);
           return;
       }
     },

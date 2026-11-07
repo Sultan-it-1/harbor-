@@ -107,12 +107,15 @@ class HomeModel(
                             "tile" -> HomeRow.Kind.TILE
                             "logo" -> HomeRow.Kind.LOGO
                             "feature" -> HomeRow.Kind.FEATURE
+                            "critic" -> HomeRow.Kind.CRITIC
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
                         more = r.optBoolean("more", false),
                         items = items,
                         edit = ed,
+                        note = r.str("note"),
+                        critic = r.optJSONObject("critic")?.let { parseCritic(it) },
                     )
                 },
                 cwEmpty = cw?.let { (it.str("title") ?: "") to (it.str("text") ?: "") },
@@ -138,6 +141,30 @@ class HomeModel(
         }
 
         private fun JSONObject.str(k: String): String? = if (isNull(k)) null else optString(k).takeIf { it.isNotEmpty() }
+
+        private fun parseCritic(c: JSONObject): CriticInfo = CriticInfo(
+            title = c.str("title") ?: "",
+            images = c.optJSONArray("img").strings(),
+            logo = c.str("logo"),
+            year = c.str("year"),
+            rating = c.str("rating"),
+            quote = c.str("quote"),
+            overview = c.str("overview"),
+            reviews = c.optJSONArray("reviews").objects().mapNotNull { r ->
+                val text = r.str("text") ?: return@mapNotNull null
+                CriticReview(text = text, full = r.str("full") ?: text, author = r.str("author"), score = r.str("score"), url = r.str("url"))
+            },
+            stills = c.optJSONArray("stills").strings(),
+            cast = c.optJSONArray("cast").objects().mapNotNull { p ->
+                val id = p.optLong("id", 0L).takeIf { it > 0 } ?: return@mapNotNull null
+                CriticPerson(id = id, name = p.str("name") ?: "", image = p.str("img"))
+            },
+            director = c.optJSONObject("director")?.let { d ->
+                d.optLong("id", 0L).takeIf { it > 0 }?.let { CriticPerson(id = it, name = d.str("name") ?: "", image = null) }
+            },
+            genres = c.optJSONArray("genres").strings(),
+            castTitle = c.str("castTitle"),
+        )
 
         /** "on" / "off" / anything else (not offered) as 1 / 0 / -1. */
         private fun tri(v: String?): Int = when (v) {
@@ -188,12 +215,42 @@ class HomeRow(
     val items: List<HomeCard>,
     /** The editor's controls for this row (null = none, or the editor is closed). */
     val edit: RowEdit? = null,
+    /** A small line at the end of the row's title (Critics' Pick: "Loved by reviewers today"). */
+    val note: String? = null,
+    /** CRITIC: everything its card shows. */
+    val critic: CriticInfo? = null,
 ) {
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
-     *  card (Critics' Pick). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE }
+     *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC }
 }
+
+/** Critics' Pick, as the page's own card shows it. */
+class CriticInfo(
+    val title: String,
+    /** The big picture, best first. */
+    val images: List<String>,
+    val logo: String?,
+    val year: String?,
+    val rating: String?,
+    /** Shown when there is no review (its tagline or first sentence). */
+    val quote: String?,
+    /** "Read full" when there is no review. */
+    val overview: String?,
+    val reviews: List<CriticReview>,
+    /** Four stills (they open full screen). */
+    val stills: List<String>,
+    val cast: List<CriticPerson>,
+    val director: CriticPerson?,
+    val genres: List<String>,
+    /** "Cast · 12", in the app's language. */
+    val castTitle: String? = null,
+)
+
+class CriticReview(val text: String, val full: String, val author: String?, val score: String?, val url: String?)
+
+class CriticPerson(val id: Long, val name: String, val image: String?)
 
 class HomeCard(
     val title: String,

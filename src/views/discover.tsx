@@ -37,7 +37,7 @@ import {
 import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
 import {
   useAwardTilesRow,
-  criticsRow,
+  useCriticsRow,
   queueRow,
   useCollectionsRow,
   useGenreTilesRow,
@@ -336,6 +336,7 @@ export function Discover({ active = true }: { active?: boolean }) {
   const languagesRow = useLanguageTilesRow("x:languages", titleOf("x:languages"), nativeOn, settings.tmdbKey, t, view);
   const collectionsRow = useCollectionsRow("x:collections", titleOf("x:collections"), nativeOn, settings.tmdbKey, t, view);
   const awardsRow = useAwardTilesRow("x:awards", titleOf("x:awards"), nativeOn, t, view);
+  const criticsNative = useCriticsRow("x:critics", titleOf("x:critics"), criticsPick, nativeOn, settings.tmdbKey, t, view);
   const nativeRows = useMemo<NativeRowInput[]>(() => {
     const out: NativeRowInput[] = [];
     for (const item of nativeRails) {
@@ -353,7 +354,7 @@ export function Discover({ active = true }: { active?: boolean }) {
                   : item.key === "x:queue"
                     ? queueRow(item.key, title, queue, t, view)
                     : item.key === "x:critics"
-                      ? criticsRow(item.key, title, criticsPick, t, view)
+                      ? criticsNative && { ...criticsNative, title }
                       : null;
         if (r) out.push(r);
         // Nothing to show right now (no queue yet…): the editor still lists it.
@@ -372,7 +373,7 @@ export function Discover({ active = true }: { active?: boolean }) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nativeRails, pageRows.editMode, dailyRows, deduped, t, loadMore, genresRow.cards, languagesRow.cards, collectionsRow.cards, awardsRow.cards, queue, criticsPick, view]);
+  }, [nativeRails, pageRows.editMode, dailyRows, deduped, t, loadMore, genresRow.cards, languagesRow.cards, collectionsRow.cards, awardsRow.cards, queue, criticsNative, view]);
   const nativeHero = useMemo(() => ({ metas: featured, rank: t("Featured") }), [featured, t]);
   const { setEditMode, editMode, custom, persist } = pageRows;
   const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);

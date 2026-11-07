@@ -93,6 +93,31 @@ class HomeModelTest {
     }
 
     @Test
+    fun criticsPick() {
+        val m = HomeModel.parse(
+            """{"page":"discover","rows":[{"key":"x:critics","title":"Critics' Pick","kind":"critic","note":"Loved by reviewers today",
+              "items":[{"title":"Yojimbo"}],
+              "critic":{"title":"Yojimbo","img":["https://a/b.jpg"],"logo":null,"year":"1961","rating":"8.1","quote":"A standout.",
+                "overview":"A ronin…","reviews":[{"text":"Short","full":"Short and long","author":"CRCulver","score":"9/10","url":"https://r"},{"author":"no text"}],
+                "stills":["https://s/1.jpg","https://s/2.jpg"],"cast":[{"id":7,"name":"Toshirō","img":"https://p/1.jpg"},{"id":0,"name":"No id"}],
+                "director":{"id":9,"name":"Akira Kurosawa"},"genres":["Drama","Thriller"]}}]}""",
+        )
+        val row = m.rows.single()
+        assertEquals(HomeRow.Kind.CRITIC, row.kind)
+        assertEquals("Loved by reviewers today", row.note)
+        val c = row.critic!!
+        assertEquals("1961", c.year)
+        assertNull(c.logo)
+        // A review without its text, a person without an id: left out.
+        assertEquals(listOf("CRCulver"), c.reviews.map { it.author })
+        assertEquals("Short and long", c.reviews[0].full)
+        assertEquals(listOf(7L), c.cast.map { it.id })
+        assertEquals("Akira Kurosawa", c.director?.name)
+        assertEquals(listOf("Drama", "Thriller"), c.genres)
+        assertEquals(2, c.stills.size)
+    }
+
+    @Test
     fun defaultsToHome() {
         val m = HomeModel.parse("{}")
         assertEquals("home", m.page)

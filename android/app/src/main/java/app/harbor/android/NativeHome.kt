@@ -185,7 +185,8 @@ class NativeHome(
 
     /** About 3.3 posters across a phone (like the web layout), never bigger than 150dp. */
     private fun posterWidth(): Int = min(((width() - gutter) / 3.3f).toInt(), dp(150))
-    private fun rankWidth(): Int = (posterWidth() * 1.4f).toInt()
+    /** Top 10 posters: a little bigger than the others. */
+    private fun rankWidth(): Int = (posterWidth() * 1.15f).toInt()
     private fun cwWidth(): Int = min(((width() - gutter) / 1.7f).toInt(), dp(300))
     private fun heroHeight(): Int = max(min((height() * 0.76f).toInt(), dp(640)), dp(320))
     /** Genre / language / award / collection tiles: about 2.3 across, 5:4. */
@@ -412,6 +413,8 @@ class NativeHome(
         private val slides = SlidesAdapter()
         private val pagerLayout = LinearLayoutManager(ctx, RecyclerView.HORIZONTAL, false)
         private val snap = PagerSnapHelper()
+        /** The next slide on its own, every [HERO_TURN_MS] (like the page's carousel). */
+        private val turn = Runnable { autoTurn() }
 
         init {
             frame.layoutParams = RecyclerView.LayoutParams(MATCH, heroHeight())
@@ -422,6 +425,8 @@ class NativeHome(
             snap.attachToRecyclerView(pager)
             pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
+                    // A swipe by hand: the next turn waits a full interval from now.
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING) scheduleTurn()
                     if (newState != RecyclerView.SCROLL_STATE_IDLE) return
                     val v = snap.findSnapView(pagerLayout) ?: return
                     val p = pagerLayout.getPosition(v)
@@ -435,6 +440,41 @@ class NativeHome(
             dots.orientation = LinearLayout.HORIZONTAL
             dots.gravity = Gravity.CENTER
             frame.addView(dots, FrameLayout.LayoutParams(MATCH, dp(10), Gravity.BOTTOM).apply { bottomMargin = dp(18) })
+            frame.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) = scheduleTurn()
+                override fun onViewDetachedFromWindow(v: View) {
+                    frame.removeCallbacks(turn)
+                }
+            })
+        }
+
+        private fun scheduleTurn() {
+            frame.removeCallbacks(turn)
+            frame.postDelayed(turn, HERO_TURN_MS)
+        }
+
+        /** Only while the screen shows, nobody is swiping it and the D-pad isn't on its buttons. */
+        private fun autoTurn() {
+            val n = model?.hero?.size ?: 0
+            if (n > 1 && isShowing && pager.scrollState == RecyclerView.SCROLL_STATE_IDLE && !frame.hasFocus()) {
+                val next = (heroPage + 1) % n
+                if (next == 0) {
+                    // Back to the first: a quick fade rather than sliding past every slide.
+                    pager.animate().alpha(0f).setDuration(220).withEndAction {
+                        pagerLayout.scrollToPosition(0)
+                        heroPage = 0
+                        paintDots()
+                        pager.animate().alpha(1f).setDuration(320).start()
+                    }.start()
+                } else {
+                    val slide = object : androidx.recyclerview.widget.LinearSmoothScroller(ctx) {
+                        override fun calculateSpeedPerPixel(dm: android.util.DisplayMetrics): Float = 160f / dm.densityDpi
+                    }
+                    slide.targetPosition = next
+                    pagerLayout.startSmoothScroll(slide)
+                }
+            }
+            scheduleTurn()
         }
 
         fun bind(m: HomeModel) {
@@ -445,6 +485,7 @@ class NativeHome(
                 frame.layoutParams = lp
             }
             slides.submit(m.hero)
+            pager.alpha = 1f
             if (heroPage >= m.hero.size) heroPage = 0
             pagerLayout.scrollToPosition(heroPage)
             paintDots()
@@ -623,6 +664,8 @@ class NativeHome(
         private var boundKey: String? = null
         /** The editor's controls for the row (up, down, hide, Top 10 look, hero, rename, delete). */
         private val controls = LinearLayout(ctx)
+        /** Critics' Pick: its own card instead of the strip (made the first time one is shown). */
+        private var critic: CriticCard? = null
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -672,16 +715,42 @@ class NativeHome(
             }
             title.text = row.title
             title.setTextColor(colors.ink)
-            seeAll.text = m.label("seeAll", "See all") + " ›"
-            seeAll.setTextColor(colors.subtle)
             val ed = if (m.edit) row.edit else null
             val hidden = ed?.hidden == true
-            seeAll.visibility = if (row.seeAll && ed == null) View.VISIBLE else View.GONE
+            // The end of the title line: "See all", or the row's small note (Critics' Pick).
+            val note = row.note
+            if (row.seeAll && ed == null) {
+                seeAll.text = m.label("seeAll", "See all") + " ›"
+                seeAll.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                seeAll.letterSpacing = 0f
+                seeAll.visibility = View.VISIBLE
+            } else if (note != null && ed == null) {
+                // Small capitals like the page's (Arabic has no case, and its letters stay joined).
+                seeAll.text = if (m.rtl) note else note.uppercase()
+                seeAll.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+                seeAll.letterSpacing = if (m.rtl) 0f else 0.14f
+                seeAll.visibility = View.VISIBLE
+            } else {
+                seeAll.visibility = View.GONE
+            }
+            seeAll.setTextColor(colors.subtle)
             header.isClickable = row.seeAll && ed == null
             header.isFocusable = row.seeAll && ed == null
             // A hidden row in the editor: its name dimmed and its controls, no cards.
             title.alpha = if (hidden) 0.45f else 1f
-            strip.visibility = if (hidden || row.items.isEmpty()) View.GONE else View.VISIBLE
+            val info = row.critic
+            val isCritic = row.kind == HomeRow.Kind.CRITIC
+            strip.visibility = if (hidden || isCritic || row.items.isEmpty()) View.GONE else View.VISIBLE
+            if (isCritic && info != null && !hidden) {
+                val card = critic ?: CriticCard().also {
+                    critic = it
+                    col.addView(it.view, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+                }
+                card.view.visibility = View.VISIBLE
+                card.bind(m, row.key, info)
+            } else {
+                critic?.view?.visibility = View.GONE
+            }
             bindControls(m, row, ed)
             strip.post { maybeAskMore() }
         }
@@ -802,7 +871,9 @@ class NativeHome(
         val image = NetImage(ctx)
         private val title = label("", 13f, lines = if (kind == C_CW) 1 else 2)
         private val badge = LinearLayout(ctx)
-        private val rankNumber = label("", 56f, bold = true, lines = 1)
+        private val rankNumber = label("", 32f, bold = true, lines = 1)
+        /** Top 10: the number and the title, side by side under the poster. */
+        private val rankLine = LinearLayout(ctx)
         private val sub = label("", 11f, lines = 1)
         private val track = FrameLayout(ctx)
         private val bar = View(ctx)
@@ -816,8 +887,8 @@ class NativeHome(
         private val bigSub = label("", if (kind == C_FEATURE) 13.5f else 11.5f, lines = if (kind == C_FEATURE) 3 else 1)
         private var row: HomeRow? = null
         private val titleBelow get() = kind == C_POSTER || kind == C_RANK || kind == C_CW
-        /** Top 10: the poster's own rounded frame, beside the big number (other cards: the box). */
-        private val frame: FrameLayout = if (kind == C_RANK) FrameLayout(ctx) else box
+        /** The picture's rounded frame. */
+        private val frame: FrameLayout = box
         /** The wide card: a label on top, the rating, a Play button. */
         private val kicker = label("", 11.5f, bold = true, lines = 1)
         private val stats = LinearLayout(ctx)
@@ -839,18 +910,6 @@ class NativeHome(
             frame.outlineProvider = roundOutline(dp(12).toFloat())
             image.scaleType = ImageView.ScaleType.CENTER_CROP
             col.addView(box)
-            if (kind == C_RANK) {
-                // Like the page's Top 10: a big outlined number, the poster beside it covering
-                // the number's end.
-                rankNumber.includeFontPadding = false
-                rankNumber.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
-                rankNumber.paint.style = android.graphics.Paint.Style.STROKE
-                rankNumber.paint.strokeWidth = dp(2).toFloat()
-                rankNumber.maxLines = 1
-                rankNumber.ellipsize = null
-                box.addView(rankNumber, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START))
-                box.addView(frame, FrameLayout.LayoutParams(0, 0, Gravity.BOTTOM or Gravity.END))
-            }
             frame.addView(image, FrameLayout.LayoutParams(MATCH, MATCH))
 
             when (kind) {
@@ -922,17 +981,29 @@ class NativeHome(
             if (kind == C_POSTER || kind == C_RANK) {
                 check.visibility = View.GONE
                 check.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(13), dp(13), Gravity.CENTER))
-                // Bottom-start like the page's posters; top-end on Top 10 cards (their number is
-                // bottom-start).
-                val corner = if (kind == C_RANK) Gravity.TOP or Gravity.END else Gravity.BOTTOM or Gravity.START
-                frame.addView(check, FrameLayout.LayoutParams(dp(22), dp(22), corner).apply {
+                // Bottom-start, like the page's posters.
+                frame.addView(check, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.BOTTOM or Gravity.START).apply {
                     marginStart = dp(6)
                     marginEnd = dp(6)
                     topMargin = dp(6)
                     bottomMargin = dp(6)
                 })
             }
-            col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            if (kind == C_RANK) {
+                // Top 10: the whole poster clear; under it the number, big and bold in the
+                // accent colour (two digits read as easily as one), the title beside it.
+                rankNumber.includeFontPadding = false
+                rankNumber.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+                rankNumber.maxLines = 1
+                rankNumber.ellipsize = null
+                rankLine.orientation = LinearLayout.HORIZONTAL
+                rankLine.gravity = Gravity.CENTER_VERTICAL
+                rankLine.addView(rankNumber, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                rankLine.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
+                col.addView(rankLine, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            } else {
+                col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            }
             if (!titleBelow) title.visibility = View.GONE
         }
 
@@ -953,14 +1024,12 @@ class NativeHome(
                 C_FEATURE -> featureWidth()
                 else -> posterWidth()
             }
-            // Top 10: the poster takes about two thirds of the card, the number the rest.
-            val posterW = if (kind == C_RANK) (w * 0.68f).toInt() else w
+            val posterW = w
             val h = when (kind) {
                 C_CW -> w * 9 / 16
                 C_TILE -> w * 4 / 5
                 C_LOGO -> dp(80)
                 C_FEATURE -> max(min(w * 10 / 16, dp(440)), dp(300))
-                C_RANK -> posterW * 3 / 2
                 else -> w * 3 / 2
             }
             val lp = box.layoutParams as LinearLayout.LayoutParams
@@ -970,22 +1039,13 @@ class NativeHome(
                 box.layoutParams = lp
             }
             if (kind == C_RANK) {
-                val flp = frame.layoutParams
-                if (flp.width != posterW || flp.height != h) {
-                    flp.width = posterW
-                    flp.height = h
-                    frame.layoutParams = flp
+                rankNumber.setTextSize(TypedValue.COMPLEX_UNIT_PX, (w * 0.3f).coerceIn(dp(26).toFloat(), dp(48).toFloat()))
+            } else {
+                val tlp = title.layoutParams as LinearLayout.LayoutParams
+                if (tlp.width != posterW) {
+                    tlp.width = posterW
+                    title.layoutParams = tlp
                 }
-                // The number as tall as most of the poster, outlined.
-                rankNumber.setTextSize(TypedValue.COMPLEX_UNIT_PX, h * 0.78f)
-                rankNumber.translationY = h * 0.08f
-            }
-            val tlp = title.layoutParams as LinearLayout.LayoutParams
-            val titleStart = if (kind == C_RANK) w - posterW else 0
-            if (tlp.width != posterW || tlp.marginStart != titleStart) {
-                tlp.width = posterW
-                tlp.marginStart = titleStart
-                title.layoutParams = tlp
             }
             col.contentDescription = c.title
             val tint = c.tint
@@ -1053,7 +1113,7 @@ class NativeHome(
                 }
                 C_RANK -> {
                     rankNumber.text = if (c.rank > 0) c.rank.toString() else ""
-                    rankNumber.setTextColor(withAlpha(colors.ink, 0.85f))
+                    rankNumber.setTextColor(colors.accent)
                 }
                 C_TILE, C_FEATURE -> {
                     // Tiles: the picture washed with the tile's colour all over (more at the bottom,
@@ -1111,6 +1171,389 @@ class NativeHome(
                     }
                 }
             }
+        }
+    }
+
+    // ---- Critics' Pick ---------------------------------------------------------------------------
+
+    /** Which review each Critics' Pick shows (its arrows page through them). */
+    private val criticReview = HashMap<String, Int>()
+
+    /**
+     * Critics' Pick, like the page's card: the title's picture with its logo (or name), year and
+     * IMDb rating; under it the review (paged, "Read full"), four stills (full screen on a tap),
+     * the cast, the director, the genres and Play.
+     */
+    private inner class CriticCard {
+        val view = LinearLayout(ctx)
+        private var rowKey = ""
+        private var info: CriticInfo? = null
+        private val poster = FrameLayout(ctx)
+        private val backdrop = NetImage(ctx)
+        private val shade = View(ctx)
+        private val logo = NetImage(ctx)
+        private val bigTitle = label("", 28f, lines = 2)
+        private val posterStats = LinearLayout(ctx)
+        private val panel = LinearLayout(ctx)
+        private val quoteIcon = ImageView(ctx)
+        private val quote = label("", 15f, lines = 5)
+        private val byline = LinearLayout(ctx)
+        private val author = label("", 11f, lines = 1)
+        private val source = ImageView(ctx)
+        private val pager = LinearLayout(ctx)
+        private val prev = ImageView(ctx)
+        private val count = label("", 10.5f, lines = 1)
+        private val next = ImageView(ctx)
+        private val readFull = label("", 11.5f, bold = true, lines = 1)
+        private val stills = LinearLayout(ctx)
+        private val stillViews = List(4) { NetImage(ctx) }
+        private val castLabel = label("", 10.5f, lines = 1)
+        private val castScroll = android.widget.HorizontalScrollView(ctx)
+        private val castStrip = LinearLayout(ctx)
+        private val directorRow = LinearLayout(ctx)
+        private val directorLabel = label("", 10.5f, lines = 1)
+        private val directorName = label("", 13f, lines = 1)
+        private val genres = LinearLayout(ctx)
+        private val play = LinearLayout(ctx)
+        private val playIcon = ImageView(ctx)
+        private val playText = label("", 13.5f, bold = true, lines = 1)
+
+        init {
+            view.orientation = LinearLayout.VERTICAL
+            view.setPaddingRelative(gutter, dp(4), gutter, 0)
+
+            // The title's picture.
+            poster.isClickable = true
+            poster.isFocusable = true
+            poster.setOnClickListener { act("open", row = rowKey, i = 0) }
+            poster.setOnFocusChangeListener { _, has -> poster.foreground = if (has) ring() else null }
+            poster.clipToOutline = true
+            poster.outlineProvider = roundOutline(dp(16).toFloat())
+            backdrop.scaleType = ImageView.ScaleType.CENTER_CROP
+            poster.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
+            poster.addView(shade, FrameLayout.LayoutParams(MATCH, MATCH))
+            val text = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPaddingRelative(dp(20), 0, dp(20), dp(20))
+            }
+            logo.scaleType = ImageView.ScaleType.FIT_START
+            text.addView(logo, LinearLayout.LayoutParams(MATCH, dp(72)))
+            bigTitle.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            bigTitle.setShadowLayer(dp(12).toFloat(), 0f, dp(2).toFloat(), 0x8C000000.toInt())
+            text.addView(bigTitle)
+            posterStats.orientation = LinearLayout.HORIZONTAL
+            posterStats.gravity = Gravity.CENTER_VERTICAL
+            text.addView(posterStats, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+            poster.addView(text, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+            view.addView(poster, LinearLayout.LayoutParams(MATCH, dp(300)))
+
+            // The panel under it.
+            panel.orientation = LinearLayout.VERTICAL
+            panel.setPadding(dp(20), dp(20), dp(20), dp(20))
+            view.addView(panel, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+            panel.addView(quoteIcon, LinearLayout.LayoutParams(dp(22), dp(22)))
+            quote.typeface = Typeface.create(Typeface.SERIF, Typeface.ITALIC)
+            quote.setLineSpacing(0f, 1.25f)
+            quote.setOnClickListener { showFull() }
+            panel.addView(quote, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+
+            byline.orientation = LinearLayout.HORIZONTAL
+            byline.gravity = Gravity.CENTER_VERTICAL
+            byline.addView(author, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            source.setPadding(dp(4), dp(4), dp(4), dp(4))
+            source.isClickable = true
+            source.isFocusable = true
+            source.setOnClickListener { currentReview()?.url?.let { act("link", row = rowKey, text = it) } }
+            byline.addView(source, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(2) })
+            pager.orientation = LinearLayout.HORIZONTAL
+            pager.gravity = Gravity.CENTER_VERTICAL
+            for (b in listOf(prev, next)) {
+                b.setPadding(dp(5), dp(5), dp(5), dp(5))
+                b.isClickable = true
+                b.isFocusable = true
+            }
+            prev.setOnClickListener { step(-1) }
+            next.setOnClickListener { step(1) }
+            pager.addView(prev, LinearLayout.LayoutParams(dp(26), dp(26)))
+            pager.addView(count)
+            pager.addView(next, LinearLayout.LayoutParams(dp(26), dp(26)))
+            byline.addView(pager, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
+            readFull.isClickable = true
+            readFull.isFocusable = true
+            readFull.setPaddingRelative(dp(8), dp(6), 0, dp(6))
+            readFull.setOnClickListener { showFull() }
+            byline.addView(readFull)
+            panel.addView(byline, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+
+            stills.orientation = LinearLayout.VERTICAL
+            for (r in 0 until 2) {
+                val line = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                for (c in 0 until 2) {
+                    val i = r * 2 + c
+                    val v = stillViews[i]
+                    v.scaleType = ImageView.ScaleType.CENTER_CROP
+                    v.clipToOutline = true
+                    v.outlineProvider = roundOutline(dp(10).toFloat())
+                    v.isClickable = true
+                    v.isFocusable = true
+                    v.setOnClickListener { info?.let { showStills(it.stills.ifEmpty { it.images.take(1) }, i) } }
+                    line.addView(v, LinearLayout.LayoutParams(0, dp(80), 1f).apply { if (c == 0) marginEnd = dp(6) })
+                }
+                stills.addView(line, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (r == 0) bottomMargin = dp(6) })
+            }
+            panel.addView(stills, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
+
+            panel.addView(castLabel, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(18) })
+            castScroll.isHorizontalScrollBarEnabled = false
+            castScroll.overScrollMode = View.OVER_SCROLL_NEVER
+            castStrip.orientation = LinearLayout.HORIZONTAL
+            castScroll.addView(castStrip)
+            panel.addView(castScroll, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+
+            directorRow.orientation = LinearLayout.HORIZONTAL
+            directorRow.gravity = Gravity.CENTER_VERTICAL
+            directorRow.addView(directorLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            directorName.isClickable = true
+            directorName.isFocusable = true
+            directorRow.addView(directorName)
+            panel.addView(directorRow, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(18) })
+            genres.orientation = LinearLayout.HORIZONTAL
+            panel.addView(genres, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+
+            play.orientation = LinearLayout.HORIZONTAL
+            play.gravity = Gravity.CENTER
+            play.isClickable = true
+            play.isFocusable = true
+            play.setPaddingRelative(dp(20), 0, dp(24), 0)
+            play.setOnClickListener { act("play", row = rowKey, i = 0) }
+            play.addView(playIcon, LinearLayout.LayoutParams(dp(15), dp(15)).apply { marginEnd = dp(8) })
+            play.addView(playText)
+            panel.addView(play, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply {
+                topMargin = dp(20)
+                gravity = Gravity.END
+            })
+        }
+
+        private fun reviews() = info?.reviews ?: emptyList()
+        private fun index(): Int = (criticReview[rowKey] ?: 0).coerceIn(0, max(0, reviews().size - 1))
+        private fun currentReview(): CriticReview? = reviews().getOrNull(index())
+
+        private fun step(d: Int) {
+            val n = reviews().size
+            if (n < 2) return
+            criticReview[rowKey] = (index() + d + n) % n
+            model?.let { paintReview(it) }
+        }
+
+        fun bind(m: HomeModel, key: String, c: CriticInfo) {
+            rowKey = key
+            info = c
+            val cardW = width() - 2 * gutter
+            val posterH = max(dp(300), min(cardW * 9 / 16, dp(460)))
+            val plp = poster.layoutParams
+            if (plp.height != posterH) {
+                plp.height = posterH
+                poster.layoutParams = plp
+            }
+            poster.background = rounded(colors.surface, dp(16).toFloat())
+            poster.contentDescription = c.title
+            shade.background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(withAlpha(colors.canvas, 0.92f), withAlpha(colors.canvas, 0.3f), Color.TRANSPARENT),
+            )
+            images.load(backdrop, c.images, cardW, posterH)
+            bigTitle.text = c.title
+            bigTitle.setTextColor(colors.ink)
+            bigTitle.visibility = View.VISIBLE
+            logo.scaleType = if (m.rtl) ImageView.ScaleType.FIT_END else ImageView.ScaleType.FIT_START
+            logo.visibility = View.GONE
+            if (c.logo != null) {
+                logo.visibility = View.INVISIBLE
+                images.load(logo, listOf(c.logo), (cardW * 0.6f).toInt(), dp(72), alpha = true) { ok ->
+                    logo.visibility = if (ok) View.VISIBLE else View.GONE
+                    bigTitle.visibility = if (ok) View.GONE else View.VISIBLE
+                }
+            }
+            posterStats.removeAllViews()
+            c.year?.let {
+                posterStats.addView(label(it, 13f, lines = 1).apply { setTextColor(withAlpha(colors.ink, 0.8f)) },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10) })
+            }
+            c.rating?.let { posterStats.addView(imdbBadge(it, 12.5f, trailing = 0)) }
+            posterStats.visibility = if (posterStats.childCount > 0) View.VISIBLE else View.GONE
+
+            panel.background = rounded(withAlpha(colors.surface, 0.55f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            quoteIcon.setImageDrawable(icon(R.drawable.ic_quote, colors.accent))
+            paintReview(m)
+
+            // Four stills, two by two (the title's picture where there are fewer).
+            val inner = cardW - dp(40)
+            val stillH = (inner - dp(6)) / 2 * 9 / 16
+            val shots = c.stills
+            stills.visibility = if (shots.isEmpty()) View.GONE else View.VISIBLE
+            stillViews.forEachIndexed { i, v ->
+                val lp = v.layoutParams
+                if (lp.height != stillH) {
+                    lp.height = stillH
+                    v.layoutParams = lp
+                }
+                v.background = rounded(colors.surface, dp(10).toFloat())
+                val src = shots.getOrNull(i) ?: c.images.firstOrNull()
+                if (shots.isNotEmpty() && src != null) images.load(v, listOf(src), inner / 2, stillH) else images.clear(v)
+            }
+
+            castLabel.text = caps(m, c.castTitle ?: m.label("cast", "Cast"))
+            castLabel.setTextColor(colors.subtle)
+            castLabel.letterSpacing = if (m.rtl) 0f else 0.2f
+            castStrip.removeAllViews()
+            for (p in c.cast) castStrip.addView(castChip(p))
+            castLabel.visibility = if (c.cast.isEmpty()) View.GONE else View.VISIBLE
+            castScroll.visibility = castLabel.visibility
+
+            val d = c.director
+            directorRow.visibility = if (d == null) View.GONE else View.VISIBLE
+            directorLabel.text = caps(m, m.label("director", "Director"))
+            directorLabel.setTextColor(colors.subtle)
+            directorLabel.letterSpacing = if (m.rtl) 0f else 0.2f
+            directorName.text = d?.name ?: ""
+            directorName.setTextColor(colors.ink)
+            directorName.setOnClickListener { d?.let { act("person", row = rowKey, what = it.id.toString()) } }
+
+            genres.removeAllViews()
+            for (g in c.genres.take(3)) {
+                genres.addView(label(g, 11.5f, lines = 1).apply {
+                    setTextColor(colors.muted)
+                    setPaddingRelative(dp(10), dp(3), dp(10), dp(3))
+                    background = rounded(Color.TRANSPARENT, dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.12f))
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) })
+            }
+            genres.visibility = if (genres.childCount > 0) View.VISIBLE else View.GONE
+
+            play.background = focusable(rounded(colors.ink, dp(21).toFloat()))
+            playIcon.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
+            playText.text = m.label("play", "Play")
+            playText.setTextColor(colors.canvas)
+        }
+
+        private fun paintReview(m: HomeModel) {
+            val c = info ?: return
+            val r = currentReview()
+            quote.text = r?.text ?: c.quote ?: ""
+            quote.setTextColor(withAlpha(colors.ink, 0.9f))
+            quote.visibility = if (quote.text.isNullOrBlank()) View.GONE else View.VISIBLE
+            author.text = if (r == null) "" else caps(m, listOfNotNull(r.author, r.score).joinToString(" · "))
+            author.setTextColor(colors.muted)
+            author.letterSpacing = if (m.rtl) 0f else 0.12f
+            source.visibility = if (r?.url != null) View.VISIBLE else View.GONE
+            source.setImageDrawable(icon(R.drawable.ic_external_link, colors.subtle))
+            source.contentDescription = m.label("source", "Open review source")
+            val n = reviews().size
+            pager.visibility = if (n > 1) View.VISIBLE else View.GONE
+            prev.setImageDrawable(icon(R.drawable.ic_chevron_left, colors.subtle))
+            next.setImageDrawable(icon(R.drawable.ic_chevron_right, colors.subtle))
+            // The arrows point the way they move in a right-to-left page too.
+            prev.scaleX = if (m.rtl) -1f else 1f
+            next.scaleX = if (m.rtl) -1f else 1f
+            count.text = "${index() + 1}/$n"
+            count.setTextColor(colors.subtle)
+            val full = r?.full ?: c.overview
+            readFull.visibility = if (full.isNullOrBlank()) View.GONE else View.VISIBLE
+            readFull.text = caps(m, m.label("readFull", "Read full"))
+            readFull.setTextColor(colors.accent)
+            readFull.letterSpacing = if (m.rtl) 0f else 0.12f
+        }
+
+        /** The whole review (or the overview), in a box that scrolls. */
+        private fun showFull() {
+            val c = info ?: return
+            val m = model ?: return
+            val r = currentReview()
+            val text = r?.full ?: c.overview ?: return
+            val body = TextView(ctx).apply {
+                this.text = text
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setLineSpacing(0f, 1.3f)
+                setPadding(dp(22), dp(10), dp(22), dp(10))
+                setTextIsSelectable(true)
+            }
+            val scroll = android.widget.ScrollView(ctx).apply { addView(body) }
+            val b = android.app.AlertDialog.Builder(ctx)
+                .setTitle(r?.author ?: c.title)
+                .setView(scroll)
+                .setPositiveButton(m.label("close", "Close"), null)
+            r?.url?.let { url -> b.setNeutralButton(m.label("source", "Open review source")) { _, _ -> act("link", row = rowKey, text = url) } }
+            try {
+                b.show()
+            } catch (_: Exception) {
+            }
+        }
+
+        private fun castChip(p: CriticPerson): View = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            isClickable = true
+            isFocusable = true
+            contentDescription = p.name
+            setOnClickListener { act("person", row = rowKey, what = p.id.toString()) }
+            val face = FrameLayout(ctx).apply {
+                clipToOutline = true
+                outlineProvider = object : ViewOutlineProvider() {
+                    override fun getOutline(view: View, outline: Outline) = outline.setOval(0, 0, view.width, view.height)
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                }.also { it.setColor(withAlpha(colors.surface, 0.9f)); it.setStroke(dp(1), withAlpha(colors.ink, 0.12f)) }
+            }
+            val initial = label(p.name.take(1), 13f, lines = 1).apply {
+                gravity = Gravity.CENTER
+                setTextColor(colors.subtle)
+            }
+            face.addView(initial, FrameLayout.LayoutParams(MATCH, MATCH))
+            if (p.image != null) {
+                val img = NetImage(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+                face.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, listOf(p.image), dp(52), dp(52)) { ok -> initial.visibility = if (ok) View.GONE else View.VISIBLE }
+            }
+            addView(face, LinearLayout.LayoutParams(dp(52), dp(52)))
+            addView(label(p.name, 11f, lines = 1).apply {
+                gravity = Gravity.CENTER
+                setTextColor(colors.ink)
+            }, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+            layoutParams = LinearLayout.LayoutParams(dp(68), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) }
+        }
+    }
+
+    /** Small capitals (Arabic has no case). */
+    private fun caps(m: HomeModel, s: String): String = if (m.rtl) s else s.uppercase()
+
+    /** Pictures full screen, swiped through; a tap (or Back) closes them. */
+    private fun showStills(urls: List<String>, start: Int) {
+        if (urls.isEmpty()) return
+        val d = android.app.Dialog(ctx, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val rv = RecyclerView(ctx)
+        val lm = LinearLayoutManager(ctx, RecyclerView.HORIZONTAL, false)
+        rv.layoutManager = lm
+        rv.setBackgroundColor(Color.BLACK)
+        rv.overScrollMode = View.OVER_SCROLL_NEVER
+        rv.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            override fun getItemCount() = urls.size
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder =
+                object : RecyclerView.ViewHolder(NetImage(ctx).apply {
+                    layoutParams = RecyclerView.LayoutParams(MATCH, MATCH)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setOnClickListener { d.dismiss() }
+                }) {}
+            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+                images.load(holder.itemView as NetImage, listOf(urls[position]), width(), height())
+            }
+            override fun onViewRecycled(holder: RecyclerView.ViewHolder) = images.clear(holder.itemView as NetImage)
+        }
+        PagerSnapHelper().attachToRecyclerView(rv)
+        lm.scrollToPosition(start.coerceIn(0, urls.size - 1))
+        d.setContentView(rv)
+        try {
+            d.show()
+        } catch (_: Exception) {
         }
     }
 
@@ -1219,5 +1662,7 @@ class NativeHome(
         private const val C_TILE = 104
         private const val C_LOGO = 105
         private const val C_FEATURE = 106
+        /** The hero turns to its next slide after this long. */
+        private const val HERO_TURN_MS = 15_000L
     }
 }

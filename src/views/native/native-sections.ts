@@ -1,7 +1,7 @@
 // The non-title rows of the native screens: genre / language / award / collection tiles, the
 // streaming services, the discovery queue and Critics' Pick, built from the same data the page's
 // own components use.
-import { createElement, useEffect, useState } from "react";
+import { createElement, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AWARDS } from "@/components/award-tiles";
@@ -9,7 +9,11 @@ import { GENRE_PALETTE, GENRE_TILES } from "@/components/genre-tiles";
 import { laurelColorFor } from "@/components/icons/award-logo";
 import { Laurel } from "@/components/icons/laurel";
 import { LANGS } from "@/components/language-tiles";
-import type { Meta } from "@/lib/cinemeta";
+import { narrowMediaType, type Meta } from "@/lib/cinemeta";
+import { excerptReview, profileUrl, upsizeTmdb } from "@/components/critics-pick/utils";
+import { pickRandom } from "@/lib/feed/tags";
+import { peekCachedLogo, resolveLogo } from "@/lib/logo";
+import { tmdbCriticData, tmdbMovieImages, type CriticData } from "@/lib/providers/tmdb";
 import { COLLECTIONS_CATALOG } from "@/lib/collections-catalog";
 import { fetchGenreSample, type FeedItem } from "@/lib/feed";
 import { MOVIE_GENRES } from "@/lib/feed/tags";
@@ -432,28 +436,84 @@ export function queueRow(key: string, title: string, items: FeedItem[], t: T, vi
   };
 }
 
-export function criticsRow(key: string, title: string, meta: Meta | null | undefined, t: T, view: View): NativeRowInput | null {
-  if (!meta) return null;
-  const bg = meta.background ?? meta.poster;
-  const big = bg?.replace(/\/t\/p\/w\d+\//, "/t/p/original/");
-  const year = meta.releaseInfo ?? null;
-  return {
-    key,
-    title,
-    metas: [meta],
-    kind: "feature",
-    cards: [
-      {
+/**
+ * Critics' Pick as the page's card shows it (src/components/critics-pick.tsx): the title's picture,
+ * logo, year and rating; its reviews (TMDB), stills, cast, director and genres; Play.
+ */
+export function useCriticsRow(
+  key: string,
+  title: string,
+  meta: Meta | null | undefined,
+  enabled: boolean,
+  tmdbKey: string,
+  t: T,
+  view: View,
+): NativeRowInput | null {
+  const [data, setData] = useState<CriticData | null>(null);
+  const [stills, setStills] = useState<string[]>([]);
+  const [logo, setLogo] = useState<string | null>(null);
+  const id = meta?.id;
+  useEffect(() => {
+    setData(null);
+    setStills([]);
+    setLogo(meta && tmdbKey ? (peekCachedLogo(tmdbKey, meta) ?? null) : null);
+    if (!enabled || !meta || !tmdbKey) return;
+    let off = false;
+    tmdbCriticData(tmdbKey, meta.id, narrowMediaType(meta.type))
+      .then((d) => !off && setData(d))
+      .catch(() => {});
+    tmdbMovieImages(tmdbKey, meta.id)
+      .then((u) => !off && setStills(u))
+      .catch(() => {});
+    if (!peekCachedLogo(tmdbKey, meta)) {
+      resolveLogo(tmdbKey, meta)
+        .then((u) => !off && setLogo(u ?? null))
+        .catch(() => {});
+    }
+    return () => {
+      off = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, id, tmdbKey]);
+
+  return useMemo(() => {
+    if (!meta) return null;
+    const backdrop = upsizeTmdb(meta.background ?? meta.poster);
+    const overview = data?.overview ?? meta.description ?? "";
+    const tagline = data?.tagline?.trim();
+    const shots = stills.length > 4 ? pickRandom(stills, 4, meta.id.length) : stills;
+    const cast = (data?.cast ?? []).slice(0, 20);
+    return {
+      key,
+      title,
+      metas: [meta],
+      kind: "critic",
+      note: t("Loved by reviewers today"),
+      cards: [{ title: meta.name }],
+      critic: {
         title: meta.name,
-        sub: meta.description ?? null,
-        img: [big, bg].filter((u): u is string => !!u),
-        kicker: [t("Loved by reviewers today"), year].filter(Boolean).join(" · "),
+        img: [backdrop, meta.background, meta.poster].filter((u, i, a): u is string => !!u && a.indexOf(u) === i),
+        logo: logo ?? (meta.logo || null),
+        year: meta.releaseInfo ?? null,
         rating: meta.imdbRating ?? null,
-        play: true,
+        quote: tagline || (overview ? overview.split(/(?<=[.!?])\s+/)[0] : t("A standout this week.")),
+        overview: overview || null,
+        reviews: (data?.reviews ?? []).slice(0, 8).map((r) => ({
+          text: excerptReview(r.content),
+          full: r.content.trim(),
+          author: r.author,
+          score: typeof r.rating === "number" && r.rating > 0 ? `${r.rating}/10` : null,
+          url: r.url ?? null,
+        })),
+        stills: shots,
+        cast: cast.map((c) => ({ id: c.id, name: c.name.split(" ")[0], img: profileUrl(c.profilePath) ?? null })),
+        castTitle: cast.length > 0 ? t("Cast · {n}", { n: (data?.cast ?? []).length }) : null,
+        director: data?.director ? { id: data.director.id, name: data.director.name } : null,
+        genres: (data?.genres ?? []).slice(0, 3),
       },
-    ],
-    onPlay: () => view.openPicker(meta),
-  };
+      onPlay: () => view.openPicker(meta),
+    };
+  }, [key, title, meta, data, stills, logo, t, view]);
 }
 
 /** A colour [f] of the way to black (the award tiles are a dark shade of their laurel's gold). */
