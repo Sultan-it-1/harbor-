@@ -127,7 +127,8 @@ export function Shows({ active = true }: { active?: boolean }) {
           if (list.length === 0) continue;
           built.push({
             key: `cinemeta-genre-${genreList[i].toLowerCase().replace(/[^a-z]/g, "")}`,
-            title: `Top ${genreList[i]}`,
+            // Its own title: "Top Drama" names the Movies page's row (and is translated as films).
+            title: `Top ${genreList[i]} Series`,
             metas: list.slice(0, 30),
             page: 1,
             hasMore: false,
