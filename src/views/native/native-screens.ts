@@ -492,6 +492,8 @@ export type NativeRowInput = {
   /** A wide card before the others (a spotlight on a person) and what a tap on it does. */
   lead?: { title: string; sub?: string | null; img?: string[] } | null;
   onLead?: () => void;
+  /** Only a heading (its title and [note]) over the next row, a grid (an award's winning films). */
+  head?: boolean;
 };
 
 /** A page's heading (see HomeHeader in HomeModel.kt). */
@@ -591,6 +593,7 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
       noInfo: !!r.noInfo,
       credits: r.credits ?? [],
       lead: r.lead ? { title: r.lead.title, sub: r.lead.sub ?? null, img: (r.lead.img ?? []).filter(isUrlOrData) } : null,
+      head: !!r.head,
       items: r.cards.map((c) => ({
         title: c.title,
         img: (c.img ?? []).filter(isUrlOrData),
@@ -660,6 +663,9 @@ export type NativePageInput = {
   /** A title's hero and synopsis (see HomeDetail in HomeModel.kt); its buttons and pills. */
   detail?: Record<string, unknown> | null;
   onDetail?: (what: string) => void;
+  /** The discovery queue's card and strip (see HomeQueue in HomeModel.kt); its taps. */
+  queue?: Record<string, unknown> | null;
+  onQueue?: (what: string, i: number) => void;
   onPill?: (id: string) => void;
   /** Steps aside for now without giving the page back (a dialog the page opens over it). */
   hidden?: boolean;
@@ -708,6 +714,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const msgAction = input.message?.action ?? null;
   const hasMessage = !!input.message;
   const detailModel = input.detail;
+  const queueModel = input.queue;
   const customizeLabel = customize?.label;
   const editing = !!editor?.on;
   const editCustom = editor?.custom;
@@ -726,7 +733,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     for (const r of rows) {
       const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
       const editable = editing && editCustom && editKeys?.includes(r.key);
-      const choices = !!r.chips || (r.tools ?? []).length > 0;
+      const choices = !!r.chips || (r.tools ?? []).length > 0 || !!r.head;
       const empty =
         r.kind === "episodes" || choices
           ? false
@@ -764,8 +771,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       note: note ?? null,
       message: hasMessage ? { title: msgTitle, text: msgText, action: msgAction } : null,
       detail: detailModel ?? null,
+      queue: queueModel ?? null,
     };
- }, [searchBig, searchFocus, noTogether, detailModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [searchBig, searchFocus, noTogether, detailModel, queueModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -850,6 +858,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "d":
           if (a.what) cur.onDetail?.(a.what);
+          return;
+        case "q":
+          if (a.what) cur.onQueue?.(a.what, i);
           return;
         case "rowchip":
           if (a.what) p.rows.get(a.row ?? "")?.onRowChip?.(a.what);

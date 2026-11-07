@@ -1,5 +1,5 @@
 import { LayoutGrid, List } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/back-to-top";
 import { laurelColorFor } from "@/components/icons/award-logo";
 import { AWARD_CATALOG } from "@/lib/awards-catalog";
@@ -13,8 +13,9 @@ import {
 import type { Meta } from "@/lib/cinemeta";
 import type { AwardType } from "@/lib/providers/wikidata";
 import { useSettings } from "@/lib/settings";
-import { useScrollMemory } from "@/lib/view";
+import { useScrollMemory, useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 import { AwardHero } from "./award/award-hero";
 import { AwardList } from "./award/award-list";
 import { FilmGrid } from "./award/film-grid";
@@ -121,6 +122,121 @@ export function AwardView({ awardType }: { awardType: AwardType }) {
     people.actors.length === 0 &&
     people.directors.length === 0 &&
     people.writers.length === 0;
+
+  // Android: the gallery drawn natively (see @/views/native/native-screens) like the page: the
+  // award's name over its winners' pictures, founded / years, what it is, Gallery / List, the
+  // winning films (a grid; "View all" then more as it scrolls) and its actors, directors and
+  // writers (a "3×" pill on those who won more than once). The list stays the page's own.
+  const { topKind, openPerson } = useView();
+  const filmsTotal = awardFilmTotal(awardType);
+  const nativeHeader = useMemo(() => {
+    const pics: string[] = [];
+    for (const f of films) {
+      const u = f.background ?? f.poster;
+      if (u && !pics.includes(u)) pics.push(u);
+      if (pics.length >= 4) break;
+    }
+    return {
+      kicker: meta.shorthand,
+      title: meta.title,
+      size: 40,
+      tint,
+      subtitle:
+        meta.founded > 0
+          ? `${t("Founded {year}", { year: meta.founded })}  ·  ${t("{n} years", { n: new Date().getFullYear() - meta.founded })}`
+          : null,
+      backdrop: pics,
+      body: [meta.description, meta.tagline].filter(Boolean).join("\n\n") || null,
+      bodyLines: 6,
+    };
+  }, [films, meta, tint, t]);
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [
+      {
+        key: "mode",
+        title: "",
+        metas: [],
+        cards: [],
+        chips: {
+          key: "mode",
+          items: [
+            { id: "gallery", label: t("Gallery"), on: mode === "gallery" },
+            { id: "list", label: t("List"), on: mode === "list" },
+          ],
+        },
+        onRowChip: (id) => selectMode(id === "list" ? "list" : "gallery"),
+      },
+    ];
+    if (!hasKey) return out;
+    if (films.length > 0) {
+      out.push({
+        key: "filmsHead",
+        title: t("Winning films & shows"),
+        note: filmsTotal > 0 ? (filmsTotal === 1 ? t("{n} title", { n: filmsTotal }) : t("{n} titles", { n: filmsTotal })) : null,
+        metas: [],
+        cards: [],
+        head: true,
+      });
+      out.push({
+        key: "films",
+        title: "",
+        metas: expanded ? films : films.slice(0, PREVIEW),
+        grid: true,
+        min: 96,
+        more: expanded && !filmsDone ? loadMore : undefined,
+      });
+      if (!expanded && filmsTotal > PREVIEW) {
+        out.push({
+          key: "filmsAll",
+          title: "",
+          metas: [],
+          cards: [],
+          tools: [{ id: "all", label: t("View all {n} winners", { n: filmsTotal }) }],
+          onTool: onViewAll,
+        });
+      }
+    }
+    const rail = (key: string, title: string, list: AwardPeople["actors"]) => {
+      if (list.length === 0) return;
+      out.push({
+        key,
+        title,
+        kind: "poster",
+        metas: [],
+        cards: list.map((p) => ({
+          title: p.name,
+          sub: p.work,
+          img: p.photo ? [p.photo] : [],
+          kicker: p.wins > 1 ? `${p.wins}×` : null,
+          tint,
+        })),
+        onOpen: (i) => {
+          const p = list[i];
+          if (p) openPerson(p.id);
+        },
+      });
+    };
+    rail("actors", t("Celebrated actors"), people.actors);
+    rail("directors", t("Acclaimed directors"), people.directors);
+    rail("writers", t("Honored writers"), people.writers);
+    return out;
+  }, [t, mode, selectMode, hasKey, films, filmsTotal, expanded, filmsDone, loadMore, onViewAll, people, tint, openPerson]);
+  const native = useNativeBrowsePage("award", {
+    active: topKind === "award",
+    blocked: mode === "list",
+    t,
+    back: true,
+    header: nativeHeader,
+    rows: nativeRows,
+    message: !hasKey
+      ? { text: t("Add a TMDB key in Settings to unlock posters and the artists behind this award.") }
+      : isEmpty
+        ? { text: t("No winners are catalogued for this award yet.") }
+        : loadingFilms && films.length === 0
+          ? { text: t("Loading…") }
+          : null,
+  });
+  if (native) return <main ref={scrollRef} className="relative h-full overflow-hidden bg-canvas" />;
 
   return (
     <main ref={scrollRef} className="relative h-full overflow-y-auto bg-canvas">

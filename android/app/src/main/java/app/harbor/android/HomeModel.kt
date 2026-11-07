@@ -45,6 +45,8 @@ class HomeModel(
     val message: HomeMessage? = null,
     /** A title's page: its hero (backdrop, logo, pills, Play, More) and synopsis, over the rows. */
     val detail: HomeDetail? = null,
+    /** The discovery queue's card and the strip under it. */
+    val queue: HomeQueue? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -109,8 +111,9 @@ class HomeModel(
                     }
                     // In the editor a row shows even with nothing in it (hidden, or not loaded); a
                     // row led by a spotlight card shows with only that card; credits have no cards.
-                    // A row of only choices or buttons (recent searches, Surprise me) shows too.
-                    val onlyChoices = r.optJSONObject("chips") != null || (r.optJSONArray("tools")?.length() ?: 0) > 0
+                    // A row of only choices or buttons (recent searches, Surprise me) shows too, and
+                    // a heading over a grid ("head": an award's winning films and their count).
+                    val onlyChoices = r.optJSONObject("chips") != null || (r.optJSONArray("tools")?.length() ?: 0) > 0 || r.optBoolean("head", false)
                     if (items.isEmpty() && ed == null && !onlyChoices && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
                     HomeRow(
                         key = key,
@@ -231,6 +234,31 @@ class HomeModel(
                         more = d.optBoolean("more", false),
                         synopsis = d.str("synopsis"),
                         taglineLink = d.optBoolean("taglineLink", false),
+                    )
+                },
+                queue = o.optJSONObject("queue")?.let { q ->
+                    val l = q.optJSONObject("labels")
+                    HomeQueue(
+                        position = q.str("position") ?: "",
+                        tag = q.str("tag"),
+                        series = q.str("series"),
+                        title = q.str("title") ?: "",
+                        facts = q.optJSONArray("facts").strings(),
+                        rating = q.str("rating"),
+                        genres = q.str("genres"),
+                        desc = q.str("desc"),
+                        backdrop = q.optJSONArray("backdrop").strings(),
+                        saved = q.optBoolean("saved", false),
+                        canPrev = q.optBoolean("canPrev", false),
+                        canNext = q.optBoolean("canNext", false),
+                        labels = buildMap {
+                            if (l != null) for (k in l.keys()) l.optString(k).takeIf { it.isNotEmpty() }?.let { put(k, it) }
+                        },
+                        strip = q.optJSONArray("strip").objects().map { t ->
+                            QueueTile(img = t.optJSONArray("img").strings(), tag = t.str("tag") ?: "")
+                        },
+                        active = q.optInt("active", 0),
+                        message = q.str("message"),
                     )
                 },
                 message = o.optJSONObject("message")?.let { g ->
@@ -498,6 +526,38 @@ class HomeDetail(
 )
 
 class DetailPill(val id: String, val label: String, val kind: String)
+
+/**
+ * The discovery queue: one title at a time on a big card (its tag, name, year · runtime · IMDb ·
+ * genres, overview, Play tonight / Save / Skip / Not interested, details, previous / next), and
+ * the queue's pictures in a strip under it (a tap jumps there). Taps send {a:"q", what, i}.
+ * With no title yet only [message] shows (loading, no TMDB key…).
+ */
+class HomeQueue(
+    val position: String,
+    val tag: String?,
+    /** "Series", beside the tag, for a series. */
+    val series: String?,
+    val title: String,
+    /** Year, runtime: dots between them, then the IMDb rating and the genres. */
+    val facts: List<String>,
+    val rating: String?,
+    val genres: String?,
+    val desc: String?,
+    val backdrop: List<String>,
+    val saved: Boolean,
+    val canPrev: Boolean,
+    val canNext: Boolean,
+    /** play, save, saved, skip, block, info, prev, next, queue. */
+    val labels: Map<String, String>,
+    val strip: List<QueueTile>,
+    val active: Int,
+    val message: String?,
+) {
+    fun label(k: String, fallback: String) = labels[k] ?: fallback
+}
+
+class QueueTile(val img: List<String>, val tag: String)
 
 /** A line of credits: a label and the people (a tap opens one), or a label and a [value]. */
 class CreditGroup(val label: String, val people: List<CriticPerson>, val value: String?)

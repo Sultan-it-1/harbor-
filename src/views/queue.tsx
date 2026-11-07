@@ -7,8 +7,13 @@ import { rankByAffinity } from "@/lib/feed/rank";
 import { blockQueueItem, filterQueuePool, shuffleQueuePool, snoozeQueueItem } from "@/lib/feed/skipped";
 import { getDownvotedIds, getUpvotedIds } from "@/lib/feed/preferences";
 import { useSettings } from "@/lib/settings";
-import { useInWatchlist } from "@/lib/watchlist";
+import { toggleWatchlist, useInWatchlist } from "@/lib/watchlist";
 import { useT } from "@/lib/i18n";
+import { useTmdbImdbId } from "@/lib/providers/tmdb";
+import { rpdbPoster } from "@/lib/providers/rpdb";
+import { smartPlayEpisode } from "@/lib/smart-play";
+import { useView } from "@/lib/view";
+import { useNativeBrowsePage } from "@/views/native/native-screens";
 
 const LOW_WATER_MARK = 6;
 
@@ -161,6 +166,101 @@ export function QueueView() {
     if (activeIndex < pool.length - 1) jump(activeIndex + 1, "skip");
   }, [activeIndex, pool.length, jump]);
 
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the heading with
+  // where in the queue, the card (tag, name, year · runtime · IMDb · genres, overview, Play
+  // tonight / Save / Skip / Not interested, details, previous / next) and the queue's strip.
+  const { topKind, openMeta, openPicker } = useView();
+  const resolvedImdb = useTmdbImdbId(item?.meta.id);
+  const savedNow = useInWatchlist(item?.meta.id, [resolvedImdb]);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hasKey = !!settings.tmdbKey;
+  const nativeHeader = useMemo(
+    () => ({
+      title: t("Discovery Queue"),
+      size: 20,
+      count: loading ? t("Loading…") : `${pad(Math.min(activeIndex + 1, pool.length))} / ${pad(pool.length)}`,
+    }),
+    [t, loading, activeIndex, pool.length],
+  );
+  const strip = useMemo(
+    () => pool.map((p) => ({ img: [p.meta.background ?? p.meta.poster].filter((u): u is string => !!u), tag: p.tag })),
+    [pool],
+  );
+  const nativeQueue = useMemo(() => {
+    const labels = {
+      play: t("Play tonight"),
+      save: t("Save"),
+      saved: t("Saved"),
+      skip: t("Skip"),
+      block: t("Not interested"),
+      info: t("See details"),
+      prev: t("Previous"),
+      next: t("Next"),
+      queue: t("Queue"),
+    };
+    if (!item) {
+      return {
+        title: "",
+        labels,
+        strip,
+        active: activeIndex,
+        message: loading
+          ? t("Building tonight's queue…")
+          : !hasKey
+            ? t("Add a TMDB key in Settings to unlock the full discovery feed.")
+            : t("No picks loaded. TMDB might be unreachable."),
+      };
+    }
+    const m = item.meta;
+    const backdrop = m.background ?? m.poster;
+    const pics = [rpdbPoster(settings.rpdbKey, m.id, backdrop), backdrop, m.poster].filter((u): u is string => !!u);
+    return {
+      position: `${pad(activeIndex + 1)} / ${pad(pool.length)}`,
+      tag: item.tag,
+      series: m.type === "series" && item.tag.toLowerCase() !== "series" ? t("Series") : null,
+      title: m.name,
+      facts: [m.releaseInfo, m.runtime].filter((x): x is string => !!x),
+      rating: m.imdbRating ?? null,
+      genres: m.genres && m.genres.length > 0 ? m.genres.slice(0, 3).join(", ") : null,
+      desc: m.description ?? null,
+      backdrop: [...new Set(pics)],
+      saved: savedNow,
+      canPrev: activeIndex > 0,
+      canNext: activeIndex < pool.length - 1,
+      labels,
+      strip,
+      active: activeIndex,
+    };
+  }, [t, item, strip, activeIndex, loading, hasKey, settings.rpdbKey, pool.length, savedNow]);
+  const native = useNativeBrowsePage("queue", {
+    active: topKind === "queue",
+    t,
+    back: true,
+    header: nativeHeader,
+    rows: [],
+    queue: nativeQueue,
+    onQueue: (what, i) => {
+      const m = item?.meta;
+      switch (what) {
+        case "jump":
+          if (i >= 0) jump(i);
+          return;
+        case "prev":
+          return onPrev();
+        case "next":
+          return onNext();
+        case "skip":
+          return onSkip();
+        case "block":
+          return onNotInterested();
+      }
+      if (!m) return;
+      if (what === "play") openPicker(m, smartPlayEpisode(m), { autoPlay: settings.instantPlay });
+      else if (what === "info") openMeta(m);
+      else if (what === "save") toggleWatchlist({ id: m.id, type: m.type, name: m.name, poster: m.poster, imdbId: resolvedImdb });
+    },
+  });
+
   const leaveClass =
     leaveAnim === "skip"
       ? "translate-x-8 opacity-0 transition-[transform,opacity] duration-200 ease-out"
@@ -169,6 +269,8 @@ export function QueueView() {
         : leaveAnim === "block"
           ? "scale-[0.98] opacity-0 blur-sm transition-[transform,opacity,filter] duration-[240ms] ease-out"
           : "transition-[transform,opacity] duration-200 ease-out";
+
+  if (native) return <main className="min-w-0 flex-1 overflow-hidden" />;
 
   return (
     <main className="min-w-0 flex-1 overflow-hidden pb-12 pt-20">

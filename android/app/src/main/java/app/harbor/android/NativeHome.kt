@@ -427,6 +427,7 @@ class NativeHome(
                     line++
                 }
             }
+            if (m.queue != null) out.add(Section(T_QUEUE, -12))
             if (m.message != null) out.add(Section(T_MESSAGE, -10))
             if (m.rows.isEmpty() && m.message == null && m.empty != null) out.add(Section(T_EMPTY, -7))
             out.add(Section(T_END, -4))
@@ -469,6 +470,7 @@ class NativeHome(
             T_DETAIL -> DetailHolder()
             T_EPISODE -> EpisodeHolder()
             T_LISTITEM -> ListItemHolder()
+            T_QUEUE -> QueueHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -493,6 +495,7 @@ class NativeHome(
                 is MessageHolder -> m.message?.let { holder.bind(it) }
                 is GridLineHolder -> items[position].row?.let { holder.bind(it, items[position].start) }
                 is DetailHolder -> m.detail?.let { holder.bind(it) }
+                is QueueHolder -> m.queue?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
             }
@@ -1353,6 +1356,375 @@ class NativeHome(
         }
     }
 
+    // ---- The discovery queue -------------------------------------------------------------------
+
+    /**
+     * Lays out [lead] at its own height and every other child exactly over it (a card's picture
+     * and shades take the size of its text, never their own).
+     */
+    private class BackedBox(ctx: Context) : FrameLayout(ctx) {
+        var lead: View? = null
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val c = lead ?: return super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            c.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+            val h = c.measuredHeight
+            for (i in 0 until childCount) {
+                val v = getChildAt(i)
+                if (v !== c) v.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
+            }
+            setMeasuredDimension(w, h)
+        }
+    }
+
+    /**
+     * The discovery queue, like the page: a big card for the title up now (its tag, name, year ·
+     * runtime · IMDb · genres, overview; Play tonight, Save, Skip, Not interested; details at the
+     * top; previous / next at the sides), then the queue's pictures in a strip (a tap jumps there,
+     * the one up now ringed in the accent colour, the ones already passed faded).
+     */
+    private inner class QueueHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private val wrap = FrameLayout(ctx)
+        private val card = BackedBox(ctx)
+        private val backdrop = NetImage(ctx)
+        private val shadeUp = View(ctx)
+        private val shadeSide = View(ctx)
+        private val content = LinearLayout(ctx)
+        private val position = label("", 12f, bold = true, lines = 1)
+        private val info = FrameLayout(ctx)
+        private val infoIcon = ImageView(ctx)
+        private val tags = LinearLayout(ctx)
+        private val tagPill = label("", 11.5f, bold = true, lines = 1)
+        private val seriesPill = label("", 11.5f, bold = true, lines = 1)
+        private val title = label("", 34f, lines = 2)
+        private val facts = FlowRow(ctx, dp(10), dp(4))
+        private val desc = label("", 15.5f, lines = 3)
+        private val buttons = FlowRow(ctx, dp(12), dp(8))
+        private val prev = FrameLayout(ctx)
+        private val next = FrameLayout(ctx)
+        private val message = label("", 15f)
+        private val stripLabel = label("", 11f, bold = true, lines = 1)
+        /** The queue's pictures: a list of its own, so only those in sight are made and loaded. */
+        private val strip = RecyclerView(ctx)
+        private val stripLayout = LinearLayoutManager(ctx, RecyclerView.HORIZONTAL, false)
+        private val stripAdapter = QueueStripAdapter()
+        private var stripKey = ""
+        private var shownTitle = ""
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.setPadding(0, dp(4), 0, dp(28))
+            val dark = Color.rgb(10, 12, 19)
+
+            backdrop.scaleType = ImageView.ScaleType.CENTER_CROP
+            card.addView(backdrop)
+            shadeUp.background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(withAlpha(dark, 0.96f), withAlpha(dark, 0.55f), Color.TRANSPARENT, Color.TRANSPARENT),
+            )
+            card.addView(shadeUp)
+            card.addView(shadeSide)
+            content.orientation = LinearLayout.VERTICAL
+            content.minimumHeight = dp(480)
+            content.setPaddingRelative(dp(24), dp(28), dp(24), dp(48))
+            card.addView(content)
+            card.lead = content
+            card.clipToOutline = true
+            card.outlineProvider = roundOutline(dp(28).toFloat())
+
+            // The top: where in the queue, and the details button.
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            top.addView(position, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            info.isClickable = true
+            info.isFocusable = true
+            info.setOnClickListener { act("q", what = "info") }
+            info.addView(infoIcon, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER))
+            top.addView(info, LinearLayout.LayoutParams(dp(44), dp(44)))
+            content.addView(top, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            content.addView(View(ctx), LinearLayout.LayoutParams(MATCH, dp(24), 1f))
+
+            tags.orientation = LinearLayout.HORIZONTAL
+            tags.gravity = Gravity.CENTER_VERTICAL
+            tagPill.setPaddingRelative(dp(12), dp(4), dp(12), dp(4))
+            seriesPill.setPaddingRelative(dp(12), dp(4), dp(12), dp(4))
+            tags.addView(tagPill)
+            tags.addView(seriesPill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
+            content.addView(tags, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            title.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            title.setShadowLayer(dp(14).toFloat(), 0f, dp(2).toFloat(), 0x8C000000.toInt())
+            title.setLineSpacing(0f, 1.05f)
+            content.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
+            content.addView(facts, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
+            desc.setLineSpacing(0f, 1.4f)
+            content.addView(desc, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(18) })
+            content.addView(buttons, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(26) })
+
+            wrap.clipChildren = false
+            wrap.addView(card, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(24)
+                marginEnd = dp(24)
+            })
+            for ((v, start) in listOf(prev to true, next to false)) {
+                v.isClickable = true
+                v.isFocusable = true
+                v.setOnClickListener { act("q", what = if (start) "prev" else "next") }
+                v.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+                v.elevation = dp(6).toFloat()
+                wrap.addView(v, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER_VERTICAL or if (start) Gravity.START else Gravity.END).apply {
+                    marginStart = dp(12)
+                    marginEnd = dp(12)
+                })
+            }
+            message.gravity = Gravity.CENTER
+            message.textAlignment = View.TEXT_ALIGNMENT_CENTER
+            message.setPadding(dp(32), dp(48), dp(32), dp(48))
+            message.minHeight = dp(480)
+            wrap.addView(message, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(24)
+                marginEnd = dp(24)
+            })
+            col.addView(wrap, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+            col.addView(stripLabel, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(24)
+                marginStart = dp(24)
+                marginEnd = dp(24)
+            })
+            strip.layoutManager = stripLayout
+            strip.adapter = stripAdapter
+            strip.itemAnimator = null
+            strip.overScrollMode = View.OVER_SCROLL_NEVER
+            strip.clipToPadding = false
+            strip.setPaddingRelative(dp(24), dp(12), dp(24), dp(4))
+            col.addView(strip, LinearLayout.LayoutParams(MATCH, dp(112 + 16)))
+        }
+
+        fun bind(q: HomeQueue) {
+            val rtl = model?.rtl == true
+            val has = q.title.isNotBlank()
+            card.visibility = if (has) View.VISIBLE else View.GONE
+            prev.visibility = card.visibility
+            next.visibility = card.visibility
+            message.visibility = if (has || q.message.isNullOrBlank()) View.GONE else View.VISIBLE
+            message.text = q.message ?: ""
+            message.setTextColor(colors.muted)
+            message.background = rounded(withAlpha(colors.surface, 0.3f), dp(28).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            if (has) bindCard(q, rtl)
+            bindStrip(q, rtl)
+        }
+
+        private fun bindCard(q: HomeQueue, rtl: Boolean) {
+            card.background = rounded(colors.canvas, dp(28).toFloat())
+            card.foreground = rounded(Color.TRANSPARENT, dp(28).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            val dark = Color.rgb(10, 12, 19)
+            shadeSide.background = GradientDrawable(
+                if (rtl) GradientDrawable.Orientation.RIGHT_LEFT else GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(withAlpha(dark, 0.62f), withAlpha(dark, 0.25f), Color.TRANSPARENT, Color.TRANSPARENT),
+            )
+            images.load(backdrop, q.backdrop, width() - dp(48), dp(560))
+
+            position.text = q.position
+            position.letterSpacing = 0.22f
+            position.setTextColor(withAlpha(colors.ink, 0.85f))
+            info.background = focusable(rounded(withAlpha(colors.canvas, 0.35f), dp(22).toFloat(), dp(1), withAlpha(colors.ink, 0.15f)))
+            info.contentDescription = q.label("info", "See details")
+            infoIcon.setImageDrawable(icon(R.drawable.ic_info, withAlpha(colors.ink, 0.85f)))
+
+            tagPill.text = q.tag?.let { if (rtl) it else it.uppercase() } ?: ""
+            tagPill.visibility = if (q.tag.isNullOrBlank()) View.GONE else View.VISIBLE
+            tagPill.letterSpacing = if (rtl) 0f else 0.22f
+            tagPill.setTextColor(colors.canvas)
+            tagPill.background = rounded(withAlpha(colors.accent, 0.9f), dp(14).toFloat())
+            seriesPill.text = q.series?.let { if (rtl) it else it.uppercase() } ?: ""
+            seriesPill.visibility = if (q.series.isNullOrBlank()) View.GONE else View.VISIBLE
+            seriesPill.letterSpacing = tagPill.letterSpacing
+            seriesPill.setTextColor(withAlpha(colors.ink, 0.85f))
+            seriesPill.background = rounded(Color.TRANSPARENT, dp(14).toFloat(), dp(1), withAlpha(colors.ink, 0.3f))
+            tags.visibility = if (tagPill.visibility == View.VISIBLE || seriesPill.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+
+            title.text = q.title
+            title.setTextColor(colors.ink)
+
+            // Year · runtime · IMDb rating · genres.
+            facts.removeAllViews()
+            val parts = ArrayList<View>()
+            for (f in q.facts) parts.add(label(f, 14f, lines = 1).apply { setTextColor(withAlpha(colors.ink, 0.85f)) })
+            q.rating?.let { parts.add(imdbBadge(it, 13f, trailing = 0)) }
+            q.genres?.let { parts.add(label(it, 14f, lines = 1).apply { setTextColor(withAlpha(colors.ink, 0.85f)) }) }
+            parts.forEachIndexed { i, v ->
+                if (i > 0) facts.addView(label("·", 14f, lines = 1).apply { setTextColor(withAlpha(colors.ink, 0.4f)) })
+                v.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                facts.addView(v)
+            }
+            facts.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
+
+            desc.text = q.desc ?: ""
+            desc.visibility = if (q.desc.isNullOrBlank()) View.GONE else View.VISIBLE
+            desc.setTextColor(withAlpha(colors.ink, 0.8f))
+
+            buttons.removeAllViews()
+            buttons.addView(button(R.drawable.ic_play, q.label("play", "Play tonight"), "play", filled = true))
+            buttons.addView(
+                button(
+                    if (q.saved) R.drawable.ic_bookmark_check else R.drawable.ic_bookmark,
+                    if (q.saved) q.label("saved", "Saved") else q.label("save", "Save"),
+                    "save",
+                    on = q.saved,
+                ),
+            )
+            buttons.addView(button(R.drawable.ic_skip_forward, q.label("skip", "Skip"), "skip"))
+            buttons.addView(button(R.drawable.ic_thumbs_down, q.label("block", "Not interested"), "block"))
+
+            for ((v, enabled) in listOf(prev to q.canPrev, next to q.canNext)) {
+                v.isEnabled = enabled
+                v.alpha = if (enabled) 1f else 0.25f
+                v.background = focusable(rounded(withAlpha(colors.canvas, 0.8f), dp(22).toFloat(), dp(1), withAlpha(colors.ink, 0.12f)))
+                val left = (v === prev) != rtl
+                v.contentDescription = if (v === prev) q.label("prev", "Previous") else q.label("next", "Next")
+                v.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(if (left) R.drawable.ic_chevron_left else R.drawable.ic_chevron_right, withAlpha(colors.ink, 0.75f)))
+            }
+
+            // Another title: it slides in (the page's 200 ms change).
+            if (shownTitle.isNotEmpty() && shownTitle != q.title + q.position) {
+                content.alpha = 0f
+                content.translationX = dp(if (rtl) -24 else 24).toFloat()
+                content.animate().alpha(1f).translationX(0f).setDuration(200).start()
+            }
+            shownTitle = q.title + q.position
+        }
+
+        private fun button(res: Int, text: String, what: String, filled: Boolean = false, on: Boolean = false): View =
+            LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                contentDescription = text
+                setPaddingRelative(dp(if (filled) 28 else 20), 0, dp(if (filled) 28 else 20), 0)
+                val fg = when {
+                    filled -> colors.canvas
+                    on -> colors.accent
+                    else -> withAlpha(colors.ink, 0.85f)
+                }
+                background = focusable(
+                    when {
+                        filled -> rounded(colors.ink, dp(24).toFloat())
+                        on -> rounded(withAlpha(colors.accent, 0.15f), dp(24).toFloat(), dp(1), withAlpha(colors.accent, 0.6f))
+                        else -> rounded(withAlpha(colors.canvas, 0.3f), dp(24).toFloat(), dp(1), withAlpha(colors.ink, 0.15f))
+                    },
+                )
+                addView(ImageView(ctx).apply { setImageDrawable(icon(res, fg)) }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(if (filled) 10 else 8) })
+                addView(label(text, if (filled) 15f else 14f, bold = filled, lines = 1).apply { setTextColor(fg) })
+                // The flow row measures by content: the height comes from here.
+                minimumHeight = dp(48)
+                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48))
+                setOnClickListener { act("q", what = what) }
+            }
+
+        private fun bindStrip(q: HomeQueue, rtl: Boolean) {
+            stripLabel.text = q.label("queue", "Queue").let { if (rtl) it else it.uppercase() }
+            stripLabel.letterSpacing = if (rtl) 0f else 0.24f
+            stripLabel.setTextColor(colors.subtle)
+            stripLabel.visibility = if (q.strip.isEmpty()) View.GONE else View.VISIBLE
+            strip.visibility = stripLabel.visibility
+            val key = q.strip.joinToString("|") { it.tag + it.img.firstOrNull() }
+            val fresh = stripKey.isEmpty()
+            val was = stripAdapter.active
+            val changed = key != stripKey
+            stripAdapter.active = q.active
+            if (changed) {
+                stripKey = key
+                stripAdapter.tiles = q.strip
+                stripAdapter.notifyDataSetChanged()
+            } else if (was != q.active) {
+                stripAdapter.notifyItemChanged(was)
+                stripAdapter.notifyItemChanged(q.active)
+            }
+            if (q.active !in q.strip.indices) return
+            // The one up now, in the middle of the strip.
+            if (fresh) {
+                stripLayout.scrollToPositionWithOffset(q.active, max(0, (width() - dp(200)) / 2 - dp(24)))
+            } else if (was != q.active || changed) {
+                val centre = object : androidx.recyclerview.widget.LinearSmoothScroller(ctx) {
+                    override fun calculateDtToFit(viewStart: Int, viewEnd: Int, boxStart: Int, boxEnd: Int, snapPreference: Int): Int =
+                        (boxStart + (boxEnd - boxStart) / 2) - (viewStart + (viewEnd - viewStart) / 2)
+                }
+                centre.targetPosition = q.active
+                strip.post { stripLayout.startSmoothScroll(centre) }
+            }
+        }
+    }
+
+    /** The discovery queue's strip: [tiles], the one up now ([active]) ringed, those before it faded. */
+    private inner class QueueStripAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        var tiles: List<QueueTile> = emptyList()
+        var active = 0
+
+        override fun getItemCount(): Int = tiles.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder = QueueTileHolder()
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            tiles.getOrNull(position)?.let { (holder as QueueTileHolder).bind(it, position, active) }
+        }
+
+        override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+            images.clear((holder as QueueTileHolder).img)
+        }
+    }
+
+    private inner class QueueTileHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val tile = itemView as FrameLayout
+        val img = NetImage(ctx)
+        private val glow = View(ctx)
+        private val tag = label("", 9.5f, bold = true, lines = 1)
+        private var index = -1
+
+        init {
+            tile.layoutParams = RecyclerView.LayoutParams(dp(200), dp(112)).apply { marginEnd = dp(12) }
+            tile.isClickable = true
+            tile.isFocusable = true
+            tile.clipToOutline = true
+            tile.outlineProvider = roundOutline(dp(10).toFloat())
+            tile.setOnClickListener { if (index >= 0) act("q", what = "jump", i = index) }
+            img.scaleType = ImageView.ScaleType.CENTER_CROP
+            tile.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+            tile.addView(glow, FrameLayout.LayoutParams(MATCH, MATCH))
+            tag.setPaddingRelative(dp(6), dp(2), dp(6), dp(2))
+            tile.addView(tag, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+                marginStart = dp(6)
+                topMargin = dp(6)
+            })
+        }
+
+        fun bind(t: QueueTile, i: Int, active: Int) {
+            index = i
+            val rtl = model?.rtl == true
+            tile.background = rounded(plate(t.tag + i), dp(10).toFloat())
+            tile.contentDescription = t.tag
+            images.load(img, t.img, dp(200), dp(112))
+            tag.text = if (rtl) t.tag else t.tag.uppercase()
+            tag.visibility = if (t.tag.isBlank()) View.GONE else View.VISIBLE
+            tag.letterSpacing = if (rtl) 0f else 0.12f
+            tag.setTextColor(colors.ink)
+            tag.background = rounded(withAlpha(colors.canvas, 0.85f), dp(6).toFloat())
+            val on = i == active
+            tile.alpha = if (i < active) 0.5f else 1f
+            tile.foreground = if (on) rounded(Color.TRANSPARENT, dp(10).toFloat(), dp(2), colors.accent) else null
+            glow.background = if (on) {
+                GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(withAlpha(colors.accent, 0.18f), withAlpha(colors.accent, 0.28f)))
+            } else {
+                null
+            }
+        }
+    }
+
     /** Children side by side, onto the next line when one doesn't fit (the hero's pills). */
     private class FlowRow(ctx: Context, private val gapX: Int, private val gapY: Int) : ViewGroup(ctx) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -2112,6 +2484,15 @@ class NativeHome(
                         bottomMargin = dp(6)
                         topMargin = dp(6)
                     })
+                    if (kind == C_POSTER) {
+                        // A small pill in the top corner (an award's "3×" on a winner's photo).
+                        kicker.setPaddingRelative(dp(6), dp(2), dp(6), dp(2))
+                        kicker.visibility = View.GONE
+                        box.addView(kicker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+                            marginEnd = dp(8)
+                            topMargin = dp(8)
+                        })
+                    }
                 }
             }
             if (kind == C_POSTER || kind == C_RANK) {
@@ -2211,7 +2592,7 @@ class NativeHome(
                 rounded(
                     when (kind) {
                         C_LOGO -> withAlpha(colors.surface, 0.9f)
-                        else -> tint ?: plate(c.title)
+                        else -> if (kind == C_POSTER && c.kicker != null) plate(c.title) else tint ?: plate(c.title)
                     },
                     dp(12).toFloat(),
                 )
@@ -2344,6 +2725,13 @@ class NativeHome(
                     bigTitle.setTextColor(colors.ink)
                 }
                 else -> {
+                    if (kind == C_POSTER) {
+                        kicker.text = c.kicker ?: ""
+                        kicker.visibility = if (c.kicker.isNullOrBlank()) View.GONE else View.VISIBLE
+                        kicker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                        kicker.setTextColor(colors.canvas)
+                        kicker.background = rounded(c.tint ?: colors.accent, dp(10).toFloat())
+                    }
                     badge.removeAllViews()
                     if (c.rating != null) {
                         badge.visibility = View.VISIBLE
@@ -2912,6 +3300,7 @@ class NativeHome(
         private const val T_DETAIL = 16
         private const val T_EPISODE = 17
         private const val T_LISTITEM = 18
+        private const val T_QUEUE = 19
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101
