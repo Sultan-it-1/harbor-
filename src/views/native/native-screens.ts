@@ -455,7 +455,7 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners";
   /** Choices under the title (a series' seasons) and what picking one does. */
   chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
   onRowChip?: (id: string) => void;

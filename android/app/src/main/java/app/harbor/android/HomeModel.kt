@@ -129,6 +129,7 @@ class HomeModel(
                             "episodes" -> HomeRow.Kind.EPISODES
                             "people" -> HomeRow.Kind.PEOPLE
                             "list" -> HomeRow.Kind.LIST
+                            "winners" -> HomeRow.Kind.WINNERS
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -371,7 +372,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS }
 }
 
 /** Critics' Pick, as the page's own card shows it. */

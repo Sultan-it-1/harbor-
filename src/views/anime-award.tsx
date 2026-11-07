@@ -10,6 +10,7 @@ import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 import { uiLocale } from "@/lib/i18n/locale";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 
 const SOURCE_TINTS: Record<AwardSourceId, string> = {
   crunchyroll: "#f47521",
@@ -53,6 +54,98 @@ export function AnimeAwardView({ sourceId }: { sourceId: AwardSourceId }) {
 
   const filtered = year !== null || query.trim().length > 0;
   const noResults = filtered && filteredCategories.length === 0;
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: "Anime award", the
+  // name, winners · categories · years, the search field and the years to pick, then each
+  // category (Grand for the year's top prize, its count) and its winners, the year in the award's
+  // colour; a tap looks the title up on TMDB and opens it.
+  const { settings } = useSettings();
+  const { topKind, openMeta } = useView();
+  const yearSpan =
+    data.years.length === 0
+      ? ""
+      : data.years.length === 1
+        ? String(data.years[0])
+        : `${data.years[data.years.length - 1]}–${data.years[0]}`;
+  const nativeHeader = useMemo(
+    () => ({
+      kicker: t("Anime award"),
+      title: data.meta.name,
+      size: 40,
+      tint,
+      subtitle: [
+        `${totalWins.toLocaleString(uiLocale())} ${t("recorded winners")}`,
+        `${data.categories.length} ${data.categories.length === 1 ? t("category") : t("categories")}`,
+        yearSpan || null,
+      ]
+        .filter(Boolean)
+        .join("  ·  "),
+    }),
+    [t, data, tint, totalWins, yearSpan],
+  );
+  const nativeChips = useMemo(
+    () =>
+      data.categories.length === 0
+        ? []
+        : [
+            {
+              key: "year",
+              items: [
+                { id: "all", label: t("All years"), on: year === null },
+                ...data.years.map((y) => ({ id: String(y), label: String(y), on: year === y })),
+              ],
+            },
+          ],
+    [t, data, year],
+  );
+  const nativeRows = useMemo<NativeRowInput[]>(
+    () =>
+      filteredCategories.map((c) => ({
+        key: `cat:${c.key}`,
+        title: c.name,
+        sub: c.isAOTY ? t("Grand") : null,
+        note: c.winners.length === 1 ? t("{n} winner", { n: 1 }) : t("{n} winners", { n: c.winners.length }),
+        kind: "winners",
+        metas: [],
+        cards: c.winners.map((w) => ({ title: w.title, sub: String(w.year), tint })),
+        onOpen: (i) => {
+          const w = c.winners[i];
+          if (w && settings.tmdbKey) void openAwardWinner(settings.tmdbKey, w.title, w.year, openMeta);
+        },
+      })),
+    [t, filteredCategories, tint, settings.tmdbKey, openMeta],
+  );
+  const native = useNativeBrowsePage("anime-award", {
+    active: topKind === "anime-award",
+    t,
+    back: true,
+    header: nativeHeader,
+    search:
+      data.categories.length > 0
+        ? { key: `anime-award:${sourceId}`, hint: t("Search winners or categories…"), text: query, onQuery: setQuery }
+        : null,
+    chips: nativeChips,
+    onChip: (group, id) => {
+      if (group !== "year") return;
+      const y = Number(id);
+      setYear(id === "all" || !Number.isFinite(y) || year === y ? null : y);
+    },
+    rows: nativeRows,
+    message:
+      data.categories.length === 0
+        ? { text: t("No data shipped for this award yet.") }
+        : noResults
+          ? {
+              text: t("No winners match these filters."),
+              action: t("Clear filters"),
+              onAction: () => {
+                setYear(null);
+                setQuery("");
+              },
+            }
+          : null,
+  });
+  if (native) return <main ref={scrollRef} className="relative h-full overflow-hidden bg-canvas" />;
 
   return (
     <main ref={scrollRef} className="relative h-full overflow-y-auto bg-canvas">
@@ -277,6 +370,22 @@ function CategoryBlock({ category, tint }: { category: AnimeAwardCategory; tint:
   );
 }
 
+/** A winner's title looked up on TMDB (a series first, then a film) and opened. */
+async function openAwardWinner(
+  key: string,
+  title: string,
+  year: number,
+  openMeta: ReturnType<typeof useView>["openMeta"],
+): Promise<void> {
+  const tv = await searchTmdb(key, title, year, "tv");
+  if (tv) {
+    openMeta({ id: `tmdb:tv:${tv.id}`, type: "series", name: title });
+    return;
+  }
+  const movie = await searchTmdb(key, title, year, "movie");
+  if (movie) openMeta({ id: `tmdb:movie:${movie.id}`, type: "movie", name: title });
+}
+
 function WinnerRow({ year, title, tint }: { year: number; title: string; tint: string }) {
   const { settings } = useSettings();
   const { openMeta } = useView();
@@ -287,15 +396,7 @@ function WinnerRow({ year, title, tint }: { year: number; title: string; tint: s
     if (!clickable || resolving) return;
     setResolving(true);
     try {
-      const tv = await searchTmdb(settings.tmdbKey, title, year, "tv");
-      if (tv) {
-        openMeta({ id: `tmdb:tv:${tv.id}`, type: "series", name: title });
-        return;
-      }
-      const movie = await searchTmdb(settings.tmdbKey, title, year, "movie");
-      if (movie) {
-        openMeta({ id: `tmdb:movie:${movie.id}`, type: "movie", name: title });
-      }
+      await openAwardWinner(settings.tmdbKey, title, year, openMeta);
     } finally {
       setResolving(false);
     }

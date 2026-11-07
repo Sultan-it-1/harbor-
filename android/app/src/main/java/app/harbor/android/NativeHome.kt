@@ -396,6 +396,13 @@ class NativeHome(
             if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
             for (r in m.rows) {
+                if (r.kind == HomeRow.Kind.WINNERS) {
+                    // An award's category: its heading, then a line for each winner (year, title).
+                    out.add(Section(T_ROW, stableId(r.key), r))
+                    val base = stableId(r.key) shl 20
+                    r.items.forEachIndexed { i, _ -> out.add(Section(T_WINNER, base + i, r, start = i)) }
+                    continue
+                }
                 if (r.kind == HomeRow.Kind.LIST) {
                     // Titles listed down the page (search results): the heading, then one a line.
                     out.add(Section(T_ROW, stableId(r.key), r))
@@ -471,6 +478,7 @@ class NativeHome(
             T_EPISODE -> EpisodeHolder()
             T_LISTITEM -> ListItemHolder()
             T_QUEUE -> QueueHolder()
+            T_WINNER -> WinnerHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -498,6 +506,7 @@ class NativeHome(
                 is QueueHolder -> m.queue?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
+                is WinnerHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
             }
         }
 
@@ -1026,6 +1035,51 @@ class NativeHome(
             sub.text = c.sub ?: ""
             sub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
             sub.setTextColor(colors.muted)
+        }
+    }
+
+    /**
+     * A winner in an award's category, as the page lists them: the year in the award's colour
+     * ([HomeCard.sub], [HomeCard.tint]), the title (a tap opens it), a faint line under it.
+     */
+    private inner class WinnerHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private val line = LinearLayout(ctx)
+        private val year = label("", 14f, bold = true, lines = 1)
+        private val title = label("", 14f, lines = 2)
+        /** The faint line under it (the page's border). */
+        private val rule = View(ctx)
+        private var rowKey = ""
+        private var index = -1
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.setPaddingRelative(gutter, 0, gutter, 0)
+            col.isClickable = true
+            col.isFocusable = true
+            col.setOnClickListener { act("open", row = rowKey, i = index) }
+            line.orientation = LinearLayout.HORIZONTAL
+            line.gravity = Gravity.CENTER_VERTICAL
+            line.minimumHeight = dp(44)
+            line.setPadding(0, dp(10), 0, dp(10))
+            year.fontFeatureSettings = "tnum"
+            line.addView(year, LinearLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.WRAP_CONTENT))
+            line.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(16) })
+            col.addView(line, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            col.addView(rule, LinearLayout.LayoutParams(MATCH, dp(1)))
+        }
+
+        fun bind(r: HomeRow, i: Int, c: HomeCard) {
+            rowKey = r.key
+            index = i
+            col.contentDescription = listOfNotNull(c.sub, c.title).joinToString(" ")
+            col.background = focusable(rounded(Color.TRANSPARENT, dp(8).toFloat()))
+            rule.setBackgroundColor(withAlpha(colors.ink, 0.06f))
+            year.text = c.sub ?: ""
+            year.setTextColor(c.tint ?: colors.accent)
+            title.text = c.title
+            title.setTextColor(colors.ink)
         }
     }
 
@@ -2139,7 +2193,7 @@ class NativeHome(
             val info = row.critic
             val isCritic = row.kind == HomeRow.Kind.CRITIC
             val isCredits = row.kind == HomeRow.Kind.CREDITS
-            val isEpisodes = row.kind == HomeRow.Kind.EPISODES || row.kind == HomeRow.Kind.LIST
+            val isEpisodes = row.kind == HomeRow.Kind.EPISODES || row.kind == HomeRow.Kind.LIST || row.kind == HomeRow.Kind.WINNERS
             val isPeople = row.kind == HomeRow.Kind.PEOPLE
             strip.visibility = if (hidden || isCritic || isCredits || isEpisodes || isPeople || row.items.isEmpty()) View.GONE else View.VISIBLE
             if (isPeople && !hidden) {
@@ -3301,6 +3355,7 @@ class NativeHome(
         private const val T_EPISODE = 17
         private const val T_LISTITEM = 18
         private const val T_QUEUE = 19
+        private const val T_WINNER = 20
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101
