@@ -24,10 +24,14 @@ class ImageCache(context: Context, private val screenShortSidePx: Int) {
     /** Also read by the native screens (NativeImages), so both share one cache. */
     val store = ImageStore(File(context.cacheDir, "images"))
 
+    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "harbor-img-sweep").apply { isDaemon = true } }
+
     init {
-        Executors.newSingleThreadExecutor { r -> Thread(r, "harbor-img-sweep").apply { isDaemon = true } }
-            .execute { store.sweep() }
+        worker.execute { store.sweep() }
     }
+
+    /** Back in the app: tidy up if the phone filled up meanwhile (off the main thread). */
+    fun trimSoon() = worker.execute { store.trim() }
 
     /** null = let the WebView load it itself (not an image, or anything went wrong here). */
     fun intercept(req: WebResourceRequest): WebResourceResponse? = try {

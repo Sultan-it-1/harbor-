@@ -42,6 +42,11 @@ type HarborAndroidApi = {
    *  ("" = none). See src/views/native/native-screens.ts. */
   homeSet?(json: string): void;
   screenShow?(page: string, bottomCss: number, cssWidth: number): void;
+  /** Saved images (android/…/ImageStore.kt): {"used","limit","free"} in bytes. The limit follows
+   *  the phone's free space. */
+  imageCache?(): string;
+  /** Empties them (and the WebView's own cache); answers like imageCache. */
+  imageCacheClear?(): string;
 };
 
 export type NativePlayerEvent =

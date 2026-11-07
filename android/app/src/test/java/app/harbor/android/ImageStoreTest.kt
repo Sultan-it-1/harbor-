@@ -29,12 +29,14 @@ class ImageStoreTest {
     @Volatile private var posterGone = false
     /** Simulates no connection: hang up without answering. */
     @Volatile private var offline = false
+    /** The phone's free space, as the store sees it. */
+    @Volatile private var free = Long.MAX_VALUE
     private val hits = Collections.synchronizedList(ArrayList<String>())
     private val conditional = Collections.synchronizedList(ArrayList<String?>())
 
     @Before fun setUp() {
         dir = Files.createTempDirectory("harbor-img").toFile()
-        store = ImageStore(dir, maxBytes = 1_000_000, targetBytes = 600_000, background = direct)
+        store = ImageStore(dir, maxBytes = 1_000_000, targetBytes = 600_000, background = direct, freeSpace = { free })
         server = MiniHttpServer { _, path, headers, out ->
             hits.add(path)
             if (offline) return@MiniHttpServer
@@ -167,6 +169,42 @@ class ImageStoreTest {
         val kept = (1..6).filter { store.cached(url("/big$it")) != null }
         assertTrue("kept $kept", store.usedBytes() <= 600_000)
         assertEquals(listOf(4, 5, 6), kept)
+    }
+
+    @Test fun theLimitFollowsTheFreeSpace() {
+        store.trim()
+        assertEquals(1_000_000L, store.limitBytes())
+        free = 3L * 1024 * 1024 * 1024
+        store.trim()
+        assertEquals(600_000L, store.limitBytes())
+        free = 1L * 1024 * 1024 * 1024
+        store.trim()
+        assertEquals(400_000L, store.limitBytes())
+    }
+
+    @Test fun aPhoneThatFilledUpIsTidiedOnReturn() {
+        val now = System.currentTimeMillis()
+        for (i in 1..4) {
+            store.download(url("/big$i"), headers).use { it.readBytes() }
+            File(dir, ImageStore.keyFor(url("/big$i"))).setLastModified(now - (10 - i) * 3600_000L)
+        }
+        assertEquals(800_000L, store.usedBytes())
+        // Under 2 GB free: the limit drops to 400 KB, tidied down to 80% of it.
+        free = 1L * 1024 * 1024 * 1024
+        store.trim()
+        val kept = (1..4).filter { store.cached(url("/big$it")) != null }
+        assertEquals(listOf(4), kept)
+        assertTrue(store.usedBytes() <= 320_000)
+    }
+
+    @Test fun clearEmptiesTheCache() {
+        store.download(url("/big1"), headers).use { it.readBytes() }
+        store.download(url("/poster"), headers).use { it.readBytes() }
+        store.clear()
+        assertNull(store.cached(url("/big1")))
+        assertNull(store.cached(url("/poster")))
+        assertEquals(0L, store.usedBytes())
+        assertTrue(dir.listFiles().isNullOrEmpty())
     }
 
     @Test fun cleanupRemovesImagesNotShownForAMonth() {

@@ -1,5 +1,5 @@
 import { isPhoneLayout } from "@/lib/platform";
-import { Check, Download, FlaskConical, Github, Link2, Loader2, Lock, RotateCw, Wrench } from "lucide-react";
+import { Check, Download, FlaskConical, Github, Link2, Loader2, Lock, RotateCw, Trash2, Wrench } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import cornerSvg from "@/assets/corner.svg";
 import harborDiscord from "@/assets/harbor-discord.svg";
@@ -139,6 +139,15 @@ export function AdvancedPanel() {
       </Section>
 
       <CustomCodeCard />
+
+      {androidApi()?.imageCache && (
+        <Section
+          title={t("Storage")}
+          subtitle={t("Covers and pictures kept on the phone, so they show at once and don't use your data again.")}
+        >
+          <SavedImagesRow />
+        </Section>
+      )}
 
       <Section
         title={t("About")}
@@ -586,6 +595,54 @@ function AboutRow() {
       <InfoLine label={t("Version")} value={version} />
       <InfoLine label={t("Build")} value={isTauri ? t("Desktop (Tauri 2 / WebView2)") : android ? t("Android app") : t("Web")} />
     </div>
+  );
+}
+
+type ImageCacheInfo = { used: number; limit: number; free: number };
+
+function readImageCache(json: string | undefined): ImageCacheInfo | null {
+  try {
+    const o = JSON.parse(json ?? "");
+    return typeof o?.used === "number" ? (o as ImageCacheInfo) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Android: what the saved images take, their limit (it follows the free space) and Clear. */
+function SavedImagesRow() {
+  const t = useT();
+  const [info, setInfo] = useState<ImageCacheInfo | null>(null);
+  const [cleared, setCleared] = useState(false);
+  useEffect(() => {
+    const read = () => setInfo(readImageCache(androidApi()?.imageCache?.()));
+    read();
+    window.addEventListener("harbor:resume", read);
+    return () => window.removeEventListener("harbor:resume", read);
+  }, []);
+  const mb = (n: number) => Math.max(0, Math.round(n / (1024 * 1024)));
+  const clear = () => {
+    const next = readImageCache(androidApi()?.imageCacheClear?.());
+    if (next) setInfo(next);
+    setCleared(true);
+  };
+  const sub = cleared
+    ? t("Cleared. Pictures come back as you browse.")
+    : info
+      ? `${t("{used} MB of {limit} MB.", { used: mb(info.used), limit: mb(info.limit) })} ${t(
+          "The limit follows the phone's free space: 250 MB with 5 GB or more free, 150 MB under 5 GB, 100 MB under 2 GB. The oldest go first.",
+        )}`
+      : "";
+  return (
+    <ActionRow
+      label={t("Saved images")}
+      sub={sub}
+      cta={cleared ? t("Cleared") : t("Clear")}
+      icon={cleared ? <Check size={14} strokeWidth={2.6} /> : <Trash2 size={14} />}
+      tone={cleared ? "success" : "neutral"}
+      onClick={clear}
+      disabled={cleared}
+    />
   );
 }
 

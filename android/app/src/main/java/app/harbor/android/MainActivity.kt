@@ -549,6 +549,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (!player.isShowing) RefreshRate.apply(this)
         downloads.kick()
+        images.trimSoon()
         DownloadService.clearPausedNotice(this)
         // e.g. back from the battery dialog: let the page re-check what it shows.
         if (pageLoaded) webView.evaluateJavascript("window.dispatchEvent(new Event('harbor:resume'))", null)
@@ -781,6 +782,28 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun dlWifiOnly(t: String): Boolean = ok(t) && guard("dlWifiOnly", true) { downloads.wifiOnly }
+
+        // ---- saved images (ImageStore; Settings > Storage) ----
+        /** {"used":bytes,"limit":bytes,"free":bytes}: what the saved images take, their limit
+         *  today (it follows the free space) and the phone's free space. */
+        @JavascriptInterface
+        fun imageCache(t: String): String = if (ok(t)) guard("imageCache", "{}") { imageCacheJson() } else "{}"
+
+        /** Empties the saved images and the WebView's own cache; answers like [imageCache]. */
+        @JavascriptInterface
+        fun imageCacheClear(t: String): String {
+            if (!ok(t)) return "{}"
+            return guard("imageCacheClear", "{}") {
+                images.store.clear()
+                onUi("clearCache") { webView.clearCache(true) }
+                imageCacheJson()
+            }
+        }
+
+        private fun imageCacheJson(): String {
+            val s = images.store
+            return JSONObject().put("used", s.usedBytes()).put("limit", s.limitBytes()).put("free", s.freeBytes()).toString()
+        }
 
         // ---- native screens (see NativeScreens.kt / NativeHome.kt) ----
         /** What a native screen shows (HomeModel JSON, its "page" says which screen). */

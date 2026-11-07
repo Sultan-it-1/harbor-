@@ -23,8 +23,9 @@ import java.util.concurrent.atomic.AtomicLong
  *  - Up to date: images that never change under the same address (TMDB) are kept as they are;
  *    others are re-checked with the server once their age passes the server's max-age (between
  *    an hour and a day): unchanged = kept (cheap 304), changed = replaced, gone = removed.
- *  - Tidy: over maxBytes, the least recently shown go first (down to targetBytes); not shown for
- *    unusedMs = removed.
+ *  - Tidy: over the limit, the least recently shown go first (down to 80% of it); not shown for
+ *    unusedMs = removed. The limit follows the phone's free space (limitBytes): all of maxBytes
+ *    with room to spare, less as the phone fills up.
  */
 class ImageStore(
     private val dir: File,
@@ -32,9 +33,13 @@ class ImageStore(
     private val targetBytes: Long = 200L * 1024 * 1024,
     private val unusedMs: Long = 30L * 24 * 3600 * 1000,
     private val background: Executor = Executors.newFixedThreadPool(2) { r -> Thread(r, "harbor-img").apply { isDaemon = true } },
+    /** Free space where the images are kept (a parameter for the tests). */
+    private val freeSpace: () -> Long = { dir.usableSpace },
 ) {
     private val total = AtomicLong(0)
     private val checking = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var freeAt = 0L
+    @Volatile private var freeSeen = Long.MAX_VALUE
 
     init {
         dir.mkdirs()
@@ -307,7 +312,7 @@ class ImageStore(
             return
         }
         writeMeta(key, meta)
-        if (total.addAndGet(size - old) > maxBytes) background.execute { evict() }
+        if (total.addAndGet(size - old) > limitBytes()) background.execute { evict() }
     }
 
     private fun writeMeta(key: String, meta: Meta) {
@@ -345,17 +350,19 @@ class ImageStore(
             }
         }
         total.set(sum)
-        if (sum > maxBytes) evict()
+        if (sum > limitBytes()) evict()
     }
 
-    /** Over the limit: remove the least recently shown images until under targetBytes. */
+    /** Over the limit: remove the least recently shown images until under the target. */
     @Synchronized
     fun evict() {
         val bodies = dir.listFiles()?.filter { it.isFile && !it.name.endsWith(".m") && !it.name.endsWith(".tmp") } ?: return
         var sum = bodies.sumOf { it.length() }
-        if (sum > maxBytes) {
+        val limit = limitBytes()
+        if (sum > limit) {
+            val target = targetFor(limit)
             for (f in bodies.sortedBy { it.lastModified() }) {
-                if (sum <= targetBytes) break
+                if (sum <= target) break
                 sum -= f.length()
                 f.delete()
                 metaFile(f.name).delete()
@@ -364,10 +371,57 @@ class ImageStore(
         total.set(sum)
     }
 
+    /** Back in the app (the phone may have filled up meanwhile): over today's limit = tidy now. */
+    fun trim() {
+        freeAt = 0L
+        if (usedBytes() > limitBytes()) evict()
+    }
+
+    /** Empties the cache (Settings > Clear). Pictures being saved right now are dropped too. */
+    @Synchronized
+    fun clear() {
+        dir.listFiles()?.forEach { if (it.isFile) it.delete() }
+        total.set(0)
+    }
+
     fun usedBytes(): Long = total.get()
+
+    /**
+     * How much the images may take: all of maxBytes with [ROOMY_FREE] or more free on the phone,
+     * 60% of it with [TIGHT_FREE] or more, 40% below that (250 / 150 / 100 MB by default).
+     */
+    fun limitBytes(): Long {
+        val free = freeBytes()
+        return when {
+            free >= ROOMY_FREE -> maxBytes
+            free >= TIGHT_FREE -> maxBytes * 3 / 5
+            else -> maxBytes * 2 / 5
+        }
+    }
+
+    /** Free space on the phone (read at most once a minute). */
+    fun freeBytes(): Long {
+        val now = System.currentTimeMillis()
+        if (now - freeAt > FREE_CHECK_MS) {
+            freeSeen = try {
+                freeSpace()
+            } catch (_: Exception) {
+                Long.MAX_VALUE
+            }
+            freeAt = now
+        }
+        return freeSeen
+    }
+
+    private fun targetFor(limit: Long): Long = if (maxBytes <= 0) 0 else limit * targetBytes / maxBytes
 
     companion object {
         const val MAX_ENTRY_BYTES = 12L * 1024 * 1024
+        /** Free space above which the images get their whole limit… */
+        const val ROOMY_FREE = 5L * 1024 * 1024 * 1024
+        /** …and below which they get the smallest. */
+        const val TIGHT_FREE = 2L * 1024 * 1024 * 1024
+        private const val FREE_CHECK_MS = 60_000L
         private const val TOUCH_EVERY_MS = 10L * 60 * 1000
         private const val DEFAULT_CHECK_MS = 24L * 3600 * 1000
         private const val MIN_CHECK_MS = 3_600_000L // re-check at most hourly…
