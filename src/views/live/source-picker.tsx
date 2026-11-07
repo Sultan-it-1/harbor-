@@ -32,6 +32,8 @@ export function SourcePicker({
   channelCount,
   loading,
   editRequest,
+  openRequest,
+  onOpenChange,
 }: {
   sources: IptvPlaylistSource[];
   activeId: string | null;
@@ -51,6 +53,10 @@ export function SourcePicker({
   loading: boolean;
   /** Asks the picker to open straight into Edit for a playlist (e.g. from the error card). */
   editRequest?: { id: string; nonce: number } | null;
+  /** Opens the picker when this changes (Android's native screen has its own button for it). */
+  openRequest?: number;
+  /** Told when the picker opens and closes (the native screen steps aside while it's open). */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -93,6 +99,18 @@ export function SourcePicker({
     setEditingId(null);
     setActions(null);
   };
+
+  const openChange = useRef(onOpenChange);
+  openChange.current = onOpenChange;
+  useEffect(() => {
+    openChange.current?.(open);
+  }, [open]);
+  useEffect(() => {
+    if (!openRequest) return;
+    setOpen(true);
+    setMode("list");
+    setActions(null);
+  }, [openRequest]);
 
   useEffect(() => {
     if (!editRequest) return;

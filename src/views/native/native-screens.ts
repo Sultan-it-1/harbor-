@@ -641,6 +641,8 @@ export type NativePageInput = {
   header?: NativeHeader | null;
   /** A page opened over another: the Back pill at the top. */
   back?: boolean;
+  /** What the Back pill does instead of going back a page (a list's own sub-page). */
+  onBack?: () => void;
   /** A search field under the heading, held at the top while the page scrolls. */
   search?: {
     key: string;
@@ -852,7 +854,8 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         }
         case "back":
-          goBack();
+          if (cur.onBack) cur.onBack();
+          else goBack();
           return;
         case "query":
           cur.search?.onQuery(a.text ?? "");

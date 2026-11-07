@@ -14,6 +14,8 @@ import { SeriesDetail } from "./playlist-vod/series-detail";
 import { useVodSources } from "./playlist-vod/use-vod-sources";
 import { VodCard } from "./playlist-vod/vod-card";
 import { uiLocale } from "@/lib/i18n/locale";
+import { enrichVod } from "@/lib/iptv/vod-enrich";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 
 type Tab = "movies" | "series";
 
@@ -22,7 +24,7 @@ const RENDER_CAP = 500;
 export function PlaylistVodView({ active }: { active: boolean }) {
   const t = useT();
   const { settings } = useSettings();
-  const { openPlayer } = useView();
+  const { openPlayer, topKind } = useView();
   const { sources, activeId, selectId, addPlaylist, editPlaylist, removePlaylist } = useVodSources();
 
   const activeSource = useMemo<IptvPlaylistSource | null>(
@@ -91,6 +93,208 @@ export function PlaylistVodView({ active }: { active: boolean }) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollMemory("vod", scrollRef, active);
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the playlist
+  // button (its menu of playlists, add / edit / remove opens over the screen), Movies / Shows
+  // with their counts, the search field, then the posters (more as it scrolls, TMDB's poster
+  // when the playlist has none) or a show's page: its poster, episodes and seasons, then its
+  // episodes (a tap plays one). With no playlist yet the page's own setup shows.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerRequest, setPickerRequest] = useState(0);
+  const [limit, setLimit] = useState(60);
+  useEffect(() => setLimit(60), [tab, q, activeId]);
+  const [posters, setPosters] = useState<Record<string, string>>({});
+  const shownMovies = useMemo(() => movies.slice(0, Math.min(limit, RENDER_CAP)), [movies, limit]);
+  const shownSeries = useMemo(() => series.slice(0, Math.min(limit, RENDER_CAP)), [series, limit]);
+  // TMDB's posters for the titles shown (a few at a time; the lookups are cached).
+  useEffect(() => {
+    if (!settings.tmdbKey || !active) return;
+    let cancelled = false;
+    const wanted: Array<{ id: string; kind: "movie" | "series"; title: string; year: number | null }> =
+      tab === "movies"
+        ? shownMovies.map((m) => ({ id: m.id, kind: "movie" as const, title: m.title, year: m.year }))
+        : shownSeries.map((x) => ({ id: x.id, kind: "series" as const, title: x.title, year: null }));
+    const todo = wanted.filter((w) => !(w.id in posters));
+    if (todo.length === 0) return;
+    let next = 0;
+    const found: Record<string, string> = {};
+    const flush = () => {
+      if (!cancelled && Object.keys(found).length > 0) setPosters((p) => ({ ...p, ...found }));
+    };
+    const worker = async () => {
+      while (!cancelled && next < todo.length) {
+        const w = todo[next++];
+        const e = await enrichVod(settings.tmdbKey, w.kind, w.title, w.year).catch(() => null);
+        found[w.id] = e?.poster ?? "";
+      }
+    };
+    void Promise.all([worker(), worker(), worker(), worker()]).then(flush);
+    return () => {
+      cancelled = true;
+      flush();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.tmdbKey, active, tab, shownMovies, shownSeries]);
+  const posterOf = (id: string, logo: string | null) => [posters[id], logo].filter((u): u is string => !!u);
+  const capNote =
+    !selected && (tab === "movies" ? movies.length : series.length) > RENDER_CAP
+      ? tab === "movies"
+        ? t("Showing {shown} of {total} movies. Search to find the rest.", {
+            shown: RENDER_CAP.toLocaleString(uiLocale()),
+            total: movies.length.toLocaleString(uiLocale()),
+          })
+        : t("Showing {shown} of {total} shows. Search to find the rest.", {
+            shown: RENDER_CAP.toLocaleString(uiLocale()),
+            total: series.length.toLocaleString(uiLocale()),
+          })
+      : null;
+  const [season, setSeason] = useState<number>(1);
+  useEffect(() => setSeason(selected?.seasons[0] ?? 1), [selected]);
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    if (state.kind === "error" || (state.kind === "loading" && !playlist)) return [];
+    if (selected) {
+      const eps = selected.episodes.filter((e) => e.season === season);
+      return [
+        {
+          key: "episodes",
+          title: "",
+          kind: "winners",
+          metas: [],
+          chips:
+            selected.seasons.length > 1
+              ? { key: "season", items: selected.seasons.map((n) => ({ id: String(n), label: t("Season {n}", { n }), on: n === season })) }
+              : null,
+          onRowChip: (id) => setSeason(Number(id)),
+          cards: eps.map((ep) => ({ title: ep.title, sub: String(ep.episode) })),
+          onOpen: (i) => {
+            const ep = eps[i];
+            if (ep) playEpisode(selected, ep);
+          },
+        },
+      ];
+    }
+    const more = (list: unknown[], shown: unknown[]) =>
+      shown.length < Math.min(list.length, RENDER_CAP) ? () => setLimit((l) => l + 60) : undefined;
+    if (tab === "movies") {
+      return [
+        {
+          key: "movies",
+          title: "",
+          kind: "poster",
+          grid: true,
+          min: Math.round(150 * (settings.posterScale ?? 1)),
+          metas: [],
+          cards: shownMovies.map((m) => ({ title: m.title, sub: m.year ? String(m.year) : null, img: posterOf(m.id, m.logo) })),
+          onOpen: (i) => {
+            const m = shownMovies[i];
+            if (m) playMovie(m);
+          },
+          more: more(movies, shownMovies),
+        },
+      ];
+    }
+    return [
+      {
+        key: "series",
+        title: "",
+        kind: "poster",
+        grid: true,
+        min: Math.round(150 * (settings.posterScale ?? 1)),
+        metas: [],
+        cards: shownSeries.map((x) => ({
+          title: x.title,
+          sub: x.episodes.length === 1 ? t("{n} episode", { n: 1 }) : t("{n} episodes", { n: x.episodes.length }),
+          img: posterOf(x.id, x.logo),
+        })),
+        onOpen: (i) => {
+          const x = shownSeries[i];
+          if (x) setSelected(x);
+        },
+        more: more(series, shownSeries),
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, state.kind, playlist, selected, season, tab, shownMovies, shownSeries, movies, series, posters, settings.posterScale, playMovie, playEpisode]);
+  const activeName = sources.find((s) => s.id === activeId)?.name ?? t("No playlist");
+  const native = useNativeBrowsePage("vod", {
+    active: topKind === "vod" && active,
+    blocked: sources.length === 0,
+    hidden: pickerOpen,
+    t,
+    back: !!selected,
+    onBack: () => setSelected(null),
+    header: selected
+      ? {
+          photo: selected.logo ?? null,
+          title: selected.title,
+          size: 26,
+          subtitle: [
+            selected.episodes.length === 1 ? t("{n} episode", { n: 1 }) : t("{n} episodes", { n: selected.episodes.length }),
+            selected.seasons.length > 1 ? t("{n} seasons", { n: selected.seasons.length }) : null,
+            selected.group,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }
+      : null,
+    chips: selected
+      ? []
+      : [
+          { key: "source", items: [{ id: "picker", label: `●  ${activeName}  ▾`, on: false }] },
+          {
+            key: "tab",
+            items: [
+              { id: "movies", label: `${t("Movies")}  ${library.movies.length.toLocaleString(uiLocale())}`, on: tab === "movies" },
+              { id: "series", label: `${t("Shows")}  ${library.series.length.toLocaleString(uiLocale())}`, on: tab === "series" },
+            ],
+          },
+        ],
+    onChip: (group, id) => {
+      if (group === "source") setPickerRequest((n) => n + 1);
+      else if (group === "tab") chooseTab(id === "series" ? "series" : "movies");
+    },
+    search: selected
+      ? null
+      : { key: `vod:${activeId}:${tab}`, hint: tab === "movies" ? t("Search movies") : t("Search shows"), text: query, onQuery: setQuery },
+    note: capNote,
+    rows: nativeRows,
+    message:
+      state.kind === "error"
+        ? { text: state.message, action: t("Try again"), onAction: refresh }
+        : state.kind === "loading" && !playlist
+          ? { text: t("Loading playlist...") }
+          : !selected && tab === "movies" && movies.length === 0
+            ? { text: emptyMoviesText(t, library.movies.length, q) }
+            : !selected && tab === "series" && series.length === 0
+              ? { text: emptyShowsText(t, library.series.length, q) }
+              : null,
+  });
+  if (native || (pickerOpen && sources.length > 0)) {
+    // The playlist menu is the page's own: it opens here, over a plain page, while the native
+    // screen steps aside.
+    return (
+      <main data-rail-flush className="relative flex min-h-0 flex-1 flex-col pt-20">
+        <header className={`relative z-[40] flex shrink-0 items-center px-4 py-2.5 ${pickerOpen ? "" : "pointer-events-none opacity-0"}`}>
+          <SourcePicker
+            sources={sources}
+            activeId={activeId}
+            exportEnabled={false}
+            onSelect={selectId}
+            onAdd={addPlaylist}
+            onEdit={editPlaylist}
+            onRemove={removePlaylist}
+            onRefresh={refresh}
+            onExport={() => {}}
+            fetchedAt={playlist?.fetchedAt ?? null}
+            channelCount={null}
+            loading={state.kind === "loading"}
+            openRequest={pickerRequest}
+            onOpenChange={setPickerOpen}
+          />
+        </header>
+      </main>
+    );
+  }
 
   if (sources.length === 0) {
     return (
