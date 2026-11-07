@@ -101,6 +101,8 @@ function GenreTile({ genre }: { genre: string }) {
         background: `linear-gradient(150deg, ${palette.from}, ${palette.to})`,
       }}
     >
+      {/* The box's height even where aspect-ratio isn't applied (old WebViews): its pictures and text sit over it. */}
+      <span aria-hidden className="block" style={{ paddingTop: "80%" }} />
       <CollageBackdrop backdrops={backdrops} rpdbKey={settings.rpdbKey} />
       <div
         aria-hidden

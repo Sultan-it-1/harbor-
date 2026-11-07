@@ -598,6 +598,9 @@ class NativeHome(
         private val count = label("", 14f, lines = 1)
         private val subtitle = label("", 14f, lines = 3)
         private val body = label("", 15f, lines = 3)
+        private val photo = NetImage(ctx)
+        private val badge = label("", 11f, bold = true, lines = 1)
+        private var bodyKey = ""
 
         init {
             frame.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -613,6 +616,15 @@ class NativeHome(
             iconBox.addView(iconView, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
             kickerLine.addView(iconBox, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(10) })
             kickerLine.addView(kicker)
+            badge.setPaddingRelative(dp(8), dp(2), dp(8), dp(2))
+            badge.isClickable = true
+            badge.isFocusable = true
+            badge.setOnClickListener { act("chip", row = "badge", what = "badge") }
+            kickerLine.addView(badge, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
+            photo.scaleType = ImageView.ScaleType.CENTER_CROP
+            photo.clipToOutline = true
+            photo.outlineProvider = roundOutline(dp(16).toFloat())
+            col.addView(photo, LinearLayout.LayoutParams(dp(200), dp(300)).apply { bottomMargin = dp(24) })
             col.addView(kickerLine)
 
             titleLine.orientation = LinearLayout.HORIZONTAL
@@ -627,6 +639,11 @@ class NativeHome(
             subtitle.setLineSpacing(0f, 1.2f)
             col.addView(subtitle, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
             body.setLineSpacing(0f, 1.25f)
+            body.setOnClickListener {
+                // A long biography: all of it on a tap, back to its first lines on another.
+                if (!headerBodyOpen.add(bodyKey)) headerBodyOpen.remove(bodyKey)
+                model?.header?.let { bind(it) }
+            }
             col.addView(body, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
         }
 
@@ -730,6 +747,24 @@ class NativeHome(
             body.text = h.body ?: ""
             body.visibility = if (h.body.isNullOrBlank()) View.GONE else View.VISIBLE
             body.setTextColor(colors.muted)
+            bodyKey = h.title
+            val open = bodyKey in headerBodyOpen
+            body.maxLines = if (open) Int.MAX_VALUE else h.bodyLines
+            body.ellipsize = if (open) null else TextUtils.TruncateAt.END
+
+            photo.visibility = if (h.photo != null) View.VISIBLE else View.GONE
+            if (h.photo != null) {
+                photo.background = rounded(plate(h.title), dp(16).toFloat())
+                images.load(photo, listOf(h.photo), dp(200), dp(300))
+            } else {
+                images.clear(photo)
+            }
+            badge.text = h.badge?.let { if (rtl) it else it.uppercase() } ?: ""
+            badge.visibility = if (h.badge.isNullOrBlank()) View.GONE else View.VISIBLE
+            badge.letterSpacing = if (rtl) 0f else 0.14f
+            badge.setTextColor(colors.accent)
+            badge.background = rounded(withAlpha(colors.accent, 0.1f), dp(6).toFloat(), dp(1), withAlpha(colors.accent, 0.3f))
+            if (!h.badge.isNullOrBlank()) kickerLine.visibility = View.VISIBLE
         }
 
         /** The other genres, to switch to one. */
@@ -1129,6 +1164,8 @@ class NativeHome(
 
     /** Which titles' synopses are open in full. */
     private val synopsisOpen = HashSet<String>()
+    /** Which headings' paragraphs (a person's biography) are open in full. */
+    private val headerBodyOpen = HashSet<String>()
 
     /**
      * A title's hero as the page draws it: the backdrop darkened from the bottom and the start, the
@@ -1240,7 +1277,10 @@ class NativeHome(
             tagline.text = d.tagline?.let { if (rtl) it else it.uppercase() } ?: ""
             tagline.visibility = if (d.tagline.isNullOrBlank()) View.GONE else View.VISIBLE
             tagline.letterSpacing = if (rtl) 0f else 0.2f
-            tagline.setTextColor(colors.subtle)
+            tagline.setTextColor(if (d.taglineLink) colors.muted else colors.subtle)
+            tagline.isClickable = d.taglineLink
+            tagline.isFocusable = d.taglineLink
+            tagline.setOnClickListener(if (d.taglineLink) View.OnClickListener { act("pill", what = "tagline") } else null)
 
             title.text = d.title
             title.setTextColor(colors.ink)

@@ -183,6 +183,9 @@ class HomeModel(
                         size = h.optDouble("size", 0.0).toFloat().takeIf { !it.isNaN() && it > 0f },
                         body = h.str("body"),
                         backdrop = h.optJSONArray("backdrop").strings(),
+                        photo = h.str("photo"),
+                        badge = h.str("badge"),
+                        bodyLines = h.optInt("bodyLines", 3),
                         switch = h.optJSONArray("switch").objects().mapNotNull { c ->
                             val id = c.str("id") ?: return@mapNotNull null
                             HomeChip(id = id, label = c.str("label") ?: id, on = c.optBoolean("on", false))
@@ -226,6 +229,7 @@ class HomeModel(
                         play = d.str("play"),
                         more = d.optBoolean("more", false),
                         synopsis = d.str("synopsis"),
+                        taglineLink = d.optBoolean("taglineLink", false),
                     )
                 },
                 message = o.optJSONObject("message")?.let { g ->
@@ -465,6 +469,12 @@ class HomeHeader(
     val backdrop: List<String> = emptyList(),
     /** The title opens a list of these (a genre page: the other genres): sends {a:"chip", row:"switch", what:id}. */
     val switch: List<HomeChip> = emptyList(),
+    /** A portrait above it all (a person's photo). */
+    val photo: String? = null,
+    /** A small accent badge after the kicker ("Top 12"): sends {a:"chip", row:"badge", what:"badge"}. */
+    val badge: String? = null,
+    /** How many lines of [body] show until it's tapped (then all of it). */
+    val bodyLines: Int = 3,
 )
 
 /** A title's hero. [pills]: kind "pill" (a tap sends {a:"pill", what:id}), "imdb" (the IMDb tag), "score". */
@@ -480,6 +490,8 @@ class HomeDetail(
     /** The round "…" button: the page's own menu (watchlist, favourite, trailer, download, Trakt…). */
     val more: Boolean,
     val synopsis: String?,
+    /** The tagline opens something (an episode's series): sends {a:"pill", what:"tagline"}. */
+    val taglineLink: Boolean = false,
 )
 
 class DetailPill(val id: String, val label: String, val kind: String)

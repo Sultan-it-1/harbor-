@@ -74,6 +74,8 @@ export const TopRankCard = memo(function TopRankCard({ meta, rank }: { meta: Met
       className="group relative w-full min-w-0"
       style={{ aspectRatio: "228 / 268", containerType: "inline-size" }}
     >
+      {/* The box's height even where aspect-ratio isn't applied (old WebViews): its pictures and text sit over it. */}
+      <span aria-hidden className="block" style={{ paddingTop: "117.54%" }} />
       <span
         aria-hidden
         className="pointer-events-none absolute -start-[3%] top-0 font-bold leading-[0.85] text-transparent"
@@ -132,6 +134,8 @@ export const AnimeRankCard = memo(function AnimeRankCard({ meta, rank }: { meta:
       className="group relative w-full min-w-0"
       style={{ aspectRatio: "228 / 268", containerType: "inline-size" }}
     >
+      {/* The box's height even where aspect-ratio isn't applied (old WebViews): its pictures and text sit over it. */}
+      <span aria-hidden className="block" style={{ paddingTop: "117.54%" }} />
       <span
         aria-hidden
         className="font-anime pointer-events-none absolute -start-[3%] top-0 font-bold leading-[0.85] text-transparent"

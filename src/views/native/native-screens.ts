@@ -510,6 +510,12 @@ export type NativeHeader = {
   backdrop?: string[];
   /** The title opens these (sends the chip group "switch"). */
   switch?: Array<{ id: string; label: string; on: boolean }>;
+  /** A portrait above it all (a person's photo). */
+  photo?: string | null;
+  /** A small accent badge after the kicker ("Top 12"; sends the chip group "badge"). */
+  badge?: string | null;
+  /** Lines of [body] shown until it's tapped. */
+  bodyLines?: number;
 };
 
 /** A tile / logo / feature card. */

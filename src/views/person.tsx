@@ -15,7 +15,8 @@ import { useSettings } from "@/lib/settings";
 import { useTopRankModal, type TopRankDept } from "@/lib/top-rank-modal";
 import { useScrollMemory, useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
-import { AwardLaurelStrip } from "./person/award-laurel-strip";
+import { AwardLaurelStrip, labelFor as awardLabelFor } from "./person/award-laurel-strip";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 import { Bio } from "./person/bio";
 import { FilmRow } from "./person/film-row";
 import { BirthdayLink, PlaceLink } from "./person/person-meta-links";
@@ -35,7 +36,7 @@ export function PersonView({ personId }: { personId: number }) {
   const t = useT();
   const { settings } = useSettings();
   const { rank } = useRankings();
-  const { openMeta } = useView();
+  const { openMeta, topKind } = useView();
   const { open: openTopRank } = useTopRankModal();
   const initialCached = tmdbPersonCached(personId);
   const [person, setPerson] = useState<PersonDetail | null>(initialCached ?? null);
@@ -113,6 +114,103 @@ export function PersonView({ personId }: { personId: number }) {
   const backdrop = knownFor.find((c) => c.background)?.background;
 
   const age = person?.birthday ? calcAge(person.birthday, person.deathday) : null;
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the photo, the
+  // department and its Top N, the name, born / died / place, the awards (their details open over
+  // it), the biography (all of it on a tap), then Known For, Movies, TV Shows, Directing, Writing,
+  // Producing and Other Work with each part and year under the poster.
+  const nativeHeader = useMemo(
+    () =>
+      person
+        ? {
+            photo: photo ?? null,
+            kicker: person.knownForDepartment ? t(person.knownForDepartment) : null,
+            badge: personRank ? t("Top {n}", { n: personRank }) : null,
+            title: person.name,
+            size: 44,
+            subtitle:
+              [
+                person.birthday ? `${t("Born {date}", { date: fmtDate(person.birthday) })}${age != null && !person.deathday ? ` (${age})` : ""}` : null,
+                person.deathday ? t("Died {date}", { date: fmtDate(person.deathday) }) : null,
+                person.placeOfBirth || null,
+              ]
+                .filter(Boolean)
+                .join("  ·  ") || null,
+            body: person.biography || null,
+            bodyLines: 6,
+          }
+        : null,
+    [person, photo, personRank, age, t],
+  );
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [];
+    if (awardChips.length > 0) {
+      out.push({
+        key: "awards",
+        title: "",
+        metas: [],
+        cards: [],
+        chips: {
+          key: "awards",
+          items: awardChips.map((c) => ({
+            id: c.type,
+            label: `${awardLabelFor(c.type)} · ${
+              c.wins > 0 ? (c.wins === 1 ? t("{n} win", { n: c.wins }) : t("{n} wins", { n: c.wins })) : c.nominations === 1 ? t("{n} nom", { n: c.nominations }) : t("{n} noms", { n: c.nominations })
+            }`,
+            on: false,
+          })),
+        },
+        onRowChip: (type) => setOpenAward({ type: type as AwardType, anchor: new DOMRect(window.innerWidth / 2, window.innerHeight / 2, 0, 0) }),
+      });
+    }
+    const films = (key: string, title: string, credits: typeof knownFor, showRole: boolean) => {
+      if (credits.length === 0) return;
+      out.push({
+        key,
+        title,
+        kind: "poster",
+        metas: credits.map(creditToMeta),
+        cards: credits.map((c) => {
+          const role = c.character?.trim() || c.job?.trim() || "";
+          return {
+            title: c.title,
+            sub: showRole ? [role, c.releaseInfo].filter(Boolean).join(" · ") || null : null,
+            img: c.poster ? [c.poster] : [],
+          };
+        }),
+      });
+    };
+    films("known", t("Known For"), knownFor, false);
+    films("movies", t("Movies · {n}", { n: movies.length }), movies, true);
+    films("shows", t("TV Shows · {n}", { n: shows.length }), shows, true);
+    films("directing", t("Directing"), directing, true);
+    films("writing", t("Writing"), writing, true);
+    films("producing", t("Producing"), producing, true);
+    films("other", t("Other Work"), otherCrew.slice(0, 24), true);
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [person, awardChips, knownFor, t]);
+  const native = useNativeBrowsePage("person", {
+    active: topKind === "person",
+    hidden: !!openAward,
+    t,
+    back: true,
+    header: nativeHeader,
+    rows: nativeRows,
+    onChip: (group) => {
+      if (group === "badge") openTopRank((person?.knownForDepartment as TopRankDept) ?? "Acting");
+    },
+    empty: loading ? { text: t("Loading…") } : { text: t("No filmography on record.") },
+  });
+  if (native) {
+    return (
+      <main ref={scrollRef} aria-hidden={!openAward} className="absolute inset-0 z-40 overflow-hidden bg-canvas">
+        {openAward && (
+          <AwardDetailModal type={openAward.type} entries={openAwardEntries} anchor={openAward.anchor} onClose={() => setOpenAward(null)} />
+        )}
+      </main>
+    );
+  }
 
   return (
     <main

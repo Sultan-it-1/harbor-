@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 import { ArrowLeft, Play } from "lucide-react";
 import type { Meta } from "@/lib/cinemeta";
 import type { EpisodeDetail } from "@/lib/providers/tmdb/tmdb-episode-types";
@@ -38,7 +39,7 @@ export function EpisodeDetailView({
 }: EpisodeDetailViewProps) {
   const t = useT();
   const { settings } = useSettings();
-  const { openPicker, openMeta, goBack } = useView();
+  const { openPicker, openMeta, goBack, openPerson, topKind } = useView();
 
   const [seriesMeta, setSeriesMeta] = useState<Meta | null>(initialSeriesMeta || null);
   const [episodeData, setEpisodeData] = useState<EpisodeDetail | null>(null);
@@ -148,6 +149,81 @@ export function EpisodeDetailView({
   const handleSeriesClick = useCallback(() => {
     if (seriesMeta) openMeta(seriesMeta);
   }, [seriesMeta, openMeta]);
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the still behind
+  // the hero, the series' name (it opens the series), "S1E3 — name", aired / runtime / rating,
+  // Play Episode, the synopsis, the guest stars, the stills (full screen on a tap). Loading, an
+  // error and Trakt comments keep the page.
+  const nativeDetail = useMemo(() => {
+    if (!episodeData || !seriesMeta) return null;
+    const pills: Array<{ id: string; label: string; kind: string }> = [];
+    if (episodeData.airDate) pills.push({ id: "aired", label: t("Aired {date}", { date: new Date(episodeData.airDate).toLocaleDateString(uiLocale()) }), kind: "score" });
+    if (episodeData.runtime && episodeData.runtime > 0) pills.push({ id: "runtime", label: t("{n} min", { n: episodeData.runtime }), kind: "score" });
+    const r = episodeRating ?? seriesRating;
+    if (r) pills.push({ id: "imdb", label: String(r), kind: "imdb" });
+    return {
+      backdrop: background ? [background] : [],
+      logo: null,
+      title: `S${episodeData.seasonNumber}E${episodeData.episodeNumber} — ${episodeData.name}`,
+      tagline: seriesMeta.name,
+      taglineLink: true,
+      pills,
+      play: t("Play Episode"),
+      more: false,
+      synopsis: episodeData.overview || null,
+    };
+  }, [episodeData, seriesMeta, background, episodeRating, seriesRating, t]);
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    if (!episodeData) return [];
+    const out: NativeRowInput[] = [];
+    const guests = episodeData.guestStars ?? [];
+    if (guests.length > 0) {
+      out.push({
+        key: "guests",
+        title: t("Guest Stars · {n}", { n: guests.length }),
+        kind: "poster",
+        metas: [],
+        cards: guests.map((g) => ({
+          title: g.name,
+          sub: g.character || null,
+          img: g.profilePath ? [g.profilePath.startsWith("http") ? g.profilePath : `https://image.tmdb.org/t/p/w185${g.profilePath}`] : [],
+        })),
+        onOpen: (i) => {
+          const g = guests[i];
+          if (g && g.id > 0) openPerson(g.id);
+        },
+      });
+    }
+    const stills = (episodeData.stills ?? []).slice(0, 12);
+    if (stills.length > 0) {
+      out.push({
+        key: "stills",
+        title: t("Stills"),
+        kind: "tile",
+        ratio: 9 / 16,
+        gallery: true,
+        metas: [],
+        cards: stills.map((st) => ({ title: "", img: [getImageUrl(st.filePath, "w780")].filter((u): u is string => !!u) })),
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episodeData, t, openPerson]);
+  const native = useNativeBrowsePage("episode", {
+    active: topKind === "episode-detail",
+    blocked: !!error || !nativeDetail || settings.showTraktComments === true,
+    t,
+    back: true,
+    detail: nativeDetail,
+    rows: nativeRows,
+    onDetail: (what) => {
+      if (what === "play") handlePlay();
+    },
+    onPill: (id) => {
+      if (id === "tagline") handleSeriesClick();
+    },
+  });
+  if (native) return <main ref={scrollRef} aria-hidden="true" className="absolute inset-0 z-30 overflow-hidden bg-canvas" />;
 
   if (error) {
     return (

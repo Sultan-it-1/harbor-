@@ -162,7 +162,7 @@ function AwardChip({
   );
 }
 
-function labelFor(type: AwardType): string {
+export function labelFor(type: AwardType): string {
   switch (type) {
     case "oscar":
       return "Oscar";

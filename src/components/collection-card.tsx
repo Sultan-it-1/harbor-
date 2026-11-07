@@ -77,6 +77,8 @@ export function CollectionCard({
       className="group/card relative aspect-[16/9] w-full cursor-pointer overflow-hidden rounded-2xl border border-edge-soft text-start shadow-[0_4px_18px_-10px_rgba(0,0,0,0.5)] ring-1 ring-inset ring-white/0 transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-edge hover:ring-white/15"
       style={{ background: `linear-gradient(140deg, ${from}, ${to})` }}
     >
+      {/* The box's height even where aspect-ratio isn't applied (old WebViews): its pictures and text sit over it. */}
+      <span aria-hidden className="block" style={{ paddingTop: "56.25%" }} />
       {backdrop && (
         <img
           src={backdrop}

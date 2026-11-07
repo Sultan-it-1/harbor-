@@ -45,6 +45,8 @@ function AwardTile({ type, name, sub }: { type: AwardType; name: string; sub: st
         background: `linear-gradient(150deg, oklch(from ${tint} 0.26 calc(c * 0.45) h), oklch(from ${tint} 0.11 calc(c * 0.3) h))`,
       }}
     >
+      {/* The box's height even where aspect-ratio isn't applied (old WebViews): its pictures and text sit over it. */}
+      <span aria-hidden className="block" style={{ paddingTop: "80%" }} />
       <div
         aria-hidden
         className="absolute inset-0"

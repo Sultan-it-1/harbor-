@@ -1,4 +1,5 @@
 import { isPhoneLayout } from "@/lib/platform";
+import { useNearViewport } from "@/lib/phone-images";
 import {
   Children,
   createContext,
@@ -43,6 +44,10 @@ function LazyChild({
   const root = useContext(RowTrackContext);
   const [visible, setVisible] = useState(eager);
   const ref = useRef<HTMLDivElement>(null);
+  // Phone: also the position check posters use (useNearViewport), so a WebView whose
+  // IntersectionObserver never fires still fills the cells as the row scrolls to them.
+  const nearOnPhone = useNearViewport(ref);
+  const shown = visible || (PHONE && nearOnPhone);
 
   useEffect(() => {
     if (visible) return;
@@ -78,14 +83,14 @@ function LazyChild({
       ref={ref}
       style={{
         ...(span ? { gridColumn: span } : undefined),
-        contentVisibility: visible ? "visible" : "auto",
+        contentVisibility: shown ? "visible" : "auto",
         // Off-screen cells must not set the row height: a 200px placeholder made rows of
         // shorter cards (genre/award tiles, landscape cards) leave a big empty band below.
         // The eager, on-screen cells define the height; the rest match it once rendered.
-        containIntrinsicSize: visible ? undefined : "auto 1px",
+        containIntrinsicSize: shown ? undefined : "auto 1px",
       }}
     >
-      {visible ? children : <Skeleton shape={shape} />}
+      {shown ? children : <Skeleton shape={shape} />}
     </div>
   );
 }
