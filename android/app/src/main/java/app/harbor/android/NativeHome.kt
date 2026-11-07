@@ -1262,6 +1262,7 @@ class NativeHome(
         private val playText = label("", 15f, bold = true, lines = 1)
         private val more = FrameLayout(ctx)
         private val moreIcon = ImageView(ctx)
+        private val extra = label("", 14f, lines = 1)
         private val synopsis = label("", 16f)
         private val synopsisToggle = label("", 13.5f, bold = true, lines = 1)
         private var key = ""
@@ -1295,6 +1296,12 @@ class NativeHome(
             play.addView(playIcon, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) })
             play.addView(playText)
             actions.addView(play, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
+            extra.gravity = Gravity.CENTER
+            extra.setPaddingRelative(dp(20), 0, dp(20), 0)
+            extra.isClickable = true
+            extra.isFocusable = true
+            extra.setOnClickListener { act("d", what = "extra") }
+            actions.addView(extra, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)).apply { marginStart = dp(12) })
             more.isClickable = true
             more.isFocusable = true
             more.setOnClickListener { act("d", what = "more") }
@@ -1379,6 +1386,10 @@ class NativeHome(
             playIcon.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
             playText.text = d.play ?: ""
             playText.setTextColor(colors.canvas)
+            extra.visibility = if (d.extra.isNullOrBlank()) View.GONE else View.VISIBLE
+            extra.text = d.extra ?: ""
+            extra.setTextColor(colors.muted)
+            extra.background = focusable(rounded(withAlpha(colors.canvas, 0.8f), dp(24).toFloat(), dp(1), withAlpha(colors.ink, 0.18f)))
             more.visibility = if (d.more) View.VISIBLE else View.GONE
             more.background = focusable(rounded(withAlpha(colors.canvas, 0.8f), dp(24).toFloat(), dp(1), withAlpha(colors.ink, 0.18f)))
             more.contentDescription = m.label("moreActions", "More actions")

@@ -693,10 +693,11 @@ export function DetailView({
   const nativeOn = useNativeScreensEnabled();
   // Series too (their episode list hands its row over, native-sink): TMDB's seasons, or the
   // addon's / Cinemeta's videos when TMDB has none. Live channels keep the page for now.
+  // A live channel's page (opened from Live TV) too: its picture, name and line, Play and "Open
+  // in TV Shows / Movies" as on the page.
   const nativeBlocked =
-    (meta.type !== "movie" && meta.type !== "series" && meta.type !== "anime") ||
+    (meta.type !== "movie" && meta.type !== "series" && meta.type !== "anime" && !addonNative) ||
     detectingAnime ||
-    !!liveContext ||
     layoutEdit;
   const [episodesSink, episodesRows] = useNativeRowSink(nativeOn && !nativeBlocked);
   const showEpisodes = !!detail && !isAnime && isSeries && detail.seasons.length > 0;
@@ -705,7 +706,7 @@ export function DetailView({
     !liveContext &&
     (!detail || detail.seasons.length === 0) &&
     !isAnime &&
-    isSeries &&
+    (isSeries || (addonNative && (meta.type === "channel" || meta.type === "tv"))) &&
     !!cinemetaVideos &&
     (addonNative ? cinemetaVideos.length > 0 : cinemetaVideos.some((v) => v.season != null && v.season > 0 && v.episode != null));
   // Anime: its own episode list (the franchise's parts, Kitsu episodes), handed over the same way.
@@ -758,10 +759,17 @@ export function DetailView({
       play: upcoming
         ? [t("Upcoming"), upcomingDateLabel(t, detail?.kind === "movie" ? detail?.releaseDate : detail?.firstAirDate)].filter(Boolean).join(" · ")
         : smartPlayLabel,
-      more: true,
+      more: !liveContext,
+      extra: liveContext
+        ? meta.type === "series" || meta.type === "tv"
+          ? t("Open in TV Shows")
+          : meta.type === "anime"
+            ? t("Open in Anime")
+            : t("Open in Movies")
+        : null,
       synopsis: overview || null,
     };
-  }, [showSeasonPill, seasonPillLabel, isAnime, year, rating, imdbRatingValue, settings.showRtBadge, scores, mdblist, runtime, genres, backdrop, meta.background, detail?.backdrop, logo, title, loading, detectingAnime, tagline, upcoming, smartPlayLabel, overview]);
+  }, [showSeasonPill, seasonPillLabel, isAnime, year, rating, imdbRatingValue, settings.showRtBadge, scores, mdblist, runtime, genres, backdrop, meta.background, detail?.backdrop, logo, title, loading, detectingAnime, tagline, upcoming, smartPlayLabel, overview, liveContext, meta.type, t]);
   const nativeRows = useMemo<NativeRowInput[]>(() => {
     if (!detail) return [];
     const sections = new Map<string, NativeRowInput>();
@@ -931,6 +939,7 @@ export function DetailView({
     rows: nativeAllRows,
     onDetail: (what) => {
       if (what === "play") void smartPlay();
+      else if (what === "extra") promoteMetaToRoot();
       else if (what === "more") overflowRef.current?.querySelector<HTMLButtonElement>("button")?.click();
     },
     onPill: (id) => {

@@ -239,6 +239,7 @@ class HomeModel(
                         more = d.optBoolean("more", false),
                         synopsis = d.str("synopsis"),
                         taglineLink = d.optBoolean("taglineLink", false),
+                        extra = d.str("extra"),
                     )
                 },
                 queue = o.optJSONObject("queue")?.let { q ->
@@ -585,6 +586,8 @@ class HomeDetail(
     val synopsis: String?,
     /** The tagline opens something (an episode's series): sends {a:"pill", what:"tagline"}. */
     val taglineLink: Boolean = false,
+    /** A second, outlined button after Play (a live channel's "Open in TV Shows"): {a:"d", what:"extra"}. */
+    val extra: String? = null,
 )
 
 class DetailPill(val id: String, val label: String, val kind: String)
