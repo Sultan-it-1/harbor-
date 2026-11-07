@@ -196,6 +196,7 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(0xFF000000.toInt())
             overScrollMode = View.OVER_SCROLL_NEVER
             isHorizontalScrollBarEnabled = false
+            isVerticalScrollBarEnabled = false
         }
         val ws = wv.settings
         ws.javaScriptEnabled = true

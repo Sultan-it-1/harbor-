@@ -1382,6 +1382,18 @@ html[data-phone] body {
   -webkit-user-select: none;
   user-select: none;
 }
+/* No scrollbars anywhere in the app: pages, rows and panels scroll by touch, and the always-on
+   8px bar took room at the edge. scrollbar-width for current WebViews, ::-webkit-scrollbar for
+   older ones (which ignore the standard property). */
+html[data-phone],
+html[data-phone] * {
+  scrollbar-width: none;
+}
+html[data-phone] ::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 html[data-phone] input,
 html[data-phone] textarea,
 html[data-phone] [contenteditable="true"] {
