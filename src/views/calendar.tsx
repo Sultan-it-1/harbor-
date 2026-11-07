@@ -20,9 +20,10 @@ import { useScrollMemory, useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 import { AuthModal } from "@/components/auth-modal";
 import { DayModal } from "./calendar/day-modal";
-import { EmptyState, ErrorState, NoKeyState, NotSignedInState } from "./calendar/empty-states";
+import { EmptyState, ErrorState, NoKeyState, NotSignedInState, emptyStateText } from "./calendar/empty-states";
 import { MonthGrid } from "./calendar/month-grid";
-import { SourceSwitcher } from "./calendar/source-switcher";
+import { SourceSwitcher, calendarSources } from "./calendar/source-switcher";
+import { useNativeBrowsePage } from "@/views/native/native-screens";
 import {
   buildLibraryNameSet,
   buildMonthCells,
@@ -31,6 +32,7 @@ import {
   FILTERS,
   MONTH_NAMES,
   normalizeName,
+  orderedWeekdayNames,
 } from "./calendar/utils";
 
 const PHONE = isPhoneLayout();
@@ -40,7 +42,7 @@ export function CalendarView() {
   const { settings, update } = useSettings();
   const { authKey } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
-  const { openSettings, openMeta } = useView();
+  const { openSettings, openMeta, topKind } = useView();
   const today = useMemo(() => new Date(), []);
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
@@ -130,23 +132,150 @@ export function CalendarView() {
   };
 
   const todayISO = todayLocalISO();
+  const body: "grid" | "other" =
+    (source === "library" && !authKey) ||
+    (source === "all" && !settings.tmdbKey) ||
+    !!error ||
+    filtered.length === 0
+      ? "other"
+      : "grid";
   const dayModalItems = dayModal ? grouped.get(dayModal) ?? [] : [];
 
   const showAllControls = source === "all";
 
-  let body: React.ReactNode;
+  // Android: drawn natively (see @/views/native/native-screens) like the page: "Releases",
+  // "Calendar", previous / Today / the month / next, the sources, Start week on Monday, the kinds
+  // with their counts and Watchlist only, then the month (each day's first three titles and
+  // "+N more", which opens the page's list of that day over it). The Custom source's builder
+  // keeps the page.
+  const nativeCalendar = useMemo(() => {
+    const cellsOut = cells.map((cell) => {
+      const events = grouped.get(cell.iso) ?? [];
+      return {
+        day: cell.date.getDate(),
+        inMonth: cell.inMonth,
+        today: cell.iso === todayISO,
+        count: events.length,
+        items: events.slice(0, 3).map((it) => ({ title: it.name, img: it.poster ? [it.poster] : [] })),
+        more: events.length > 3 ? t("+{n} more", { n: events.length - 3 }) : null,
+      };
+    });
+    return {
+      month: `${t(MONTH_NAMES[month])} ${year}`,
+      weekdays: orderedWeekdayNames(settings.weekStartsMonday).map((d) => t(d)),
+      cells: body === "grid" ? cellsOut : [],
+      labels: { prev: t("Previous month"), next: t("Next month"), today: t("Today") },
+    };
+  }, [t, cells, grouped, todayISO, month, year, settings.weekStartsMonday, body]);
+  const nativeChips = useMemo(() => {
+    const groups: Array<{ key: string; items: Array<{ id: string; label: string; on: boolean }> }> = [
+      {
+        key: "source",
+        items: calendarSources(traktConnected, simklConnected).map((o) => ({ id: o.id, label: t(o.label), on: source === o.id })),
+      },
+    ];
+    const opts = [{ id: "monday", label: t("Start week on Monday"), on: settings.weekStartsMonday }];
+    if (showAllControls) {
+      for (const f of FILTERS) {
+        const count = f.id === "all" ? filtered.length : applyCalendarFilter(items, f.id).length;
+        opts.push({ id: `filter:${f.id}`, label: `${t(f.label)}  ${count}`, on: filter === f.id });
+      }
+      if (authKey) opts.push({ id: "watchlist", label: `★ ${t("Watchlist only")}`, on: watchlistOnly });
+    }
+    groups.push({ key: "opts", items: opts });
+    return groups;
+  }, [t, traktConnected, simklConnected, source, settings.weekStartsMonday, showAllControls, filtered.length, items, filter, authKey, watchlistOnly]);
+  const nativeMessage = useMemo(() => {
+    if (source === "library" && !authKey) {
+      return {
+        title: t("Sign in to see your library calendar"),
+        text: t("My Library shows upcoming episodes from the shows you've saved on Stremio. Sign in to wire it up."),
+        action: t("Sign in"),
+        onAction: () => setShowAuth(true),
+      };
+    }
+    if (source === "all" && !settings.tmdbKey) {
+      return {
+        title: t("All upcoming needs a TMDB key"),
+        text: t(
+          "TMDB powers the firehose of every release this month. The free tier covers it. About 60 seconds to set up. Switch to My Library if you'd rather only see what you've saved.",
+        ),
+        action: t("Open settings"),
+        onAction: () => openSettings("library"),
+      };
+    }
+    if (error) return { title: t("Couldn't load the calendar"), text: error };
+    if (loading && filtered.length === 0) return { text: t("Loading…") };
+    if (filtered.length === 0) {
+      const e = emptyStateText(t, source, filter, watchlistOnly);
+      return { title: e.heading, text: e.body };
+    }
+    return null;
+  }, [t, source, authKey, settings.tmdbKey, error, loading, filtered.length, filter, watchlistOnly, openSettings]);
+  const native = useNativeBrowsePage("calendar", {
+    active: topKind === "calendar",
+    blocked: source === "custom",
+    hidden: !!dayModal || showAuth,
+    t,
+    header: { kicker: t("Releases"), title: t("Calendar"), size: 32 },
+    chips: nativeChips,
+    onChip: (group, id) => {
+      if (group === "source") update({ calendarSource: id as typeof source });
+      else if (id === "monday") update({ weekStartsMonday: !settings.weekStartsMonday });
+      else if (id === "watchlist") setWatchlistOnly((v) => !v);
+      else if (id.startsWith("filter:")) setFilter(id.slice(7) as CalendarFilter);
+    },
+    rows: [],
+    calendar: nativeCalendar,
+    onCalendar: (what, i, text) => {
+      if (what === "prev") goPrev();
+      else if (what === "next") goNext();
+      else if (what === "today") goToday();
+      else {
+        const cell = cells[i];
+        if (!cell) return;
+        if (what === "day") setDayModal(cell.iso);
+        else if (what === "item") {
+          const it = (grouped.get(cell.iso) ?? [])[Number(text)];
+          if (it) openItem(it);
+        }
+      }
+    },
+    message: nativeMessage,
+  });
+
+  if (native) {
+    return (
+      <main className="flex h-full flex-col overflow-hidden">
+        {dayModal && dayModalItems.length > 0 && (
+          <DayModal
+            dateISO={dayModal}
+            items={dayModalItems}
+            onClose={() => setDayModal(null)}
+            onOpenItem={(it) => {
+              setDayModal(null);
+              openItem(it);
+            }}
+          />
+        )}
+        {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      </main>
+    );
+  }
+
+  let pageBody: React.ReactNode;
   if (source === "library" && !authKey) {
-    body = <NotSignedInState onSignIn={() => setShowAuth(true)} />;
+    pageBody = <NotSignedInState onSignIn={() => setShowAuth(true)} />;
   } else if (source === "all" && !settings.tmdbKey) {
-    body = <NoKeyState onSetup={() => openSettings("library")} />;
+    pageBody = <NoKeyState onSetup={() => openSettings("library")} />;
   } else if (error) {
-    body = <ErrorState message={error} />;
+    pageBody = <ErrorState message={error} />;
   } else if (loading && filtered.length === 0) {
-    body = <CalendarSkeleton />;
+    pageBody = <CalendarSkeleton />;
   } else if (filtered.length === 0) {
-    body = <EmptyState source={source} filter={filter} watchlistOnly={watchlistOnly} />;
+    pageBody = <EmptyState source={source} filter={filter} watchlistOnly={watchlistOnly} />;
   } else {
-    body = (
+    pageBody = (
       <MonthGrid
         cells={cells}
         grouped={grouped}
@@ -278,7 +407,7 @@ export function CalendarView() {
         </nav>
       </header>
 
-      <div ref={scrollRef} className={`flex-1 overflow-y-auto ${PHONE ? "px-3 py-5" : "px-12 py-8"}`}>{body}</div>
+      <div ref={scrollRef} className={`flex-1 overflow-y-auto ${PHONE ? "px-3 py-5" : "px-12 py-8"}`}>{pageBody}</div>
 
       {dayModal && dayModalItems.length > 0 && (
         <DayModal

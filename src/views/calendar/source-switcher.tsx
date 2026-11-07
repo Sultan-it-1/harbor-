@@ -67,6 +67,16 @@ const OPTIONS: Option[] = [
   },
 ];
 
+/** The sources the switcher offers (Trakt's and Simkl's once connected), their labels untranslated. */
+export function calendarSources(traktConnected: boolean, simklConnected: boolean): Array<{ id: Source; label: string }> {
+  return OPTIONS.filter(
+    (o) =>
+      (o.id !== "trakt" || traktConnected) &&
+      (o.id !== "simkl" || simklConnected) &&
+      (o.id !== "simkl-anticipated" || simklConnected),
+  ).map((o) => ({ id: o.id, label: o.label }));
+}
+
 export function SourceSwitcher({
   value,
   onChange,

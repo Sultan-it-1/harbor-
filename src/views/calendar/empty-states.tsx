@@ -62,16 +62,13 @@ export function NotSignedInState({ onSignIn }: { onSignIn: () => void }) {
   );
 }
 
-export function EmptyState({
-  source,
-  filter,
-  watchlistOnly,
-}: {
-  source: Source;
-  filter: CalendarFilter;
-  watchlistOnly: boolean;
-}) {
-  const t = useT();
+/** What the page says when the month has nothing (also the native screen's message). */
+export function emptyStateText(
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  source: Source,
+  filter: CalendarFilter,
+  watchlistOnly: boolean,
+): { heading: string; body: string } {
   const heading =
     source === "library"
       ? t("Nothing from your library this month")
@@ -116,6 +113,20 @@ export function EmptyState({
               : t("No {kind} releases this month. Try a different filter.", {
                   kind: filterKind,
                 });
+  return { heading, body };
+}
+
+export function EmptyState({
+  source,
+  filter,
+  watchlistOnly,
+}: {
+  source: Source;
+  filter: CalendarFilter;
+  watchlistOnly: boolean;
+}) {
+  const t = useT();
+  const { heading, body } = emptyStateText(t, source, filter, watchlistOnly);
   return <EmptyShell heading={heading} body={body} />;
 }
 

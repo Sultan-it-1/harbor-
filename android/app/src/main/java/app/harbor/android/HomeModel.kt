@@ -47,6 +47,8 @@ class HomeModel(
     val detail: HomeDetail? = null,
     /** The discovery queue's card and the strip under it. */
     val queue: HomeQueue? = null,
+    /** The release calendar's month: its bar (previous / Today / month / next) and its grid. */
+    val calendar: HomeCalendar? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -260,6 +262,28 @@ class HomeModel(
                         },
                         active = q.optInt("active", 0),
                         message = q.str("message"),
+                    )
+                },
+                calendar = o.optJSONObject("calendar")?.let { c ->
+                    val l = c.optJSONObject("labels")
+                    HomeCalendar(
+                        month = c.str("month") ?: "",
+                        weekdays = c.optJSONArray("weekdays").strings(),
+                        cells = c.optJSONArray("cells").objects().map { x ->
+                            CalCell(
+                                day = x.optInt("day", 0),
+                                inMonth = x.optBoolean("inMonth", true),
+                                today = x.optBoolean("today", false),
+                                count = x.optInt("count", 0),
+                                items = x.optJSONArray("items").objects().map { it ->
+                                    CalItem(title = it.str("title") ?: "", images = it.optJSONArray("img").strings())
+                                },
+                                more = x.str("more"),
+                            )
+                        },
+                        labels = buildMap {
+                            if (l != null) for (k in l.keys()) l.optString(k).takeIf { it.isNotEmpty() }?.let { put(k, it) }
+                        },
                     )
                 },
                 message = o.optJSONObject("message")?.let { g ->
@@ -559,6 +583,26 @@ class HomeQueue(
 }
 
 class QueueTile(val img: List<String>, val tag: String)
+
+/**
+ * The release calendar: the month's name, the weekdays' names and the grid's days (the month's
+ * and the neighbouring ones that fill its weeks). Taps send {a:"cal", what}: "prev", "next",
+ * "today"; "item" (i = the day, text = which title) and "day" (i = the day: all of its titles).
+ */
+class HomeCalendar(
+    val month: String,
+    val weekdays: List<String>,
+    val cells: List<CalCell>,
+    /** prev, next, today. */
+    val labels: Map<String, String>,
+) {
+    fun label(k: String, fallback: String) = labels[k] ?: fallback
+}
+
+/** A day: its number, its first titles ([items], three at most), how many in all, "+2 more". */
+class CalCell(val day: Int, val inMonth: Boolean, val today: Boolean, val count: Int, val items: List<CalItem>, val more: String?)
+
+class CalItem(val title: String, val images: List<String>)
 
 /** A line of credits: a label and the people (a tap opens one), or a label and a [value]. */
 class CreditGroup(val label: String, val people: List<CriticPerson>, val value: String?)

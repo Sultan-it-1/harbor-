@@ -388,6 +388,7 @@ class NativeHome(
             val out = ArrayList<Section>()
             if (m.detail != null) out.add(Section(T_DETAIL, -11))
             if (m.header != null) out.add(Section(T_HEADER, -6))
+            if (m.calendar != null) out.add(Section(T_CALBAR, -13))
             if (m.search != null) out.add(Section(T_SEARCH, -8))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
             if (m.showCustomize || m.edit) out.add(Section(T_TOOLS, -2))
@@ -435,6 +436,7 @@ class NativeHome(
                 }
             }
             if (m.queue != null) out.add(Section(T_QUEUE, -12))
+            if (m.calendar?.cells?.isNotEmpty() == true) out.add(Section(T_CALENDAR, -14))
             if (m.message != null) out.add(Section(T_MESSAGE, -10))
             if (m.rows.isEmpty() && m.message == null && m.empty != null) out.add(Section(T_EMPTY, -7))
             out.add(Section(T_END, -4))
@@ -479,6 +481,8 @@ class NativeHome(
             T_LISTITEM -> ListItemHolder()
             T_QUEUE -> QueueHolder()
             T_WINNER -> WinnerHolder()
+            T_CALBAR -> CalendarBarHolder()
+            T_CALENDAR -> CalendarHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -504,6 +508,8 @@ class NativeHome(
                 is GridLineHolder -> items[position].row?.let { holder.bind(it, items[position].start) }
                 is DetailHolder -> m.detail?.let { holder.bind(it) }
                 is QueueHolder -> m.queue?.let { holder.bind(it) }
+                is CalendarBarHolder -> m.calendar?.let { holder.bind(it) }
+                is CalendarHolder -> m.calendar?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is WinnerHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
@@ -1406,6 +1412,179 @@ class NativeHome(
                     isFocusable = true
                     setOnClickListener { act("pill", what = p.id) }
                 }
+            }
+        }
+    }
+
+    // ---- the release calendar ------------------------------------------------------------------
+
+    /** Previous month, Today, the month's name, next month (the page's bar under its title). */
+    private inner class CalendarBarHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val bar = itemView as LinearLayout
+        private val prev = FrameLayout(ctx)
+        private val today = label("", 13f, bold = true, lines = 1)
+        private val month = LinearLayout(ctx)
+        private val monthIcon = ImageView(ctx)
+        private val monthText = label("", 14f, bold = true, lines = 1)
+        private val next = FrameLayout(ctx)
+
+        init {
+            bar.orientation = LinearLayout.HORIZONTAL
+            bar.gravity = Gravity.CENTER_VERTICAL
+            bar.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            bar.setPaddingRelative(dp(16), 0, dp(16), dp(16))
+            for ((v, what) in listOf(prev to "prev", next to "next")) {
+                v.isClickable = true
+                v.isFocusable = true
+                v.setOnClickListener { act("cal", what = what) }
+                v.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
+            }
+            today.gravity = Gravity.CENTER
+            today.setPaddingRelative(dp(16), 0, dp(16), 0)
+            today.isClickable = true
+            today.isFocusable = true
+            today.setOnClickListener { act("cal", what = "today") }
+            month.orientation = LinearLayout.HORIZONTAL
+            month.gravity = Gravity.CENTER
+            month.setPaddingRelative(dp(12), 0, dp(12), 0)
+            month.addView(monthIcon, LinearLayout.LayoutParams(dp(14), dp(14)).apply { marginEnd = dp(8) })
+            month.addView(monthText)
+            bar.addView(prev, LinearLayout.LayoutParams(dp(40), dp(40)))
+            bar.addView(today, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { marginStart = dp(8) })
+            bar.addView(month, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { marginStart = dp(8) })
+            bar.addView(next, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(8) })
+        }
+
+        fun bind(c: HomeCalendar) {
+            val rtl = model?.rtl == true
+            val edge = withAlpha(colors.ink, 0.1f)
+            for (v in listOf(prev, next)) {
+                v.background = focusable(rounded(Color.TRANSPARENT, dp(20).toFloat(), dp(1), edge))
+                val left = (v === prev) != rtl
+                v.contentDescription = if (v === prev) c.label("prev", "Previous month") else c.label("next", "Next month")
+                v.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(if (left) R.drawable.ic_chevron_left else R.drawable.ic_chevron_right, colors.muted))
+            }
+            today.text = c.label("today", "Today")
+            today.setTextColor(colors.muted)
+            today.background = focusable(rounded(Color.TRANSPARENT, dp(20).toFloat(), dp(1), edge))
+            month.background = rounded(Color.TRANSPARENT, dp(20).toFloat(), dp(1), edge)
+            monthIcon.setImageDrawable(icon(R.drawable.ic_calendar, colors.subtle))
+            monthText.text = c.month
+            monthText.setTextColor(colors.ink)
+        }
+    }
+
+    /**
+     * The month as the page draws it: the weekdays, then a week a line, each day a box with its
+     * number, how many titles, the first three (a small poster and the name; a tap opens it) and
+     * "+2 more" (all of that day's). Today is outlined; the neighbouring months' days are faded.
+     */
+    private inner class CalendarHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private val head = LinearLayout(ctx)
+        private val weeks = LinearLayout(ctx)
+        private val days = ArrayList<LinearLayout>()
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.setPaddingRelative(dp(12), dp(4), dp(12), dp(24))
+            head.orientation = LinearLayout.HORIZONTAL
+            col.addView(head, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+            weeks.orientation = LinearLayout.VERTICAL
+            col.addView(weeks, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+
+        fun bind(c: HomeCalendar) {
+            val rtl = model?.rtl == true
+            // The weekdays.
+            if (head.childCount != c.weekdays.size) {
+                head.removeAllViews()
+                c.weekdays.forEachIndexed { i, _ ->
+                    head.addView(label("", 11f, bold = true, lines = 1).apply { setPaddingRelative(dp(4), 0, 0, 0) },
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { if (i > 0) marginStart = dp(8) })
+                }
+            }
+            c.weekdays.forEachIndexed { i, d ->
+                (head.getChildAt(i) as? TextView)?.apply {
+                    text = if (rtl) d else d.uppercase()
+                    letterSpacing = if (rtl) 0f else 0.16f
+                    setTextColor(colors.subtle)
+                }
+            }
+            // A box for each day, seven to a line.
+            if (days.size != c.cells.size) {
+                weeks.removeAllViews()
+                days.clear()
+                var line: LinearLayout? = null
+                for (i in c.cells.indices) {
+                    if (i % 7 == 0) {
+                        line = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                        weeks.addView(line, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (i > 0) topMargin = dp(8) })
+                    }
+                    val day = LinearLayout(ctx).apply {
+                        orientation = LinearLayout.VERTICAL
+                        minimumHeight = dp(112)
+                        setPadding(dp(8), dp(8), dp(8), dp(8))
+                    }
+                    line!!.addView(day, LinearLayout.LayoutParams(0, MATCH, 1f).apply { if (i % 7 > 0) marginStart = dp(8) })
+                    days.add(day)
+                }
+            }
+            c.cells.forEachIndexed { i, cell -> bindDay(days[i], i, cell) }
+        }
+
+        private fun bindDay(box: LinearLayout, index: Int, d: CalCell) {
+            box.removeAllViews()
+            box.alpha = if (d.inMonth) 1f else 0.5f
+            box.background = when {
+                !d.inMonth -> rounded(withAlpha(colors.canvas, 0.3f), dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.04f))
+                d.today -> rounded(withAlpha(colors.surface, 0.4f), dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.6f))
+                else -> rounded(withAlpha(colors.surface, 0.15f), dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            }
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.BOTTOM
+            }
+            top.addView(label(d.day.toString(), 12.5f, bold = true, lines = 1).apply {
+                fontFeatureSettings = "tnum"
+                setTextColor(if (d.today) colors.ink else if (d.inMonth) colors.muted else colors.subtle)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (d.count > 0) {
+                top.addView(label(d.count.toString(), 10.5f, bold = true, lines = 1).apply { setTextColor(colors.subtle) })
+            }
+            box.addView(top, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            d.items.forEachIndexed { k, it ->
+                val chip = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPaddingRelative(dp(4), dp(4), dp(8), dp(4))
+                    background = focusable(rounded(withAlpha(colors.canvas, 0.5f), dp(6).toFloat()))
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = it.title
+                    setOnClickListener { act("cal", what = "item", i = index, text = k.toString()) }
+                }
+                val pic = NetImage(ctx).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    clipToOutline = true
+                    outlineProvider = roundOutline(dp(3).toFloat())
+                    background = rounded(withAlpha(colors.surface, 0.5f), dp(3).toFloat())
+                }
+                chip.addView(pic, LinearLayout.LayoutParams(dp(20), dp(28)))
+                if (it.images.isNotEmpty()) images.load(pic, it.images, dp(20), dp(28))
+                chip.addView(label(it.title, 11.5f, lines = 1).apply { setTextColor(colors.ink) },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
+                box.addView(chip, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+            }
+            d.more?.let { more ->
+                box.addView(label(more, 11f, lines = 1).apply {
+                    setTextColor(colors.subtle)
+                    setPaddingRelative(dp(4), dp(2), dp(4), dp(2))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { act("cal", what = "day", i = index) }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
             }
         }
     }
@@ -3356,6 +3535,8 @@ class NativeHome(
         private const val T_LISTITEM = 18
         private const val T_QUEUE = 19
         private const val T_WINNER = 20
+        private const val T_CALBAR = 21
+        private const val T_CALENDAR = 22
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

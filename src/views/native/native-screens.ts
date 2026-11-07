@@ -666,6 +666,9 @@ export type NativePageInput = {
   /** The discovery queue's card and strip (see HomeQueue in HomeModel.kt); its taps. */
   queue?: Record<string, unknown> | null;
   onQueue?: (what: string, i: number) => void;
+  /** The release calendar's bar and month (see HomeCalendar in HomeModel.kt); its taps. */
+  calendar?: Record<string, unknown> | null;
+  onCalendar?: (what: string, i: number, text: string) => void;
   onPill?: (id: string) => void;
   /** Steps aside for now without giving the page back (a dialog the page opens over it). */
   hidden?: boolean;
@@ -715,6 +718,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const hasMessage = !!input.message;
   const detailModel = input.detail;
   const queueModel = input.queue;
+  const calendarModel = input.calendar;
   const customizeLabel = customize?.label;
   const editing = !!editor?.on;
   const editCustom = editor?.custom;
@@ -772,8 +776,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       message: hasMessage ? { title: msgTitle, text: msgText, action: msgAction } : null,
       detail: detailModel ?? null,
       queue: queueModel ?? null,
+      calendar: calendarModel ?? null,
     };
- }, [searchBig, searchFocus, noTogether, detailModel, queueModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -861,6 +866,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "q":
           if (a.what) cur.onQueue?.(a.what, i);
+          return;
+        case "cal":
+          if (a.what) cur.onCalendar?.(a.what, i, a.text ?? "");
           return;
         case "rowchip":
           if (a.what) p.rows.get(a.row ?? "")?.onRowChip?.(a.what);
