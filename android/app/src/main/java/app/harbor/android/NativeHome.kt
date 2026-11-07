@@ -613,6 +613,8 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
         private val bar = View(ctx)
         private val play = FrameLayout(ctx)
         private val shade = View(ctx)
+        /** The "watched" check (as on the page's posters). */
+        private val check = FrameLayout(ctx)
         private var row: HomeRow? = null
 
         init {
@@ -659,8 +661,22 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
                     box.addView(badge, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END).apply {
                         marginEnd = dp(6)
                         bottomMargin = dp(6)
+                        topMargin = dp(6)
                     })
                 }
+            }
+            if (kind != C_CW) {
+                check.visibility = View.GONE
+                check.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(13), dp(13), Gravity.CENTER))
+                // Bottom-start like the page's posters; top-end on Top 10 cards (their number is
+                // bottom-start).
+                val corner = if (kind == C_RANK) Gravity.TOP or Gravity.END else Gravity.BOTTOM or Gravity.START
+                box.addView(check, FrameLayout.LayoutParams(dp(22), dp(22), corner).apply {
+                    marginStart = dp(6)
+                    marginEnd = dp(6)
+                    topMargin = dp(6)
+                    bottomMargin = dp(6)
+                })
             }
             col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         }
@@ -697,7 +713,17 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
             images.load(image, c.images, w, h)
             title.text = c.title
             title.setTextColor(colors.ink)
-            if (kind != C_CW) title.minLines = 2
+            if (kind != C_CW) {
+                title.minLines = 2
+                check.visibility = if (c.watched) View.VISIBLE else View.GONE
+                if (c.watched) {
+                    check.background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                    }.also { it.setColor(colors.accent); it.setStroke(dp(2), withAlpha(colors.canvas, 0.7f)) }
+                    check.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_check, colors.canvas))
+                    check.contentDescription = model?.label("watched", "Watched")
+                }
+            }
 
             when (kind) {
                 C_CW -> {
@@ -723,7 +749,14 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
                     badge.removeAllViews()
                     if (c.rating != null) {
                         badge.visibility = View.VISIBLE
-                        badge.addView(imdbBadge(c.rating, 10f))
+                        // In the poster's corner (bottom, or top per Settings), nothing pushing it in.
+                        badge.addView(imdbBadge(c.rating, 9.5f, trailing = 0))
+                        val blp = badge.layoutParams as FrameLayout.LayoutParams
+                        val g = (if (model?.badgesTop == true) Gravity.TOP else Gravity.BOTTOM) or Gravity.END
+                        if (blp.gravity != g) {
+                            blp.gravity = g
+                            badge.layoutParams = blp
+                        }
                     } else {
                         badge.visibility = View.GONE
                     }
@@ -735,7 +768,7 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
     // ---- small pieces ----------------------------------------------------------------------------
 
     /** IMDb's yellow tag and the score, on a dark pill. */
-    private fun imdbBadge(value: String, sizeSp: Float): View = LinearLayout(ctx).apply {
+    private fun imdbBadge(value: String, sizeSp: Float, trailing: Int = dp(14)): View = LinearLayout(ctx).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPaddingRelative(dp(5), dp(3), dp(7), dp(3))
@@ -756,7 +789,7 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
             setTextColor(colors.ink)
             includeFontPadding = false
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(5) })
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(14) }
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = trailing }
     }
 
     private fun label(text: String, sizeSp: Float, bold: Boolean = false, lines: Int = 0) = TextView(ctx).apply {

@@ -20,6 +20,8 @@ class HomeModel(
     val cwEmpty: Pair<String, String>?,
     val showCustomize: Boolean,
     val showTogether: Boolean,
+    /** Rating badges at the top of the poster instead of the bottom (Settings > badge placement). */
+    val badgesTop: Boolean = false,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -59,6 +61,7 @@ class HomeModel(
                             sub = c.str("sub"),
                             progress = c.optDouble("progress", 0.0).toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 1f) ?: 0f,
                             rank = c.optInt("rank", 0),
+                            watched = c.optBoolean("watched", false),
                         )
                     }
                     if (items.isEmpty()) return@mapNotNull null
@@ -78,6 +81,7 @@ class HomeModel(
                 cwEmpty = cw?.let { (it.str("title") ?: "") to (it.str("text") ?: "") },
                 showCustomize = o.optBoolean("customize", false),
                 showTogether = o.optBoolean("together", false),
+                badgesTop = o.optBoolean("badgesTop", false),
             )
         }
 
@@ -138,6 +142,8 @@ class HomeCard(
     val progress: Float,
     /** Top 10: the number shown on the card (0 = none). */
     val rank: Int,
+    /** Finished: a small check on the poster (when Settings > watched marks is on). */
+    val watched: Boolean = false,
 )
 
 /** The theme's colours (the page sends what its CSS uses), as ARGB ints. */

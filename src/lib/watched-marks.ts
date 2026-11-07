@@ -144,6 +144,11 @@ function subscribe(fn: () => void): () => void {
 
 const getVersion = () => version + manualWatchedVersion();
 
+/** Changes whenever any title's watched state may have changed (for lists that check many at once). */
+export function useWatchedMarksVersion(): number {
+  return useSyncExternalStore(subscribe, getVersion, getVersion);
+}
+
 /** True when this title counts as watched (and the marks are turned on). */
 export function useIsWatched(id: string | undefined, altIds?: ReadonlyArray<string | null | undefined>): boolean {
   const v = useSyncExternalStore(subscribe, getVersion, getVersion);

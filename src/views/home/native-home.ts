@@ -18,6 +18,7 @@ import { episodeFromVideoId, isAnimeCwItem, libraryMetaType, type LibraryItem } 
 import { useTogether } from "@/lib/together/provider";
 import { useView, type PlayEpisode } from "@/lib/view";
 import { subscribeWatchlist, toggleWatchlist, watchlistHas } from "@/lib/watchlist";
+import { isTitleWatched, useWatchedMarksVersion } from "@/lib/watched-marks";
 import type { HomeRow } from "./home-types";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
@@ -67,6 +68,7 @@ export function useNativeHome(input: NativeHomeInput): boolean {
   const inUse = enabled && !input.editMode;
 
   // ---- what native shows ----
+  const watchedVer = useWatchedMarksVersion();
   const [watchlistVer, setWatchlistVer] = useState(0);
   useEffect(() => (inUse ? subscribeWatchlist(() => setWatchlistVer((v) => v + 1)) : undefined), [inUse]);
   const published = useRef<{ hero: Meta[]; cw: LibraryItem[]; rows: Map<string, { metas: Meta[]; row?: HomeRow }> }>({
@@ -98,7 +100,7 @@ export function useNativeHome(input: NativeHomeInput): boolean {
         key: "top10",
         title: input.top10Title,
         kind: "rank",
-        items: input.top10.map((m, i) => ({ title: m.name, img: poster(m), rank: i + 1 })),
+        items: input.top10.map((m, i) => ({ title: m.name, img: poster(m), rank: i + 1, watched: isTitleWatched(m.id) })),
       });
     }
     for (const { row, metas, ranked } of input.rows) {
@@ -112,7 +114,9 @@ export function useNativeHome(input: NativeHomeInput): boolean {
         all: !!row.fetcher,
         more: !ranked && row.hasMore,
         items: shown.map((m, i) =>
-          ranked ? { title: m.name, img: poster(m), rank: i + 1 } : { title: m.name, img: poster(m), rating: rating(m) },
+          ranked
+            ? { title: m.name, img: poster(m), rank: i + 1, watched: isTitleWatched(m.id) }
+            : { title: m.name, img: poster(m), rating: rating(m), watched: isTitleWatched(m.id) },
         ),
       });
     }
@@ -121,6 +125,7 @@ export function useNativeHome(input: NativeHomeInput): boolean {
       v: 1,
       rtl,
       top: input.resetTick,
+      badgesTop: settings.badgePlacement === "top",
       colors: themeColors(),
       labels: {
         play: t("Play"),
@@ -131,6 +136,7 @@ export function useNativeHome(input: NativeHomeInput): boolean {
         together: t("Watch together"),
         year: t("Year"),
         runtime: t("Runtime"),
+        watched: t("Watched"),
       },
       hero: input.heroSlides.slice(0, hero.length).map((s) => ({
         title: s.meta.name,
@@ -157,9 +163,9 @@ export function useNativeHome(input: NativeHomeInput): boolean {
       together: true,
     });
     return json;
-    // watchlistVer: the hero's watchlist buttons follow the watchlist.
+    // watchlistVer / watchedVer: the hero's watchlist buttons and the cards' watched checks follow them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inUse, input.t, input.heroSlides, input.showHero, input.cwItems, input.signedIn, input.top10, input.top10Title, input.rows, input.resetTick, settings.rpdbKey, settings.showCardBadges, settings.showImdbBadge, watchlistVer]);
+  }, [inUse, input.t, input.heroSlides, input.showHero, input.cwItems, input.signedIn, input.top10, input.top10Title, input.rows, input.resetTick, settings.rpdbKey, settings.showCardBadges, settings.showImdbBadge, settings.badgePlacement, watchlistVer, watchedVer]);
 
   // Sent a moment after the last change: rows arrive one after another while Home loads.
   useEffect(() => {

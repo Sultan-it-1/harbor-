@@ -18,11 +18,11 @@ class HomeModelTest {
              "rows":[
                {"key":"cw","title":"Continue Watching","kind":"cw","items":[{"title":"Show","img":["https://a/c.jpg"],"sub":"S1E2","progress":0.4}]},
                {"key":"top","title":"Top 10","kind":"rank","items":[{"title":"A","rank":1}]},
-               {"key":"pop","title":"Popular","kind":"poster","all":true,"more":true,"items":[{"title":"B","img":["https://a/d.jpg"],"rating":"7.1"}]},
+               {"key":"pop","title":"Popular","kind":"poster","all":true,"more":true,"items":[{"title":"B","img":["https://a/d.jpg"],"rating":"7.1","watched":true},{"title":"D"}]},
                {"key":"empty","title":"Nothing","items":[]},
                {"title":"no key","items":[{"title":"C"}]}
              ],
-             "cwEmpty":null,"customize":true,"together":false}
+             "cwEmpty":null,"customize":true,"together":false,"badgesTop":true}
             """.trimIndent(),
         )
         assertTrue(m.rtl)
@@ -49,6 +49,9 @@ class HomeModelTest {
         assertEquals(HomeRow.Kind.POSTER, pop.kind)
         assertTrue(pop.seeAll && pop.more)
         assertEquals("7.1", pop.items[0].rating)
+        assertTrue(pop.items[0].watched)
+        assertFalse(pop.items[1].watched)
+        assertTrue(m.badgesTop)
         assertNull(m.cwEmpty)
         assertTrue(m.showCustomize)
         assertFalse(m.showTogether)
