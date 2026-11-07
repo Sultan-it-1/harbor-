@@ -25,7 +25,7 @@ import { RtBadge } from "./rt-badge";
 
 const PHONE = isPhoneLayout();
 
-export function CriticsPick({ meta }: { meta: Meta }) {
+export function CriticsPick({ meta, title }: { meta: Meta; title?: string }) {
   const { settings } = useSettings();
   const { openMeta, openPicker, openPerson } = useView();
   const t = useT();
@@ -191,7 +191,7 @@ export function CriticsPick({ meta }: { meta: Meta }) {
     <section className="flex flex-col gap-5">
       <div className="flex items-baseline justify-between">
         <h2 className={`font-display font-medium leading-tight tracking-tight text-ink ${PHONE ? "text-[20px]" : "text-[28px]"}`}>
-          {t("Critics' Pick")}
+          {title ?? t("Critics' Pick")}
         </h2>
         <span className={`uppercase text-ink-subtle ${PHONE ? "text-[10.5px] tracking-[0.16em]" : "text-[12px] tracking-[0.22em]"}`}>
           {t("Loved by reviewers today")}

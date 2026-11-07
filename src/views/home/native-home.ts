@@ -12,6 +12,8 @@ import {
   cwEpisode,
   cwMeta,
   nativeLabels,
+  nativeRowJson,
+  type NativeRowInput,
   nativeScreensAvailable,
   useNativeCards,
   useNativeMetaActions,
@@ -40,6 +42,9 @@ export type NativeHomeInput = {
   rows: NativeHomeRow[];
   onLoadMore: (rowKey: string) => void;
   resetTick: number;
+  /** Your Streaming (TMDB services) and Collections, when Home shows them. */
+  servicesRow?: NativeRowInput | null;
+  collectionsRow?: NativeRowInput | null;
 };
 
 /** The shell can draw the browse screens (kept under this name for the Settings switch). */
@@ -57,7 +62,7 @@ export function useNativeHome(input: NativeHomeInput): boolean {
   const cards = useNativeCards();
   const meta = useNativeMetaActions();
 
-  const published = useRef<{ hero: Meta[]; cw: LibraryItem[]; rows: Map<string, { metas: Meta[]; row?: HomeRow }> }>({
+  const published = useRef<{ hero: Meta[]; cw: LibraryItem[]; rows: Map<string, { metas: Meta[]; row?: HomeRow; input?: NativeRowInput }> }>({
     hero: [],
     cw: [],
     rows: new Map(),
@@ -67,14 +72,22 @@ export function useNativeHome(input: NativeHomeInput): boolean {
     const { t } = input;
     const hero = input.showHero ? input.heroSlides.map((s) => s.meta) : [];
     const rows: unknown[] = [];
-    const rowMap = new Map<string, { metas: Meta[]; row?: HomeRow }>();
+    const rowMap = new Map<string, { metas: Meta[]; row?: HomeRow; input?: NativeRowInput }>();
+    const extra = (r: NativeRowInput | null | undefined) => {
+      if (!r || !r.cards || r.cards.length === 0) return;
+      rowMap.set(r.key, { metas: r.metas, input: r });
+      rows.push(nativeRowJson(r, cards));
+    };
+    // The page's order: Continue Watching, Your Streaming, Top 10, Collections, then the rows.
     if (input.cwItems.length > 0) {
       rows.push({ key: "cw", title: t("Continue Watching"), kind: "cw", items: input.cwItems.map((i) => cwCard(i, t)) });
     }
+    extra(input.servicesRow);
     if (input.top10.length >= 10) {
       rowMap.set("top10", { metas: input.top10 });
       rows.push({ key: "top10", title: input.top10Title, kind: "rank", items: input.top10.map(cards.rank) });
     }
+    extra(input.collectionsRow);
     for (const { row, metas, ranked } of input.rows) {
       if (row.sourceRow || metas.length === 0) continue;
       const shown = ranked ? metas.slice(0, 10) : metas;
@@ -107,7 +120,8 @@ export function useNativeHome(input: NativeHomeInput): boolean {
             },
       customize: true,
     };
-  }, [inUse, input.t, input.heroSlides, input.showHero, input.cwItems, input.signedIn, input.top10, input.top10Title, input.rows, input.resetTick, cards]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inUse, input.t, input.heroSlides, input.showHero, input.cwItems, input.signedIn, input.top10, input.top10Title, input.rows, input.resetTick, cards, input.servicesRow?.cards, input.collectionsRow?.cards]);
 
   useNativeScreen("home", {
     inUse,
@@ -121,7 +135,9 @@ export function useNativeHome(input: NativeHomeInput): boolean {
           return meta.hero(p.hero[i], a.what);
         case "open":
         case "hold": {
-          const m = a.row === "cw" ? (p.cw[i] ? cwMeta(p.cw[i]) : undefined) : p.rows.get(a.row ?? "")?.metas[i];
+          const entry = a.row === "cw" ? undefined : p.rows.get(a.row ?? "");
+          if (a.a === "open" && entry?.input?.onOpen) return entry.input.onOpen(i);
+          const m = a.row === "cw" ? (p.cw[i] ? cwMeta(p.cw[i]) : undefined) : entry?.metas[i];
           return a.a === "open" ? meta.open(m) : meta.hold(m);
         }
         case "play": {
@@ -130,6 +146,8 @@ export function useNativeHome(input: NativeHomeInput): boolean {
           return;
         }
         case "all": {
+          const onAll = p.rows.get(a.row ?? "")?.input?.onAll;
+          if (onAll) return onAll();
           const row = p.rows.get(a.row ?? "")?.row;
           if (row?.fetcher) openGrid({ title: input.t(row.name), fetcher: row.fetcher, initial: row.metas });
           return;

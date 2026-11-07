@@ -13,7 +13,9 @@ export function AutoExhaustedModal({
   onBrowseManually: () => void;
 }) {
   useCloseOnAndroidBack(true, onBrowseManually);
-  const { goBack } = useView();
+  // Exit leaves the stream search for good, to the title's page: plain Back landed on the search
+  // again (which found nothing again), so it went round in a loop.
+  const { exitPickerToDetail } = useView();
   const title = meta.name ?? "this title";
   const epSuffix = episode
     ? ` S${episode.imdbSeason ?? episode.season}E${String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}`
@@ -43,10 +45,10 @@ export function AutoExhaustedModal({
             {t("Browse streams manually")}
           </button>
           <button
-            onClick={goBack}
-            className="mt-1 text-[12.5px] text-ink-subtle transition-colors hover:text-ink-muted"
+            onClick={() => exitPickerToDetail(meta)}
+            className="mt-1 h-10 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
           >
-            {t("Back")}
+            {t("Exit")}
           </button>
         </div>
       </div>

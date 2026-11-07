@@ -9,7 +9,7 @@ import { Poster } from "./poster";
 
 const PHONE = isPhoneLayout();
 
-export function DiscoveryQueueCta({ items }: { items: FeedItem[] }) {
+export function DiscoveryQueueCta({ items, title }: { items: FeedItem[]; title?: string }) {
   const { settings } = useSettings();
   const { openQueue } = useView();
   const t = useT();
@@ -21,7 +21,7 @@ export function DiscoveryQueueCta({ items }: { items: FeedItem[] }) {
     <section className="flex flex-col gap-3.5">
       <div className="flex items-baseline justify-between">
         <h2 className={`font-display font-medium leading-tight tracking-tight text-ink ${PHONE ? "text-[20px]" : "text-[28px]"}`}>
-          {t("Your Discovery Queue")}
+          {title ?? t("Your Discovery Queue")}
         </h2>
         <span className="text-[12.5px] uppercase tracking-[0.2em] text-ink-subtle">
           {t("{count} picks ready", { count: items.length })}

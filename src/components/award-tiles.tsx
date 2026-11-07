@@ -6,7 +6,7 @@ import type { AwardType } from "@/lib/providers/wikidata";
 import { useView } from "@/lib/view";
 import { Row } from "./row";
 
-const AWARDS: Array<{ type: AwardType; name: string; sub: string }> = [
+export const AWARDS: Array<{ type: AwardType; name: string; sub: string }> = [
   { type: "oscar", name: "Academy Awards", sub: "Best Picture and beyond" },
   { type: "golden_globe", name: "Golden Globes", sub: "Film and television" },
   { type: "bafta", name: "BAFTA", sub: "The British Academy" },
@@ -20,10 +20,11 @@ const AWARDS: Array<{ type: AwardType; name: string; sub: string }> = [
 
 const PHONE = isPhoneLayout();
 
-export function AwardTiles() {
+/** [title]: the row's name when the page's editor renamed it. */
+export function AwardTiles({ title }: { title?: string } = {}) {
   const t = useT();
   return (
-    <Row title={t("Browse by Award")} min={210} shape="tile" alwaysActive>
+    <Row title={title ?? t("Browse by Award")} min={210} shape="tile" alwaysActive>
       {AWARDS.map((a) => (
         <AwardTile key={a.type} type={a.type} name={a.name} sub={a.sub} />
       ))}

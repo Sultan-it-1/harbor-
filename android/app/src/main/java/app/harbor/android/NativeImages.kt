@@ -45,7 +45,9 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
      * [onResult] (main thread) says whether a picture is shown.
      */
     fun load(view: NetImage, urls: List<String>, widthPx: Int, heightPx: Int, alpha: Boolean = false, onResult: ((Boolean) -> Unit)? = null) {
-        val list = urls.filter { (it.startsWith("https://") || it.startsWith("http://")) && it !in failed }.distinct()
+        val list = urls.filter {
+            (it.startsWith("https://") || it.startsWith("http://") || it.startsWith("data:image/")) && it !in failed
+        }.distinct()
         val w = widthPx.coerceAtLeast(1)
         val h = heightPx.coerceAtLeast(1)
         val sig = list.joinToString("|") + "@" + w + "x" + h
@@ -107,12 +109,17 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
         val target = ImageStore.phoneSized(url, screenShortSidePx)
         val headers = mapOf("User-Agent" to userAgent, "Accept" to "image/webp,image/png,image/jpeg,image/*;q=0.8")
         val bytes = try {
-            val hit = store.cached(target)
-            if (hit != null) {
-                if (hit.stale) store.recheck(target, hit.meta, headers)
-                hit.file.readBytes()
+            if (url.startsWith("data:")) {
+                // A picture the page drew itself (a service logo): carried in the address.
+                android.util.Base64.decode(url.substringAfter(','), android.util.Base64.DEFAULT)
             } else {
-                store.download(target, headers).use { it.readBytes() }
+                val hit = store.cached(target)
+                if (hit != null) {
+                    if (hit.stale) store.recheck(target, hit.meta, headers)
+                    hit.file.readBytes()
+                } else {
+                    store.download(target, headers).use { it.readBytes() }
+                }
             }
         } catch (_: Exception) {
             return null
@@ -123,10 +130,11 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             var sample = 1
             while (bounds.outWidth / (sample * 2) >= w && bounds.outHeight / (sample * 2) >= h) sample *= 2
+            // Full colour: 16-bit (RGB_565) halved the memory but banded and softened the
+            // pictures, most visibly the full-width hero.
             val opts = BitmapFactory.Options().apply {
                 inSampleSize = sample
-                // Photos have no transparency: half the memory. Logos keep theirs.
-                inPreferredConfig = if (alpha) Bitmap.Config.ARGB_8888 else Bitmap.Config.RGB_565
+                inPreferredConfig = Bitmap.Config.ARGB_8888
             }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
         } catch (_: OutOfMemoryError) {

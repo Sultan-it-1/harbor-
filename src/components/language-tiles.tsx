@@ -9,9 +9,9 @@ import { useView } from "@/lib/view";
 import { Row } from "./row";
 import { Poster } from "./poster";
 
-type Lang = { iso: string; name: string; endonym: string; hue: number };
+export type Lang = { iso: string; name: string; endonym: string; hue: number };
 
-const LANGS: Lang[] = [
+export const LANGS: Lang[] = [
   { iso: "ko", name: "Korean", endonym: "한국어", hue: 25 },
   { iso: "ja", name: "Japanese", endonym: "日本語", hue: 350 },
   { iso: "es", name: "Spanish", endonym: "Español", hue: 60 },
@@ -34,10 +34,11 @@ const LANGS: Lang[] = [
 
 const PHONE = isPhoneLayout();
 
-export function LanguageTiles() {
+/** [title]: the row's name when the page's editor renamed it. */
+export function LanguageTiles({ title }: { title?: string } = {}) {
   const t = useT();
   return (
-    <Row title={t("Browse by Language")} min={210} shape="tile" alwaysActive>
+    <Row title={title ?? t("Browse by Language")} min={210} shape="tile" alwaysActive>
       {LANGS.map((l) => (
         <LanguageTile key={l.iso} lang={l} />
       ))}

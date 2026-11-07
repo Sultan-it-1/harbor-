@@ -79,6 +79,9 @@ class NativeHome(
         cardPool.setMaxRecycledViews(C_POSTER, 40)
         cardPool.setMaxRecycledViews(C_RANK, 16)
         cardPool.setMaxRecycledViews(C_CW, 12)
+        cardPool.setMaxRecycledViews(C_TILE, 16)
+        cardPool.setMaxRecycledViews(C_LOGO, 12)
+        cardPool.setMaxRecycledViews(C_FEATURE, 2)
         root.addView(list, FrameLayout.LayoutParams(MATCH, MATCH))
 
         togetherButton.apply {
@@ -184,6 +187,11 @@ class NativeHome(
     private fun rankWidth(): Int = (posterWidth() * 1.2f).toInt()
     private fun cwWidth(): Int = min(((width() - gutter) / 1.7f).toInt(), dp(300))
     private fun heroHeight(): Int = max(min((height() * 0.76f).toInt(), dp(640)), dp(320))
+    /** Genre / language / award / collection tiles: about 2.3 across, 5:4. */
+    private fun tileWidth(): Int = min(((width() - gutter) / 2.3f).toInt(), dp(220))
+    private fun logoWidth(): Int = min(((width() - gutter) / 2.6f).toInt(), dp(172))
+    /** One card the width of the screen (Critics' Pick). */
+    private fun featureWidth(): Int = width() - 2 * gutter
 
     // ---- outer list: hero, Customize, rows -----------------------------------------------------
 
@@ -679,6 +687,9 @@ class NativeHome(
         override fun getItemViewType(position: Int) = when (row?.kind) {
             HomeRow.Kind.CW -> C_CW
             HomeRow.Kind.RANK -> C_RANK
+            HomeRow.Kind.TILE -> C_TILE
+            HomeRow.Kind.LOGO -> C_LOGO
+            HomeRow.Kind.FEATURE -> C_FEATURE
             else -> C_POSTER
         }
 
@@ -705,7 +716,12 @@ class NativeHome(
         private val shade = View(ctx)
         /** The "watched" check (as on the page's posters). */
         private val check = FrameLayout(ctx)
+        /** Tiles and the feature card: their name (and a line under it) on the picture. */
+        private val overlay = LinearLayout(ctx)
+        private val bigTitle = label("", if (kind == C_FEATURE) 24f else 17f, lines = 2)
+        private val bigSub = label("", if (kind == C_FEATURE) 13.5f else 11.5f, lines = if (kind == C_FEATURE) 3 else 1)
         private var row: HomeRow? = null
+        private val titleBelow get() = kind == C_POSTER || kind == C_RANK || kind == C_CW
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -749,6 +765,23 @@ class NativeHome(
                         bottomMargin = dp(2)
                     })
                 }
+                C_TILE, C_FEATURE -> {
+                    box.addView(shade, FrameLayout.LayoutParams(MATCH, MATCH))
+                    overlay.orientation = LinearLayout.VERTICAL
+                    overlay.setPaddingRelative(dp(14), 0, dp(14), dp(12))
+                    bigTitle.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                    bigTitle.setShadowLayer(dp(10).toFloat(), 0f, dp(2).toFloat(), 0x99000000.toInt())
+                    overlay.addView(bigTitle)
+                    overlay.addView(bigSub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })
+                    box.addView(overlay, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+                }
+                C_LOGO -> {
+                    image.scaleType = ImageView.ScaleType.FIT_CENTER
+                    val pad = dp(22)
+                    image.setPadding(pad, pad, pad, pad)
+                    bigTitle.gravity = Gravity.CENTER
+                    box.addView(bigTitle, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+                }
                 else -> {
                     badge.orientation = LinearLayout.HORIZONTAL
                     badge.gravity = Gravity.CENTER_VERTICAL
@@ -759,7 +792,7 @@ class NativeHome(
                     })
                 }
             }
-            if (kind != C_CW) {
+            if (kind == C_POSTER || kind == C_RANK) {
                 check.visibility = View.GONE
                 check.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(13), dp(13), Gravity.CENTER))
                 // Bottom-start like the page's posters; top-end on Top 10 cards (their number is
@@ -773,6 +806,7 @@ class NativeHome(
                 })
             }
             col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            if (!titleBelow) title.visibility = View.GONE
         }
 
         private fun tap(what: String) {
@@ -787,9 +821,18 @@ class NativeHome(
             val w = when (kind) {
                 C_CW -> cwWidth()
                 C_RANK -> rankWidth()
+                C_TILE -> tileWidth()
+                C_LOGO -> logoWidth()
+                C_FEATURE -> featureWidth()
                 else -> posterWidth()
             }
-            val h = if (kind == C_CW) w * 9 / 16 else w * 3 / 2
+            val h = when (kind) {
+                C_CW -> w * 9 / 16
+                C_TILE -> w * 4 / 5
+                C_LOGO -> dp(80)
+                C_FEATURE -> min(w * 9 / 16, dp(420))
+                else -> w * 3 / 2
+            }
             val lp = box.layoutParams as LinearLayout.LayoutParams
             if (lp.width != w || lp.height != h) {
                 lp.width = w
@@ -802,12 +845,21 @@ class NativeHome(
                 title.layoutParams = tlp
             }
             col.contentDescription = c.title
-            box.background = rounded(plate(c.title), dp(12).toFloat())
+            box.background = rounded(
+                when (kind) {
+                    C_LOGO -> withAlpha(colors.surface, 0.9f)
+                    else -> c.tint ?: plate(c.title)
+                },
+                dp(12).toFloat(),
+            )
             box.foreground = if (col.isFocused) ring() else null
-            images.load(image, c.images, w, h)
+            images.load(image, c.images, w, h, alpha = kind == C_LOGO) { ok ->
+                // A logo that didn't come: its name instead.
+                if (kind == C_LOGO) bigTitle.visibility = if (ok) View.GONE else View.VISIBLE
+            }
             title.text = c.title
             title.setTextColor(colors.ink)
-            if (kind != C_CW) {
+            if (kind == C_POSTER || kind == C_RANK) {
                 title.minLines = 2
                 check.visibility = if (c.watched) View.VISIBLE else View.GONE
                 if (c.watched) {
@@ -838,6 +890,25 @@ class NativeHome(
                 C_RANK -> {
                     rankNumber.text = if (c.rank > 0) c.rank.toString() else ""
                     rankNumber.setTextColor(Color.WHITE)
+                }
+                C_TILE, C_FEATURE -> {
+                    // Tiles: the picture washed with the tile's colour all over (more at the bottom,
+                    // under the name). The feature card: only its bottom, the picture stays clear.
+                    val base = c.tint ?: colors.canvas
+                    shade.background = GradientDrawable(
+                        GradientDrawable.Orientation.BOTTOM_TOP,
+                        if (kind == C_TILE) intArrayOf(withAlpha(base, 0.95f), withAlpha(base, 0.6f), withAlpha(base, 0.45f))
+                        else intArrayOf(withAlpha(base, 0.95f), withAlpha(base, 0.35f), Color.TRANSPARENT),
+                    )
+                    bigTitle.text = c.title
+                    bigTitle.setTextColor(Color.WHITE)
+                    bigSub.text = c.sub ?: ""
+                    bigSub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
+                    bigSub.setTextColor(withAlpha(Color.WHITE, 0.75f))
+                }
+                C_LOGO -> {
+                    bigTitle.text = c.title
+                    bigTitle.setTextColor(colors.ink)
                 }
                 else -> {
                     badge.removeAllViews()
@@ -951,5 +1022,8 @@ class NativeHome(
         private const val C_POSTER = 101
         private const val C_RANK = 102
         private const val C_CW = 103
+        private const val C_TILE = 104
+        private const val C_LOGO = 105
+        private const val C_FEATURE = 106
     }
 }

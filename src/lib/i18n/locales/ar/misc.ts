@@ -319,6 +319,7 @@ const misc: Record<string, string> = {
   "· No stream addon is installed yet (Torrentio, MediaFusion, Comet).": "· لم يتم تثبيت أي إضافة بث حتى الآن (Torrentio، MediaFusion، Comet).",
   "· This title is too new and no source has it cached yet.": "· هذا العمل جديد جدًا ولم يقم أي مصدر بتخزينه مؤقتًا بعد.",
   "Browse streams manually": "تصفح المصادر يدويًا",
+  Exit: "خروج",
   "Debrid is down": "Debrid معطل",
   "No streaming sources yet": "لا توجد مصادر بث بعد",
   "· Install a stream addon (Torrentio, Comet, MediaFusion).": "· تثبيت إضافة بث (Torrentio، Comet، MediaFusion).",

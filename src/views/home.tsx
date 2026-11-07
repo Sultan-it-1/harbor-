@@ -52,6 +52,8 @@ import { useLocalWatchlist } from "@/lib/local-watchlist";
 import { useScrollMemory, useView } from "@/lib/view";
 import { CustomizableRows, homeRowMetas, makeWatchedTest } from "./home/customizable-rows";
 import { useNativeHome, type NativeHomeRow } from "./home/native-home";
+import { useNativeScreensEnabled } from "@/views/native/native-screens";
+import { useCollectionsRow, useServicesRow } from "@/views/native/native-sections";
 import { CustomizeBar } from "./home/customize-bar";
 import { CWSection } from "./home/cw-section";
 import { useCwAdvance } from "./home/hooks/use-cw-advance";
@@ -69,6 +71,7 @@ import { AddSourceModal } from "@/components/add-source-modal";
 import type { SourceRow } from "@/lib/custom-sources";
 
 const NO_METAS: Meta[] = [];
+const NO_SERVICES: StreamingService[] = [];
 
 export function Home({ active = true }: { active?: boolean }) {
   const { authKey, user } = useAuth();
@@ -631,6 +634,11 @@ export function Home({ active = true }: { active?: boolean }) {
     return out;
   }, [visibleRows, homeRowsCustom, settings.hideWatchedInCatalogs, settings.homeLanguages, isWatched]);
   const nativeTop10 = settings.homeMode !== "classic" && top10.length >= 10 && !homeRowsCustom.hidden.includes("top10") ? top10 : NO_METAS;
+  const homeView = useView();
+  const nativeOn = useNativeScreensEnabled() && !editMode;
+  const servicesRow = useServicesRow(settings.homeMode !== "classic" ? enabledServices : NO_SERVICES, nativeOn, t, homeView);
+  const showCollections = settings.homeMode !== "classic" && !!settings.tmdbKey && !homeRowsCustom.hidden.includes("collections");
+  const collectionsRow = useCollectionsRow("collections", t("Collections"), nativeOn && showCollections, settings.tmdbKey, t, homeView);
   const nativeHome = useNativeHome({
     active,
     editMode,
@@ -645,6 +653,8 @@ export function Home({ active = true }: { active?: boolean }) {
     rows: nativeRows,
     onLoadMore: loadMore,
     resetTick: homeResetTick,
+    servicesRow,
+    collectionsRow: showCollections ? collectionsRow : null,
   });
   if (nativeHome) {
     return <main ref={scrollCb} aria-hidden="true" className="flex-1 overflow-hidden" />;

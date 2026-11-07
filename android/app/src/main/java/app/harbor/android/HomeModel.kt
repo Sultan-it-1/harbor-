@@ -74,6 +74,7 @@ class HomeModel(
                             progress = c.optDouble("progress", 0.0).toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 1f) ?: 0f,
                             rank = c.optInt("rank", 0),
                             watched = c.optBoolean("watched", false),
+                            tint = HomeColors.parseHex(c.str("tint")),
                         )
                     }
                     if (items.isEmpty()) return@mapNotNull null
@@ -83,6 +84,9 @@ class HomeModel(
                         kind = when (r.str("kind")) {
                             "cw" -> HomeRow.Kind.CW
                             "rank" -> HomeRow.Kind.RANK
+                            "tile" -> HomeRow.Kind.TILE
+                            "logo" -> HomeRow.Kind.LOGO
+                            "feature" -> HomeRow.Kind.FEATURE
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -153,7 +157,10 @@ class HomeRow(
     val more: Boolean,
     val items: List<HomeCard>,
 ) {
-    enum class Kind { POSTER, RANK, CW }
+    /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
+     *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
+     *  card (Critics' Pick). */
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE }
 }
 
 class HomeCard(
@@ -169,6 +176,8 @@ class HomeCard(
     val rank: Int,
     /** Finished: a small check on the poster (when Settings > watched marks is on). */
     val watched: Boolean = false,
+    /** Tiles: the card's colour (behind / under its picture). */
+    val tint: Int? = null,
 )
 
 /** The theme's colours (the page sends what its CSS uses), as ARGB ints. */

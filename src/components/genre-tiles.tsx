@@ -10,7 +10,7 @@ import { useView } from "@/lib/view";
 import { Row } from "./row";
 import { Poster } from "./poster";
 
-const GENRE_PALETTE: Record<string, { from: string; to: string; ink: string }> = {
+export const GENRE_PALETTE: Record<string, { from: string; to: string; ink: string }> = {
   Action: { from: "oklch(0.40 0.18 25)", to: "oklch(0.18 0.10 20)", ink: "oklch(0.96 0.02 25)" },
   Adventure: { from: "oklch(0.45 0.14 145)", to: "oklch(0.20 0.10 155)", ink: "oklch(0.96 0.02 145)" },
   Animation: { from: "oklch(0.50 0.16 200)", to: "oklch(0.20 0.10 195)", ink: "oklch(0.96 0.02 200)" },
@@ -31,7 +31,7 @@ const GENRE_PALETTE: Record<string, { from: string; to: string; ink: string }> =
   Western: { from: "oklch(0.45 0.12 55)", to: "oklch(0.18 0.08 35)", ink: "oklch(0.96 0.04 60)" },
 };
 
-const TILES: string[] = [
+export const GENRE_TILES: string[] = [
   "Action",
   "Adventure",
   "Thriller",
@@ -54,11 +54,12 @@ const TILES: string[] = [
 
 const PHONE = isPhoneLayout();
 
-export function GenreTiles() {
+/** [title]: the row's name when the page's editor renamed it. */
+export function GenreTiles({ title }: { title?: string } = {}) {
   const t = useT();
   return (
-    <Row title={t("Browse by Genre")} min={210} shape="tile" alwaysActive>
-      {TILES.map((g) => (
+    <Row title={title ?? t("Browse by Genre")} min={210} shape="tile" alwaysActive>
+      {GENRE_TILES.map((g) => (
         <GenreTile key={g} genre={g} />
       ))}
     </Row>

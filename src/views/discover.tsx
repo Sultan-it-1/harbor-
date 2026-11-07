@@ -34,7 +34,28 @@ import {
   usePageRows,
 } from "@/lib/page-rows";
 
-import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
+import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
+import {
+  awardTilesRow,
+  criticsRow,
+  queueRow,
+  useCollectionsRow,
+  useGenreTilesRow,
+  useLanguageTilesRow,
+} from "@/views/native/native-sections";
+import { useView } from "@/lib/view";
+
+// Discover's own sections, listed with the rails so the page's editor can hide, move and rename
+// them like any row ("x:" keys). Their default places are where they always sat: after the rail
+// with that index.
+const SECTIONS: Array<{ key: string; title: string; after: number }> = [
+  { key: "x:genres", title: "Browse by Genre", after: 0 },
+  { key: "x:queue", title: "Your Discovery Queue", after: 1 },
+  { key: "x:languages", title: "Browse by Language", after: 2 },
+  { key: "x:collections", title: "Collections", after: 2 },
+  { key: "x:critics", title: "Critics' Pick", after: 3 },
+  { key: "x:awards", title: "Browse by Award", after: 4 },
+];
 const MAX_RAIL_PAGES = 10;
 const MIN_PAGE_YIELD = 4;
 const ROW_COUNT = 14;
@@ -247,10 +268,16 @@ export function Discover({ active = true }: { active?: boolean }) {
   const order = useMemo(() => dailyRows.map((r) => r.id), [dailyRows]);
   const deduped = useDedupedRows(rails, order, featuredIds, criticsPick?.id, DEDUP_PRIORITY);
 
-  const railItems = useMemo(
-    () => dailyRows.map((r) => ({ key: r.id, title: r.shelf.title })),
-    [dailyRows],
-  );
+  const railItems = useMemo(() => {
+    const sections = SECTIONS.filter((x) => x.key !== "x:collections" || !!settings.tmdbKey);
+    const out: Array<{ key: string; title: string }> = [];
+    dailyRows.forEach((r, i) => {
+      out.push({ key: r.id, title: r.shelf.title });
+      for (const x of sections) if (x.after === i) out.push({ key: x.key, title: x.title });
+    });
+    for (const x of sections) if (x.after >= dailyRows.length) out.push({ key: x.key, title: x.title });
+    return out;
+  }, [dailyRows, settings.tmdbKey]);
   const railKeys = useMemo(() => railItems.map((r) => r.key), [railItems]);
   const visibleRails = useMemo(
     () => applyPageRows(railItems, pageRows.custom, false),
@@ -269,24 +296,78 @@ export function Discover({ active = true }: { active?: boolean }) {
     [railKeys, pageRows.custom],
   );
 
-  // Android: drawn natively (see @/views/native/native-screens); the page then stays empty. The
-  // genre / language / award tiles, the discovery queue and Critics' Pick stay on the web page.
-  const nativeRows = useMemo<NativeRowInput[]>(
-    () =>
-      visibleRails.map((item) => {
-        const def = dailyRows.find((r) => r.id === item.key);
-        const title = t(item.title);
-        const metas = deduped[item.key] ?? [];
-        return {
-          key: item.key,
-          title,
-          metas,
-          seeAll: def ? { title, fetcher: (page: number) => def.fetch(page), initial: metas } : undefined,
-          more: () => loadMore(item.key),
-        };
-      }),
-    [visibleRails, dailyRows, deduped, t, loadMore],
-  );
+  /** One of Discover's own sections ("x:" keys), under [title]. */
+  const section = (key: string, title: string) => {
+    switch (key) {
+      case "x:genres":
+        return <GenreTiles title={title} />;
+      case "x:queue":
+        return queue.length > 0 ? <DiscoveryQueueCta items={queue} title={title} /> : null;
+      case "x:languages":
+        return <LanguageTiles title={title} />;
+      case "x:collections":
+        return settings.tmdbKey ? (
+          <LazyMount minHeight={260}>
+            <CollectionsRow title={title} />
+          </LazyMount>
+        ) : null;
+      case "x:critics":
+        return criticsPick ? (
+          <LazyMount minHeight={580}>
+            <CriticsPick meta={criticsPick} title={title} />
+          </LazyMount>
+        ) : null;
+      case "x:awards":
+        return <AwardTiles title={title} />;
+    }
+    return null;
+  };
+
+  // Android: drawn natively (see @/views/native/native-screens); the page then stays empty.
+  const view = useView();
+  const nativeOn = useNativeScreensEnabled() && !pageRows.editMode;
+  const titleOf = (key: string) => {
+    const it = visibleRails.find((r) => r.key === key);
+    return it ? t(it.title) : "";
+  };
+  const genresRow = useGenreTilesRow("x:genres", titleOf("x:genres"), nativeOn, settings.tmdbKey, t, view);
+  const languagesRow = useLanguageTilesRow("x:languages", titleOf("x:languages"), nativeOn, settings.tmdbKey, t, view);
+  const collectionsRow = useCollectionsRow("x:collections", titleOf("x:collections"), nativeOn, settings.tmdbKey, t, view);
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [];
+    for (const item of visibleRails) {
+      const title = t(item.title);
+      if (item.key.startsWith("x:")) {
+        const r =
+          item.key === "x:genres"
+            ? genresRow
+            : item.key === "x:languages"
+              ? languagesRow
+              : item.key === "x:collections"
+                ? collectionsRow
+                : item.key === "x:awards"
+                  ? awardTilesRow(item.key, title, t, view)
+                  : item.key === "x:queue"
+                    ? queueRow(item.key, title, queue, t, view)
+                    : item.key === "x:critics"
+                      ? criticsRow(item.key, title, criticsPick)
+                      : null;
+        if (r) out.push(r);
+        continue;
+      }
+      const def = dailyRows.find((r) => r.id === item.key);
+      const metas = deduped[item.key] ?? [];
+      out.push({
+        key: item.key,
+        title,
+        metas,
+        seeAll: def ? { title, fetcher: (page: number) => def.fetch(page), initial: metas } : undefined,
+        more: () => loadMore(item.key),
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleRails, dailyRows, deduped, t, loadMore, genresRow.cards, languagesRow.cards, collectionsRow.cards, queue, criticsPick, view]);
   const nativeHero = useMemo(() => ({ metas: featured, rank: t("Featured") }), [featured, t]);
   const { setEditMode } = pageRows;
   const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);
@@ -302,7 +383,7 @@ export function Discover({ active = true }: { active?: boolean }) {
   // time.
   useEffect(() => {
     if (!native) return;
-    const keys = visibleRails.map((r) => r.key);
+    const keys = visibleRails.map((r) => r.key).filter((k) => !k.startsWith("x:"));
     const timers: number[] = [];
     keys.forEach((k, i) => {
       timers.push(window.setTimeout(() => ensureLoadedRef.current(k), Math.floor(i / 4) * 700));
@@ -347,7 +428,28 @@ export function Discover({ active = true }: { active?: boolean }) {
                       onResetName={() => pageRows.persist(renamePageRow(pageRows.custom, item.key, ""))}
                       isRenamed={item.key in pageRows.custom.renamed}
                     />
-                    {!hidden && (
+                    {!hidden &&
+                      (item.key.startsWith("x:") ? (
+                        section(item.key, t(item.title))
+                      ) : (
+                        <Rail
+                          railId={item.key}
+                          allRails={dailyRows}
+                          deduped={deduped}
+                          loadMore={loadMore}
+                          ensureLoaded={ensureLoaded}
+                          titleOverride={item.title}
+                        />
+                      ))}
+                  </div>
+                );
+              })
+            : visibleRails.map((item) => (
+                <Fragment key={item.key}>
+                  {item.key.startsWith("x:") ? (
+                    section(item.key, t(item.title))
+                  ) : (
+                    <LazyMount minHeight={PHONE ? 240 : 340}>
                       <Rail
                         railId={item.key}
                         allRails={dailyRows}
@@ -356,37 +458,8 @@ export function Discover({ active = true }: { active?: boolean }) {
                         ensureLoaded={ensureLoaded}
                         titleOverride={item.title}
                       />
-                    )}
-                  </div>
-                );
-              })
-            : visibleRails.map((item, i) => (
-                <Fragment key={item.key}>
-                  <LazyMount minHeight={PHONE ? 240 : 340}>
-                    <Rail
-                      railId={item.key}
-                      allRails={dailyRows}
-                      deduped={deduped}
-                      loadMore={loadMore}
-                      ensureLoaded={ensureLoaded}
-                      titleOverride={item.title}
-                    />
-                  </LazyMount>
-
-                  {i === 0 && <GenreTiles />}
-                  {i === 1 && queue.length > 0 && <DiscoveryQueueCta items={queue} />}
-                  {i === 2 && <LanguageTiles />}
-                  {i === 2 && settings.tmdbKey && (
-                    <LazyMount minHeight={260}>
-                      <CollectionsRow />
                     </LazyMount>
                   )}
-                  {i === 3 && criticsPick && (
-                    <LazyMount minHeight={580}>
-                      <CriticsPick meta={criticsPick} />
-                    </LazyMount>
-                  )}
-                  {i === 4 && <AwardTiles />}
                 </Fragment>
               ))}
         </div>

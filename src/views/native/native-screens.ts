@@ -215,6 +215,17 @@ function isUrl(u: string | null | undefined): u is string {
   return typeof u === "string" && /^https?:\/\//.test(u);
 }
 
+/** The hero's backdrop at the size the web hero uses: TMDB's full size (the shell keeps it to
+ *  1280px on a phone) and Metahub's large one, the given address as the fallback. */
+function heroImages(bg: string | undefined): string[] {
+  if (!bg) return [];
+  const out: string[] = [];
+  if (/image\.tmdb\.org\/t\/p\/w\d+\//.test(bg)) out.push(bg.replace(/\/t\/p\/w\d+\//, "/t/p/original/"));
+  if (/images\.metahub\.space\/background\/(small|medium)\//.test(bg)) out.push(bg.replace(/\/background\/(small|medium)\//, "/background/large/"));
+  out.push(bg);
+  return out;
+}
+
 /** Poster / Top 10 / hero cards as the page's own cards would show them (follows the settings, the
  *  watched marks and the watchlist; include `cards` in a model's memo so it follows them too). */
 export function useNativeCards() {
@@ -240,7 +251,7 @@ export function useNativeCards() {
         year: m.releaseInfo ?? null,
         rating: settings.showImdbBadge && m.imdbRating ? String(m.imdbRating) : null,
         runtime: m.runtime ?? null,
-        img: [m.background, m.poster].filter(isUrl),
+        img: [...heroImages(m.background), m.poster].filter(isUrl),
         logo: isUrl(m.logo) ? m.logo : null,
         rank,
         inList: watchlistHas(m.id),
@@ -414,7 +425,45 @@ export type NativeRowInput = {
   seeAll?: { title: string; fetcher: (page: number) => Promise<Meta[]>; initial?: Meta[] };
   /** Load more when the row's end comes near. */
   more?: () => void;
+  /** Not titles: genre / language / award / collection tiles, service logos, one wide card. */
+  kind?: "tile" | "logo" | "feature";
+  /** The cards of a [kind] row (its [metas], if any, are what a tap opens). */
+  cards?: NativeCardInput[];
+  /** What a tap on card [i] does, instead of opening its title. */
+  onOpen?: (i: number) => void;
+  /** What "See all" does when it isn't a list of titles (Collections opens its own page). */
+  onAll?: () => void;
 };
+
+/** A tile / logo / feature card. */
+export type NativeCardInput = { title: string; img?: string[]; sub?: string | null; tint?: string | null };
+
+/** A row's JSON for the native screen. */
+export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNativeCards>) {
+  if (r.cards) {
+    return {
+      key: r.key,
+      title: r.title,
+      kind: r.kind ?? "tile",
+      all: !!r.seeAll || !!r.onAll,
+      more: false,
+      items: r.cards.map((c) => ({ title: c.title, img: (c.img ?? []).filter(isUrlOrData), sub: c.sub ?? null, tint: c.tint ?? null })),
+    };
+  }
+  const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
+  return {
+    key: r.key,
+    title: r.title,
+    kind: r.rank ? "rank" : "poster",
+    all: !!r.seeAll,
+    more: !r.rank && !!r.more,
+    items: r.rank ? shown.map(cards.rank) : shown.map(cards.poster),
+  };
+}
+
+function isUrlOrData(u: string | null | undefined): u is string {
+  return typeof u === "string" && (/^https?:\/\//.test(u) || u.startsWith("data:image/"));
+}
 
 export type NativePageInput = {
   /** The page is the screen on top. */
@@ -467,16 +516,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     }
     for (const r of rows) {
       const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
-      if (shown.length === 0 || r.key === "cw") continue;
+      if ((r.cards ? r.cards.length : shown.length) === 0 || r.key === "cw") continue;
       map.set(r.key, { ...r, metas: shown });
-      out.push({
-        key: r.key,
-        title: r.title,
-        kind: r.rank ? "rank" : "poster",
-        all: !!r.seeAll,
-        more: !r.rank && !!r.more,
-        items: r.rank ? shown.map(cards.rank) : shown.map(cards.poster),
-      });
+      out.push(nativeRowJson(r, cards));
     }
     published.current = { hero: heroMetas, cw: cwItems, rows: map };
     return {
@@ -506,7 +548,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return meta.hero(p.hero[i], a.what);
         case "open":
         case "hold": {
-          const m = a.row === "cw" ? (p.cw[i] ? cwMeta(p.cw[i]) : undefined) : p.rows.get(a.row ?? "")?.metas[i];
+          const row = a.row === "cw" ? undefined : p.rows.get(a.row ?? "");
+          if (a.a === "open" && row?.onOpen) return row.onOpen(i);
+          const m = a.row === "cw" ? (p.cw[i] ? cwMeta(p.cw[i]) : undefined) : row?.metas[i];
           if (a.a === "open") return meta.open(m);
           if (m && a.row && cur.onHold?.(a.row, m)) return;
           return meta.hold(m);
@@ -517,7 +561,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         }
         case "all": {
-          const all = p.rows.get(a.row ?? "")?.seeAll;
+          const row = p.rows.get(a.row ?? "");
+          if (row?.onAll) return row.onAll();
+          const all = row?.seeAll;
           if (all) openGrid({ title: all.title, fetcher: all.fetcher, initial: all.initial });
           return;
         }

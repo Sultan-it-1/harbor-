@@ -5,14 +5,15 @@ import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { Row } from "./row";
 
-export function CollectionsRow() {
+/** [title]: the row's name when the page's editor renamed it. */
+export function CollectionsRow({ title }: { title?: string } = {}) {
   const { settings } = useSettings();
   const { openCollections } = useView();
   const t = useT();
   if (!settings.tmdbKey) return null;
   return (
     <Row
-      title={t("Collections")}
+      title={title ?? t("Collections")}
       min={320}
       shape="landscape"
       arrowsAlways
