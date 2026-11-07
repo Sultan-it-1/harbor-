@@ -1,4 +1,4 @@
-import { ArrowUpRight, ClipboardCopy, ExternalLink, RotateCw, Sparkles, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ClipboardCopy, ExternalLink, ListOrdered, RotateCw, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { installFromUrl } from "@/lib/addon-store";
@@ -21,6 +21,9 @@ const EVENT = "harbor:open-installer";
 const PHONE = isPhoneLayout();
 
 type InstallerDetail = { url: string; title?: string; logo?: string | null };
+
+/** Phone: whether the "how to install" steps under the setup page are shown ("0" = hidden). */
+const SETUP_STEPS_KEY = "harbor.addonSetupSteps";
 
 export function openInstallerViewport(url: string, title?: string, logo?: string | null): void {
   if (typeof window === "undefined") return;
@@ -97,6 +100,24 @@ function InstallerViewport({
   onClose: () => void;
 }) {
   const [pasteValue, setPasteValue] = useState("");
+  // Phone: the three "how to install" steps under the page can be hidden (and shown again);
+  // the choice is remembered.
+  const [stepsShown, setStepsShown] = useState(() => {
+    try {
+      return localStorage.getItem(SETUP_STEPS_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleSteps = () =>
+    setStepsShown((v) => {
+      try {
+        localStorage.setItem(SETUP_STEPS_KEY, v ? "0" : "1");
+      } catch {
+        /* not remembered */
+      }
+      return !v;
+    });
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [loaded, setLoaded] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -407,6 +428,7 @@ function InstallerViewport({
           </p>
         ) : PHONE ? (
           <>
+            {stepsShown && (
             <ol className="flex flex-col gap-1.5 text-[12.5px] leading-snug text-ink-muted">
               <li className="flex gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">1</span>
@@ -422,14 +444,27 @@ function InstallerViewport({
                 <span><Interpolate text={t("Or paste the addon link ({c1} or {c2}) below.")} values={{ c1: <span className="font-mono text-[11.5px]">stremio://…</span>, c2: <span className="font-mono text-[11.5px]">…/manifest.json</span> }} /></span>
               </li>
             </ol>
-            <button
-              type="button"
-              onClick={() => openUrl(url)}
-              className="flex h-11 items-center justify-center gap-2 rounded-full border border-edge bg-elevated/70 text-[13.5px] font-semibold text-ink transition-colors hover:bg-elevated"
-            >
-              <ExternalLink size={14} strokeWidth={2.3} />
-              {t("Open in browser")}
-            </button>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openUrl(url)}
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-edge bg-elevated/70 text-[13.5px] font-semibold text-ink transition-colors hover:bg-elevated"
+              >
+                <ExternalLink size={14} strokeWidth={2.3} />
+                {t("Open in browser")}
+              </button>
+              <button
+                type="button"
+                onClick={toggleSteps}
+                aria-expanded={stepsShown}
+                aria-label={stepsShown ? t("Hide the steps") : t("Show the steps")}
+                title={stepsShown ? t("Hide the steps") : t("Show the steps")}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-edge bg-elevated/70 text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
+              >
+                {stepsShown ? <ChevronDown size={17} strokeWidth={2.3} /> : <ListOrdered size={17} strokeWidth={2.1} />}
+              </button>
+            </div>
           </>
         ) : (
           <p className="text-[12.5px] leading-snug text-ink-muted">

@@ -3,6 +3,8 @@
 
 type HarborAndroidApi = {
   version(): string;
+  /** The build number (CI run), shells from the native-Home release on. */
+  build?(): string;
   fetch(id: string, requestJson: string): void;
   /** Stops a request that is queued or running in the shell (frees its thread). */
   fetchCancel?(id: string): void;

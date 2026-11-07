@@ -274,7 +274,9 @@ export function Discover({ active = true }: { active?: boolean }) {
         <div data-tauri-drag-region className={`flex flex-col ${PHONE ? "gap-8" : "gap-14"}`}>
           <div className="relative">
             <FeaturedBanner items={featured} />
-            <div className={`absolute end-0 z-10 ${PHONE ? "-bottom-7" : "bottom-4"}`}>
+            {/* Phone: on its own line under the banner (hung off the banner's edge it ran into
+                the slide dots and the first row's title). */}
+            <div className={PHONE ? "mt-3 flex justify-end" : "absolute bottom-4 end-0 z-10"}>
               <CatalogCustomizeBar
                 editMode={pageRows.editMode}
                 hasChanges={hasPageRowChanges(pageRows.custom)}

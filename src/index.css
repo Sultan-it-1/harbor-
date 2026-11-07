@@ -9,18 +9,19 @@
 }
 
 @theme {
-  --color-canvas: oklch(0.18 0.004 260);
-  --color-surface: oklch(0.22 0.004 260);
-  --color-elevated: oklch(0.27 0.004 260);
-  --color-raised: oklch(0.32 0.004 260);
-  --color-ink: oklch(0.97 0.003 260);
-  --color-ink-muted: oklch(0.72 0.003 260);
-  --color-ink-subtle: oklch(0.50 0.003 260);
-  --color-edge: oklch(0.36 0.004 260 / 0.55);
-  --color-edge-soft: oklch(0.36 0.004 260 / 0.25);
-  --color-accent: oklch(0.78 0.13 60);
-  --color-accent-soft: oklch(0.78 0.13 60 / 0.18);
-  --color-danger: oklch(0.55 0.18 25);
+  /* Harbor default (the "cool-grey" preset in src/lib/theme.ts): applied before the theme loads. */
+  --color-canvas: #160717;
+  --color-surface: #160717;
+  --color-elevated: #160717;
+  --color-raised: #4c1b52;
+  --color-ink: #f6f6f8;
+  --color-ink-muted: #aaadb6;
+  --color-ink-subtle: #6e7079;
+  --color-edge: #70727b8c;
+  --color-edge-soft: #70727b40;
+  --color-accent: #d3a064;
+  --color-accent-soft: #d3a0642e;
+  --color-danger: #d35a3a;
   --color-success: oklch(0.68 0.15 150);
 
   --radius-sm: 6px;

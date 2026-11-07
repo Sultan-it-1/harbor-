@@ -639,6 +639,10 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun version(t: String): String = if (ok(t)) BuildConfigInfo.versionName(this@MainActivity) else ""
 
+        /** The build number (Settings > About). */
+        @JavascriptInterface
+        fun build(t: String): String = if (ok(t)) BuildConfigInfo.versionCode(this@MainActivity).toString() else ""
+
         @JavascriptInterface
         fun fetch(t: String, id: String, requestJson: String) {
             if (ok(t)) guard("fetch", Unit) { fetcher.enqueue(id, requestJson) }
@@ -831,5 +835,14 @@ object BuildConfigInfo {
         activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: "0"
     } catch (_: Exception) {
         "0"
+    }
+
+    /** The CI build number (the "-88" in a release named android-v0.9.36-88). */
+    @Suppress("DEPRECATION")
+    fun versionCode(activity: ComponentActivity): Long = try {
+        val info = activity.packageManager.getPackageInfo(activity.packageName, 0)
+        if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+    } catch (_: Exception) {
+        0L
     }
 }

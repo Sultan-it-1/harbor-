@@ -6,18 +6,18 @@ export type TokenRow = {
 };
 
 export const COLOR_TOKENS: TokenRow[] = [
-  { name: "--color-canvas", type: "color", defaultValue: "oklch(0.18 0.004 260)", desc: "Page background. Everything sits on this." },
-  { name: "--color-surface", type: "color", defaultValue: "oklch(0.22 0.004 260)", desc: "Cards, panels, search input, modal bodies." },
-  { name: "--color-elevated", type: "color", defaultValue: "oklch(0.27 0.004 260)", desc: "Modals, dropdowns, popovers, settings nav." },
-  { name: "--color-raised", type: "color", defaultValue: "oklch(0.32 0.004 260)", desc: "Hover states, pressed surfaces, pill backgrounds." },
-  { name: "--color-ink", type: "color", defaultValue: "oklch(0.97 0.003 260)", desc: "Primary text and icons. Maximum contrast." },
-  { name: "--color-ink-muted", type: "color", defaultValue: "oklch(0.72 0.003 260)", desc: "Secondary text, inactive nav items, blurbs." },
-  { name: "--color-ink-subtle", type: "color", defaultValue: "oklch(0.50 0.003 260)", desc: "Captions, eyebrow labels, hints, dim metadata." },
-  { name: "--color-edge", type: "color", defaultValue: "oklch(0.36 0.004 260 / 0.55)", desc: "Strong borders and dividers. Includes alpha." },
-  { name: "--color-edge-soft", type: "color", defaultValue: "oklch(0.36 0.004 260 / 0.25)", desc: "Soft borders. Used for low-emphasis containers." },
-  { name: "--color-accent", type: "color", defaultValue: "oklch(0.78 0.13 60)", desc: "Brand color. Active states, focus rings, buttons." },
-  { name: "--color-accent-soft", type: "color", defaultValue: "oklch(0.78 0.13 60 / 0.18)", desc: "Accent tints, hover backgrounds, glow effects." },
-  { name: "--color-danger", type: "color", defaultValue: "oklch(0.55 0.18 25)", desc: "Errors, destructive actions, delete buttons." },
+  { name: "--color-canvas", type: "color", defaultValue: "#160717", desc: "Page background. Everything sits on this." },
+  { name: "--color-surface", type: "color", defaultValue: "#160717", desc: "Cards, panels, search input, modal bodies." },
+  { name: "--color-elevated", type: "color", defaultValue: "#160717", desc: "Modals, dropdowns, popovers, settings nav." },
+  { name: "--color-raised", type: "color", defaultValue: "#4c1b52", desc: "Hover states, pressed surfaces, pill backgrounds." },
+  { name: "--color-ink", type: "color", defaultValue: "#f6f6f8", desc: "Primary text and icons. Maximum contrast." },
+  { name: "--color-ink-muted", type: "color", defaultValue: "#aaadb6", desc: "Secondary text, inactive nav items, blurbs." },
+  { name: "--color-ink-subtle", type: "color", defaultValue: "#6e7079", desc: "Captions, eyebrow labels, hints, dim metadata." },
+  { name: "--color-edge", type: "color", defaultValue: "#70727b8c", desc: "Strong borders and dividers. Includes alpha." },
+  { name: "--color-edge-soft", type: "color", defaultValue: "#70727b40", desc: "Soft borders. Used for low-emphasis containers." },
+  { name: "--color-accent", type: "color", defaultValue: "#d3a064", desc: "Brand color. Active states, focus rings, buttons." },
+  { name: "--color-accent-soft", type: "color", defaultValue: "#d3a0642e", desc: "Accent tints, hover backgrounds, glow effects." },
+  { name: "--color-danger", type: "color", defaultValue: "#d35a3a", desc: "Errors, destructive actions, delete buttons." },
 ];
 
 export const FONT_TOKENS: TokenRow[] = [

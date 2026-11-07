@@ -12,6 +12,7 @@ import {
   omdbBudget as readOmdbBudget,
 } from "@/lib/providers/omdb";
 import { useSettings } from "@/lib/settings";
+import { androidApi } from "@/lib/android";
 import { repairStremioLibrary, type RepairProgress, type RepairResult } from "@/lib/stremio-library-repair";
 import { openUrl } from "@/lib/window";
 import {
@@ -566,10 +567,24 @@ function OnboardingRow() {
 
 function AboutRow() {
   const t = useT();
+  const android = androidApi();
+  let version = `${__APP_VERSION__}${IS_BETA_BUILD ? " (Beta)" : ""}`;
+  if (android) {
+    // The installed app's own version and build number (the "-88" of android-v0.9.36-88).
+    let name = "";
+    let build = "";
+    try {
+      name = android.version();
+      build = android.build?.() ?? "";
+    } catch {
+      /* older shell */
+    }
+    version = `${name || __APP_VERSION__}${build && build !== "0" ? ` (${t("build {n}", { n: build })})` : ""}`;
+  }
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3.5 text-[13px] text-ink-muted">
-      <InfoLine label={t("Version")} value={`${__APP_VERSION__}${IS_BETA_BUILD ? " (Beta)" : ""}`} />
-      <InfoLine label={t("Build")} value={isTauri ? t("Desktop (Tauri 2 / WebView2)") : t("Web")} />
+      <InfoLine label={t("Version")} value={version} />
+      <InfoLine label={t("Build")} value={isTauri ? t("Desktop (Tauri 2 / WebView2)") : android ? t("Android app") : t("Web")} />
     </div>
   );
 }

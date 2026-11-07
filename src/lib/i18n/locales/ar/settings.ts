@@ -1154,6 +1154,8 @@ const settings: Record<string, string> = {
     "متابعة المشاهدة، ثم إضافاتك المثبّتة. يُعرض كل كتالوج كصفّ خاص به، بترتيب التثبيت، بلا إزالة تكرار، بلا عرض رئيسي.",
   "Show every addon row": "إظهار كل صفّ إضافة",
   "Native Home screen": "الرئيسية بواجهة أندرويد الأصلية",
+  "Android app": "تطبيق أندرويد",
+  "build {n}": "بناء {n}",
   "Draws Home and its poster rows with Android's own views instead of the web page: smoother, and posters show even on devices whose WebView can't draw them. Turn it off to use the web Home.":
     "تُرسم الرئيسية وصفوف الكفرات بعناصر أندرويد نفسها بدل صفحة الويب: أسلس، وتظهر الكفرات حتى في الأجهزة التي لا يقدر WebView فيها على رسمها. أطفئه لترجع للرئيسية بنسخة الويب.",
   "Watchlist shows only saved titles": "تعرض قائمة المشاهدة العناوين المحفوظة فقط",

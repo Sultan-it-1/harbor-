@@ -84,9 +84,11 @@ export function ColorPopoverTrigger({
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
+  // A press anywhere outside closes the panel. No full-screen layer catches it: on a touch screen
+  // that layer swallowed every swipe, so the page couldn't scroll while the panel was open.
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => {
+    const close = (e: PointerEvent) => {
       const t = e.target as Node;
       if (wrapRef.current?.contains(t) || panelRef.current?.contains(t)) return;
       setOpen(false);
@@ -94,10 +96,10 @@ export function ColorPopoverTrigger({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    window.addEventListener("mousedown", close);
+    window.addEventListener("pointerdown", close, true);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("mousedown", close);
+      window.removeEventListener("pointerdown", close, true);
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -124,9 +126,12 @@ export function ColorPopoverTrigger({
     };
   }, [open, portal, align, direction]);
 
+  // role="dialog": the Android Back gesture closes this pop-up first (Escape) instead of the
+  // screen behind it.
   const panel = (
     <div
       ref={panelRef}
+      role="dialog"
       className="animate-nudge-in w-[280px] rounded-2xl border border-edge bg-elevated/95 p-3 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.65)] backdrop-blur-md"
     >
       <CustomColorPanel value={value} onChange={onChange} />
@@ -152,48 +157,28 @@ export function ColorPopoverTrigger({
         {label}
       </button>
       {open && !portal && (
-        <>
-          <div role="dialog" aria-modal="true"
-            className="fixed inset-0 z-20"
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-            }}
-          />
-          <div
-            className={`absolute z-30 ${
-              direction === "up" ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"
-            } ${align === "right" ? "end-0" : "start-0"}`}
-          >
-            {panel}
-          </div>
-        </>
+        <div
+          className={`absolute z-30 ${
+            direction === "up" ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"
+          } ${align === "right" ? "end-0" : "start-0"}`}
+        >
+          {panel}
+        </div>
       )}
       {open &&
         portal &&
         pos &&
         createPortal(
-          <>
-            {/* Marked like the inline panel's backdrop: the Android Back gesture closes this
-                pop-up first (Escape) instead of the screen behind it. */}
-            <div role="dialog" aria-modal="true"
-              className="fixed inset-0 z-[310]"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                setOpen(false);
-              }}
-            />
-            <div
-              className="fixed z-[320]"
-              style={{
-                top: pos.top,
-                left: pos.left,
-                ...(direction === "up" ? { transform: "translateY(-100%)" } : null),
-              }}
-            >
-              {panel}
-            </div>
-          </>,
+          <div
+            className="fixed z-[320]"
+            style={{
+              top: pos.top,
+              left: pos.left,
+              ...(direction === "up" ? { transform: "translateY(-100%)" } : null),
+            }}
+          >
+            {panel}
+          </div>,
           document.body,
         )}
     </div>
