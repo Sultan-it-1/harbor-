@@ -26,7 +26,7 @@ export function UpcomingCta({ detail, onTry }: { detail: TmdbDetail | null; onTr
   );
 }
 
-function upcomingDateLabel(
+export function upcomingDateLabel(
   t: (key: string, vars?: Record<string, string | number>) => string,
   date: string | null | undefined,
 ): string | null {

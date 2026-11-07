@@ -15,6 +15,13 @@ import { EpisodeWatchedMenu, type WatchedMenuTarget } from "@/components/episode
 import { manualWatchedVersion, setManualWatchedMany, subscribeManualWatched } from "@/lib/manual-watched";
 import { useT } from "@/lib/i18n";
 import { AnimeEpisodeRow } from "./anime-episodes/episode-row";
+import { useReportNativeRow } from "@/views/native/native-sink";
+import { useAuth } from "@/lib/auth";
+import { useDebridClients } from "@/lib/debrid/registry";
+import { seasonJobKey, startSeasonDownload, stopSeasonDownload, useSeasonDownload } from "@/lib/download/season-download";
+import { formatAirDate } from "@/lib/dates";
+import { formatRelativeWatched } from "@/lib/episode-progress";
+import { isUpcomingDate } from "./helpers";
 import { AnimeEpisodeStrip } from "./anime-episode-strip";
 import { UpcomingBadge } from "./badges";
 import { EpisodeGridControls } from "./episode-grid-controls";
@@ -144,6 +151,111 @@ export function AnimeEpisodes({
   }, [settings.episodeLayout, hasMore, grow, scrollRef]);
 
   const isOneOff = meta.type === "movie" || episodes.length <= 1;
+
+  // Android: the title's page is drawn natively; this list hands its row over (native-sink) like
+  // the page shows it: the parts of the franchise to switch to, Download season / Mark season,
+  // then every episode (still, number, Filler / Upcoming, "E3 · Abs E27 · 24 min · date", how
+  // far in, the synopsis). A long-press opens the page's episode menu over it.
+  const { openPicker, openMeta } = useView();
+  const { authKey } = useAuth();
+  const debrids = useDebridClients();
+  const seasonEps = episodes.map((ep) => ({
+    season: ep.seasonNumber || 1,
+    episode: ep.number,
+    name: ep.title || undefined,
+    still: ep.thumbnail ?? undefined,
+    overview: ep.synopsis || undefined,
+  }));
+  const dlKey = seasonJobKey(meta.id, seasonEps);
+  const dlProgress = useSeasonDownload(dlKey);
+  const dlRunning = !!dlProgress && !dlProgress.finished;
+  const nativeEpisodes = useReportNativeRow("episodes", 0, {
+    key: "episodes",
+    title: isOneOff ? t("Movie") : t("Episodes"),
+    sub: !isOneOff && episodes.length > 0 ? (episodes.length === 1 ? t("{n} episode", { n: episodes.length }) : t("{n} episodes", { n: episodes.length })) : null,
+    kind: "episodes",
+    noInfo: true,
+    metas: [],
+    chips:
+      franchise.length > 1
+        ? {
+            key: "franchise",
+            items: franchise.map((f) => ({
+              id: f.meta.id,
+              label: f.episodeCount ? `${f.meta.name} · ${f.episodeCount === 1 ? t("{n} ep", { n: f.episodeCount }) : t("{n} eps", { n: f.episodeCount })}` : f.meta.name,
+              on: f.meta.id === currentId,
+            })),
+          }
+        : null,
+    tools:
+      !isOneOff && episodes.length > 0
+        ? [
+            dlRunning ? { id: "stopdl", label: t("Stop") } : { id: "download", label: t("Download season") },
+            allWatched ? { id: "unwatched", label: t("Mark season as unwatched") } : { id: "watched", label: t("Mark season as watched") },
+          ]
+        : [],
+    cards: episodes.map((ep) => {
+      const pr = progressFor(ep);
+      const sp = spoilerFor(ep);
+      const ago = pr.startedAt > 0 ? formatRelativeWatched(pr.startedAt) : "";
+      const line = [
+        `E${ep.number}`,
+        ep.absoluteNumber && ep.absoluteNumber !== ep.number ? `Abs E${ep.absoluteNumber}` : null,
+        ep.length ? t("{n} min", { n: ep.length }) : null,
+        formatAirDate(ep.airdate) || null,
+      ]
+        .filter(Boolean)
+        .join("  ·  ");
+      const progressText =
+        pr.watched && ago
+          ? t("Watched {ago}", { ago })
+          : !pr.watched && pr.ratio > 0.01 && ago
+            ? `${t("{pct}% watched", { pct: Math.round(pr.ratio * 100) })} · ${ago}`
+            : "";
+      return {
+        title: sp?.title ? t("Episode {n}", { n: ep.number }) : ep.title || t("Episode {n}", { n: ep.number }),
+        sub: progressText ? `${line}  ·  ${progressText}` : line,
+        desc: sp?.desc ? null : ep.synopsis || null,
+        img: sp?.thumb ? [] : [ep.thumbnail, ep.thumbnailFallback, meta.background].filter((u, i, a): u is string => !!u && a.indexOf(u) === i),
+        rank: ep.number,
+        progress: pr.ratio,
+        watched: pr.watched && settings.showWatchedMarks !== false,
+        kicker: ep.filler ? t("Filler") : isUpcomingDate(ep.airdate) ? t("Upcoming") : null,
+        play: true,
+      };
+    }),
+    onOpen: (i) => {
+      const s = seasonEps[i];
+      if (s) openPicker(meta, s, { autoPlay: settings.instantPlay });
+    },
+    onRowChip: (id) => {
+      const f = franchise.find((x) => x.meta.id === id);
+      if (f && f.meta.id !== currentId) openMeta(f.meta);
+    },
+    onTool: (id) => {
+      if (id === "download") {
+        const q = seasonEps.length === 1 ? t("Download 1 episode?") : t("Download {n} episodes?", { n: seasonEps.length });
+        if (window.confirm(q)) startSeasonDownload(dlKey, { meta, episodes: seasonEps, authKey, settings, debrids });
+      } else if (id === "stopdl") {
+        stopSeasonDownload(dlKey);
+      } else if (id === "watched" || id === "unwatched") {
+        markSeason(id === "watched");
+      }
+    },
+    onAction: (a, i) => {
+      const s = seasonEps[i];
+      if (!s) return false;
+      if (a === "dl") openPicker(meta, s, { intent: "download" });
+      else if (a === "hold") {
+        setWatchedMenu({ x: window.innerWidth / 2, y: window.innerHeight / 2, season: s.season, episode: s.episode, watched: progressFor(episodes[i]).watched });
+      }
+      return true;
+    },
+  });
+  if (nativeEpisodes) {
+    return watchedMenu ? <EpisodeWatchedMenu metaId={meta.id} target={watchedMenu} onClose={() => setWatchedMenu(null)} /> : null;
+  }
+
   return (
     <div data-anime-episodes className="flex flex-col gap-6 scroll-mt-24">
       <div className="flex items-center justify-between gap-6">

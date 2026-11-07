@@ -7,7 +7,7 @@ import { AwardLogo, laurelColorFor } from "./icons/award-logo";
 import { Laurel } from "./icons/laurel";
 import { t } from "@/lib/i18n/translate";
 
-const TYPE_ORDER: Record<AwardType, number> = {
+export const TYPE_ORDER: Record<AwardType, number> = {
   oscar: 0,
   emmy: 1,
   bafta: 2,
@@ -20,7 +20,7 @@ const TYPE_ORDER: Record<AwardType, number> = {
   other: 9,
 };
 
-const TYPE_TITLE: Record<AwardType, string> = {
+export const TYPE_TITLE: Record<AwardType, string> = {
   oscar: "Academy Awards",
   emmy: "Primetime Emmys",
   bafta: "BAFTA Awards",

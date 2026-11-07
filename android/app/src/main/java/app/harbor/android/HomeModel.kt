@@ -136,6 +136,7 @@ class HomeModel(
                         critic = r.optJSONObject("critic")?.let { parseCritic(it) },
                         sub = r.str("sub"),
                         gallery = r.optBoolean("gallery", false),
+                        noInfo = r.optBoolean("noInfo", false),
                         chips = r.optJSONObject("chips")?.let { g ->
                             val ck = g.str("key") ?: return@let null
                             val its = g.optJSONArray("items").objects().mapNotNull { c ->
@@ -322,6 +323,8 @@ class HomeRow(
     val sub: String? = null,
     /** Pictures (a title's stills): a tap shows them full screen, here. */
     val gallery: Boolean = false,
+    /** Episodes without a details page (anime): no details button. */
+    val noInfo: Boolean = false,
     /** CREDITS: who made it (names open the person) and facts about it. */
     val credits: List<CreditGroup> = emptyList(),
     /** Choices under the title (a series' seasons): sends {a:"rowchip", row:key, what:id}. */

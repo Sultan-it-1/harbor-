@@ -5,7 +5,7 @@ import { imdbToKitsu, tmdbTvToKitsu } from "@/lib/providers/anime-mapping";
 import { stripFranchiseSuffix } from "@/lib/providers/jikan";
 import type { KitsuEpisode, KitsuStreamer } from "@/lib/providers/kitsu";
 import { AnimeAwardsBlock } from "@/components/anime-awards-block";
-import { AwardsBlock } from "@/components/awards-block";
+import { AwardsBlock, TYPE_ORDER as AWARD_TYPE_ORDER, TYPE_TITLE as AWARD_TYPE_TITLE } from "@/components/awards-block";
 import { BackToTop } from "@/components/back-to-top";
 import { PickCard } from "@/components/pick-card";
 import { Row } from "@/components/row";
@@ -77,7 +77,7 @@ import { Pill } from "./detail/pill";
 import { Credit } from "./detail/credit";
 import { TitlePlate } from "./detail/title-plate";
 import { PlayModeHint } from "./detail/play-mode-hint";
-import { UpcomingCta } from "./detail/upcoming-cta";
+import { UpcomingCta, upcomingDateLabel } from "./detail/upcoming-cta";
 import { Synopsis } from "./detail/synopsis";
 import { CastCard } from "./detail/cast-card";
 import { PreviewIcon } from "./detail/preview-icon";
@@ -91,6 +91,7 @@ import { AnimeEpisodes } from "./detail/anime-episodes";
 import { EpisodeGridSkeleton } from "./detail/episode-grid-skeleton";
 import { StreamingLinks } from "./detail/streaming-links";
 import { WatchOn } from "./detail/watch-on";
+import { animeStreamerInfo } from "@/lib/providers/anime-streamer";
 import { InfoBlock } from "./detail/info-block";
 import { TraktComments } from "./detail/trakt-comments";
 import { stremioIdToTraktTarget } from "@/lib/trakt/ids";
@@ -693,15 +694,20 @@ export function DetailView({
   // Series too once their seasons are known (the list then hands its row over, native-sink);
   // anime, live channels and addon-only series (no seasons) keep the page for now.
   const nativeBlocked =
-    (meta.type !== "movie" && meta.type !== "series") ||
-    isAnime ||
+    (meta.type !== "movie" && meta.type !== "series" && meta.type !== "anime") ||
     detectingAnime ||
     !!liveContext ||
     layoutEdit ||
-    (isSeries && !loading && (!detail || detail.seasons.length === 0));
+    (!isAnime && isSeries && !loading && (!detail || detail.seasons.length === 0));
   const [episodesSink, episodesRows] = useNativeRowSink(nativeOn && !nativeBlocked);
-  const showEpisodes = !!detail && isSeries && detail.seasons.length > 0;
+  const showEpisodes = !!detail && !isAnime && isSeries && detail.seasons.length > 0;
+  // Anime: its own episode list (the franchise's parts, Kitsu episodes), handed over the same way.
+  const showAnimeEpisodes = !!detail && isAnime && (animeEpisodes.length > 1 || franchise.length > 1);
+  const [awardsOpen, setAwardsOpen] = useState(false);
+  useEffect(() => setAwardsOpen(false), [meta.id]);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  useEffect(() => setCommentsOpen(false), [meta.id]);
   const [collectionParts, setCollectionParts] = useState<Meta[]>([]);
   const collectionId = detail?.collection?.id;
   useEffect(() => {
@@ -718,11 +724,14 @@ export function DetailView({
   const nativeDetail = useMemo(() => {
     const pills: Array<{ id: string; label: string; kind: string }> = [];
     if (year) pills.push({ id: "year", label: String(year), kind: "pill" });
+    if (showSeasonPill && seasonPillLabel) pills.push({ id: "season", label: seasonPillLabel, kind: "score" });
     if (rating) {
       pills.push(
-        imdbRatingValue != null
-          ? { id: "imdb", label: String(rating), kind: "imdb" }
-          : { id: "tmdb", label: `TMDB ${rating}`, kind: "score" },
+        isAnime
+          ? { id: "mal", label: `MyAnimeList ${rating}`, kind: "score" }
+          : imdbRatingValue != null
+            ? { id: "imdb", label: String(rating), kind: "imdb" }
+            : { id: "tmdb", label: `TMDB ${rating}`, kind: "score" },
       );
     }
     if (settings.showRtBadge && scores?.rtCritics != null) pills.push({ id: "rt", label: `RT ${scores.rtCritics}%`, kind: "score" });
@@ -738,11 +747,14 @@ export function DetailView({
       title,
       tagline: !loading && !detectingAnime && tagline ? tagline : null,
       pills,
-      play: upcoming ? null : smartPlayLabel,
+      // Not out yet: the page's "Upcoming · in 3 days" (it still searches, in case it's out early).
+      play: upcoming
+        ? [t("Upcoming"), upcomingDateLabel(t, detail?.kind === "movie" ? detail?.releaseDate : detail?.firstAirDate)].filter(Boolean).join(" · ")
+        : smartPlayLabel,
       more: true,
       synopsis: overview || null,
     };
-  }, [year, rating, imdbRatingValue, settings.showRtBadge, scores, mdblist, runtime, genres, backdrop, meta.background, detail?.backdrop, logo, title, loading, detectingAnime, tagline, upcoming, smartPlayLabel, overview]);
+  }, [showSeasonPill, seasonPillLabel, isAnime, year, rating, imdbRatingValue, settings.showRtBadge, scores, mdblist, runtime, genres, backdrop, meta.background, detail?.backdrop, logo, title, loading, detectingAnime, tagline, upcoming, smartPlayLabel, overview]);
   const nativeRows = useMemo<NativeRowInput[]>(() => {
     if (!detail) return [];
     const sections = new Map<string, NativeRowInput>();
@@ -805,18 +817,107 @@ export function DetailView({
     if (budget) info.push({ label: t("Budget"), value: budget });
     const revenue = money(detail.revenue);
     if (revenue) info.push({ label: t("Revenue"), value: revenue });
+    // Awards & Recognition: each award with its wins and nominations, then the categories.
+    if (awards && awards.length > 0) {
+      const groups = new Map<string, typeof awards>();
+      for (const a of awards) {
+        if (a.type === "other") continue;
+        groups.set(a.type, [...(groups.get(a.type) ?? []), a]);
+      }
+      const lines = [...groups.entries()]
+        .sort((a, b) => (AWARD_TYPE_ORDER[a[0] as keyof typeof AWARD_TYPE_ORDER] ?? 99) - (AWARD_TYPE_ORDER[b[0] as keyof typeof AWARD_TYPE_ORDER] ?? 99))
+        .map(([type, entries]) => {
+          const wins = entries.filter((e) => e.result === "won");
+          const noms = entries.filter((e) => e.result === "nominated");
+          const head = [
+            wins.length > 0 ? `${wins.length} ${wins.length === 1 ? t("Win") : t("Wins")}` : null,
+            noms.length > 0 ? `${noms.length} ${noms.length === 1 ? t("Nomination") : t("Nominations")}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          const cat = (e: (typeof entries)[number]) => [e.year, e.category, e.recipient].filter(Boolean).join(" · ");
+          const won = wins.filter((e) => e.category).sort((a, b) => (b.year ?? 0) - (a.year ?? 0)).map(cat);
+          const nom = noms.filter((e) => e.category).sort((a, b) => (b.year ?? 0) - (a.year ?? 0)).map(cat);
+          const body = [
+            head,
+            ...won,
+            ...(nom.length > 0 ? [`${won.length > 0 ? `${t("Also Nominated")}: ` : ""}${nom.join(" / ")}`] : []),
+          ]
+            .filter(Boolean)
+            .join("\n");
+          return { label: AWARD_TYPE_TITLE[type as keyof typeof AWARD_TYPE_TITLE] ?? type, value: body };
+        });
+      if (lines.length > 0) sections.set("awards", { key: "awards", title: t("Awards & Recognition"), metas: [], kind: "credits", credits: lines });
+    }
     if (info.length > 0) sections.set("info", { key: "info", title: t("Information"), metas: [], kind: "credits", credits: info });
+    // Anime awards: the page's own block opens over the screen.
+    if (isAnime) {
+      sections.set("animeAwards", {
+        key: "animeAwards",
+        title: t("Awards"),
+        metas: [],
+        cards: [],
+        tools: [{ id: "awards", label: t("Awards") }],
+        onTool: () => setAwardsOpen(true),
+      });
+    }
+    // Trakt comments (when turned on): the page's own list opens over the screen.
+    if (settings.showTraktComments === true) {
+      sections.set("traktComments", {
+        key: "traktComments",
+        title: t("Comments"),
+        metas: [],
+        cards: [],
+        tools: [{ id: "comments", label: t("Comments") }],
+        onTool: () => setCommentsOpen(true),
+      });
+    }
     const order = orderedSectionKeys([...sections.keys()], layout).filter((k) => !layout.hidden.includes(k));
     return order.map((k) => sections.get(k)).filter((r): r is NativeRowInput => !!r);
-  }, [detail, collectionParts, recommendations, similar, layout, t, openPerson, openCollection]);
+  }, [detail, collectionParts, recommendations, similar, layout, t, openPerson, openCollection, awards, settings.showTraktComments, isAnime]);
+  // Watch on (where it streams) comes first, as on the page, then the episodes, then the rest.
+  const watchOnRow = useMemo<NativeRowInput | null>(
+    () =>
+      isAnime
+        ? streamers.length > 0
+          ? {
+              key: "watchOn",
+              title: t("Watch on"),
+              kind: "logo",
+              metas: [],
+              cards: streamers.map((s) => {
+                const info = animeStreamerInfo(s.service);
+                return { title: s.service, img: info.logo ? [info.logo] : [] };
+              }),
+              onOpen: (i) => {
+                const s = streamers[i];
+                if (s?.url) openUrl(s.url);
+              },
+            }
+          : null
+        : watchProviders.length > 0
+        ? {
+            key: "watchOn",
+            title: t("Watch on"),
+            kind: "logo",
+            metas: [],
+            cards: watchProviders.map((p) => ({ title: p.name, img: p.logo ? [p.logo] : [] })),
+            onOpen: (i) => {
+              const p = watchProviders[i];
+              if (p?.link) openUrl(p.link);
+            },
+          }
+        : null,
+    [isAnime, watchProviders, streamers, t],
+  );
   const nativeAllRows = useMemo(
-    () => (showEpisodes ? [...episodesRows, ...nativeRows] : nativeRows),
-    [showEpisodes, episodesRows, nativeRows],
+    () => [...(watchOnRow ? [watchOnRow] : []), ...(showEpisodes || showAnimeEpisodes ? episodesRows : []), ...nativeRows],
+    [watchOnRow, showEpisodes, showAnimeEpisodes, episodesRows, nativeRows],
   );
   const native = useNativeBrowsePage("detail", {
     active: topKind === "meta",
     blocked: nativeBlocked,
-    hidden: trailerOpen,
+    hidden: trailerOpen || commentsOpen || awardsOpen,
     t,
     back: true,
     detail: nativeDetail,
@@ -885,6 +986,24 @@ export function DetailView({
         )}
         {trailerOpen && trailerCandidate && (
           <TrailerOverlay id={trailerCandidate} title={title} logo={logo} onClose={() => setTrailerOpen(false)} />
+        )}
+        {commentsOpen && (
+          <WebSheet title={t("Comments")} onClose={() => setCommentsOpen(false)}>
+            <TraktComments resolution={traktResolution} />
+          </WebSheet>
+        )}
+        {awardsOpen && (
+          <WebSheet title={t("Awards")} onClose={() => setAwardsOpen(false)}>
+            <AnimeAwardsBlock
+              name={animeAwardLookupName(releaseYearNum, title, meta.name, detail?.title) ?? stickyAwardName.current ?? title}
+              year={releaseYearNum}
+            />
+          </WebSheet>
+        )}
+        {showAnimeEpisodes && detail && (
+          <NativeRowSinkContext.Provider value={episodesSink}>
+            <AnimeEpisodes meta={playMeta} episodes={animeEpisodes} franchise={franchise} currentId={currentFranchiseId} scrollRef={scrollRef} />
+          </NativeRowSinkContext.Provider>
         )}
       </main>
     );
@@ -1452,5 +1571,34 @@ export function DetailView({
         />
       )}
     </main>
+  );
+}
+
+/** Android: a part of the page shown over the native screen (Trakt comments, anime awards: the
+ *  page's own block, reading and posting included); Back or the close button returns to it. */
+function WebSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const t = useT();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-[150] flex flex-col bg-canvas">
+      <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4">
+        <h3 className="text-[20px] font-medium tracking-tight text-ink">{title}</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("Close")}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-edge-soft text-ink-muted"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-24">{children}</div>
+    </div>
   );
 }

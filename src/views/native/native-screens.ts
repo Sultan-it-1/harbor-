@@ -468,6 +468,8 @@ export type NativeRowInput = {
   credits?: Array<{ label: string; people?: Array<{ id: number; name: string }>; value?: string | null }>;
   /** Pictures shown full screen by the native screen itself on a tap (a title's stills). */
   gallery?: boolean;
+  /** Episodes without a details page (anime): no details button. */
+  noInfo?: boolean;
   /** A small line at the end of the title (Critics' Pick: "Loved by reviewers today"). */
   note?: string | null;
   /** Critics' Pick: everything its card shows (see CriticInfo in HomeModel.kt). */
@@ -586,6 +588,7 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
       min: r.min ?? 0,
       ratio: r.ratio ?? 0,
       gallery: !!r.gallery,
+      noInfo: !!r.noInfo,
       credits: r.credits ?? [],
       lead: r.lead ? { title: r.lead.title, sub: r.lead.sub ?? null, img: (r.lead.img ?? []).filter(isUrlOrData) } : null,
       items: r.cards.map((c) => ({

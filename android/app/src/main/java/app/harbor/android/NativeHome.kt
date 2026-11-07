@@ -1150,6 +1150,7 @@ class NativeHome(
             desc.text = c.desc ?: ""
             desc.visibility = if (c.desc.isNullOrBlank()) View.GONE else View.VISIBLE
             desc.setTextColor(colors.muted)
+            info.visibility = if (r.noInfo) View.GONE else View.VISIBLE
             info.contentDescription = m.label("episodeInfo", "Episode details")
             info.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_eye, colors.subtle))
             info.background = focusable(rounded(Color.TRANSPARENT, dp(20).toFloat()))
