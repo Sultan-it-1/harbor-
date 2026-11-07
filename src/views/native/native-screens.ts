@@ -669,6 +669,9 @@ export type NativePageInput = {
   /** The release calendar's bar and month (see HomeCalendar in HomeModel.kt); its taps. */
   calendar?: Record<string, unknown> | null;
   onCalendar?: (what: string, i: number, text: string) => void;
+  /** The downloads page's list (see HomeDownloads in HomeModel.kt); its taps. */
+  downloads?: Record<string, unknown> | null;
+  onDownloads?: (what: string, text: string) => void;
   onPill?: (id: string) => void;
   /** Steps aside for now without giving the page back (a dialog the page opens over it). */
   hidden?: boolean;
@@ -719,6 +722,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const detailModel = input.detail;
   const queueModel = input.queue;
   const calendarModel = input.calendar;
+  const downloadsModel = input.downloads;
   const customizeLabel = customize?.label;
   const editing = !!editor?.on;
   const editCustom = editor?.custom;
@@ -777,8 +781,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       detail: detailModel ?? null,
       queue: queueModel ?? null,
       calendar: calendarModel ?? null,
+      downloads: downloadsModel ?? null,
     };
- }, [searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -870,6 +875,11 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
         case "cal":
           if (a.what) cur.onCalendar?.(a.what, i, a.text ?? "");
           return;
+        case "dl":
+          // (An episode's download button is "dl" with a row; the downloads page's taps have none.)
+          if (a.row) p.rows.get(a.row)?.onAction?.(a.a, i);
+          else if (a.what) cur.onDownloads?.(a.what, a.text ?? "");
+          return;
         case "rowchip":
           if (a.what) p.rows.get(a.row ?? "")?.onRowChip?.(a.what);
           return;
@@ -877,7 +887,6 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           if (a.what) p.rows.get(a.row ?? "")?.onTool?.(a.what);
           return;
         case "info":
-        case "dl":
           p.rows.get(a.row ?? "")?.onAction?.(a.a, i);
           return;
         case "pill":

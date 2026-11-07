@@ -26,6 +26,7 @@ import {
 import { Poster } from "@/components/poster";
 import { useView } from "@/lib/view";
 import { DownloadDirBar } from "./downloads/download-dir-bar";
+import { useNativeBrowsePage } from "@/views/native/native-screens";
 import {
   cancelDownload,
   fetchDownloadSubtitles,
@@ -262,6 +263,77 @@ function SeasonJobs() {
   );
 }
 
+/** Plays a saved download (Android: the file and the subtitles saved next to it). */
+function playDownload(d: DownloadItem, openPlayer: ReturnType<typeof useView>["openPlayer"]): void {
+  const local = ANDROID ? nativeFiles(d.id) : null;
+  openPlayer({
+    meta: {
+      id: d.metaId,
+      type: d.season != null ? "series" : "movie",
+      name: d.title,
+      poster: d.poster ?? undefined,
+    },
+    episode: d.season != null && d.episode != null ? { season: d.season, episode: d.episode } : undefined,
+    url: local?.video ?? d.path,
+    title: d.title,
+    subtitle: d.subtitle ?? undefined,
+    subtitles: local?.subtitles.map((x) => ({ url: x.url, lang: x.lang, label: x.label })),
+    notWebReady: true,
+  });
+}
+
+/** A download as the native screen draws it (the page's DownloadRow). */
+function nativeDownloadItem(d: DownloadItem, compact: boolean, confirming: boolean, t: TFn) {
+  const downloading = d.status === "downloading";
+  const pct = Math.round(d.ratio * 100);
+  const subsShown = ANDROID && (downloading || d.status === "done");
+  const n = d.subsCount ?? 0;
+  const buttons: Array<{ id: string; label: string }> = [];
+  if (downloading) {
+    if (ANDROID && d.code !== "relinking") {
+      buttons.push(d.paused ? { id: "resume", label: t("Resume download") } : { id: "pause", label: t("Pause download") });
+    }
+    buttons.push({ id: "cancel", label: t("Cancel download") });
+  } else {
+    if (ANDROID && d.status === "error" && d.retryable !== false) buttons.push({ id: "retry", label: t("Retry download") });
+    if (d.status === "done") buttons.push({ id: "play", label: t("Play") });
+    buttons.push(confirming ? { id: "confirm", label: t("Delete") } : { id: "delete", label: t("Delete download and file") });
+  }
+  return {
+    id: d.id,
+    title: compact ? (d.subtitle ?? d.title) : d.title,
+    side: !compact && d.subtitle ? d.subtitle : null,
+    img: d.poster ? [d.poster] : [],
+    compact,
+    progress: downloading ? d.ratio : -1,
+    paused: !!d.paused,
+    stats: downloading
+      ? [
+          `${pct}%${d.totalBytes != null ? `  ${fmtBytes(d.receivedBytes)} / ${fmtBytes(d.totalBytes)}` : ""}`,
+          fmtSpeed(d.bytesPerSec) || null,
+          fmtEta(d, t) || null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : null,
+    note: downloading ? noteText(d, t) : null,
+    status: d.status,
+    statusText:
+      d.status === "done"
+        ? `${t("Saved")}${d.streamLabel ? ` · ${d.streamLabel}` : ""}${d.totalBytes ? ` · ${fmtBytes(d.totalBytes)}` : ""}`
+        : d.status === "error"
+          ? errorText(d, t)
+          : d.status === "canceled"
+            ? t("Canceled")
+            : d.status === "interrupted"
+              ? t("Interrupted: re-download to finish")
+              : null,
+    subs: !subsShown ? null : d.subsState === "searching" ? t("finding subtitles…") : n > 0 ? (n === 1 ? t("1 subtitle") : t("{count} subtitles", { count: n })) : null,
+    subsAction: subsShown && d.subsState !== "searching" && n === 0 ? t("Get subtitles") : null,
+    buttons,
+  };
+}
+
 export function DownloadsView() {
   const t = useT();
   const items = useDownloads();
@@ -276,6 +348,152 @@ export function DownloadsView() {
     0,
   );
   const groups = useMemo(() => buildGroups(items), [items]);
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: "Downloads" and
+  // its summary, where files are kept and what's free, the Wi-Fi only and battery cards, the
+  // season searches still finding sources (Stop), then the films and the shows' episodes with
+  // their bar, speed, time left, subtitles and buttons (pause / resume, cancel, retry, play,
+  // delete, then Delete to confirm).
+  const { topKind, openPlayer } = useView();
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!confirmId) return;
+    const timer = window.setTimeout(() => setConfirmId(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [confirmId]);
+  const [wifiOnly, setWifiOnly] = useState<boolean | null>(() => (ANDROID ? nativeWifiOnly() : null));
+  const [bgAllowed, setBgAllowed] = useState<boolean | null>(() => (ANDROID ? nativeBgAllowed() : null));
+  useEffect(() => {
+    if (!ANDROID) return;
+    const recheck = () => setBgAllowed(nativeBgAllowed());
+    window.addEventListener("harbor:resume", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    return () => {
+      window.removeEventListener("harbor:resume", recheck);
+      document.removeEventListener("visibilitychange", recheck);
+    };
+  }, []);
+  const doneCount = items.filter((d) => d.status === "done").length;
+  const storage = useMemo(() => (ANDROID ? nativeStorage() : {}), [items.length, doneCount]);
+  const summary =
+    items.length === 0
+      ? t("Saved movies and episodes for offline watching")
+      : [
+          items.length === 1 ? t("1 item") : t("{count} items", { count: items.length }),
+          active > 0 ? t("{count} downloading", { count: active }) : null,
+          savedBytes > 0 ? t("{size} saved", { size: fmtBytes(savedBytes) }) : null,
+        ]
+          .filter(Boolean)
+          .join("  ·  ");
+  const nativeDownloads = useMemo(() => {
+    const waitingWifi = items.some((d) => d.code === "waiting_wifi");
+    const notices: Array<Record<string, unknown>> = [];
+    if (wifiOnly != null) {
+      notices.push({
+        id: "wifi",
+        icon: "wifi",
+        text: wifiOnly
+          ? waitingWifi
+            ? t("Waiting for Wi-Fi. Downloads don't use mobile data unless you allow it.")
+            : t("Downloads use Wi-Fi only.")
+          : t("Downloads also use mobile data."),
+        action: wifiOnly ? t("Use mobile data") : t("Wi-Fi only"),
+        actionOn: wifiOnly,
+        accent: waitingWifi && wifiOnly,
+      });
+    }
+    if (bgAllowed === false && (active > 0 || seasonJobs.length > 0)) {
+      notices.push({
+        id: "battery",
+        icon: "battery",
+        text: t("Downloads keep going when you leave the app. If your phone still stops them, let Harbor run without battery limits."),
+        action: t("Allow"),
+        actionOn: true,
+        accent: true,
+      });
+    }
+    return {
+      storage:
+        storage.free != null && storage.free >= 0
+          ? [
+              t("Stored in the app"),
+              (storage.used ?? 0) > 0 ? t("{size} used", { size: fmtBytes(storage.used ?? 0) }) : null,
+              t("{size} free on this phone", { size: fmtBytes(storage.free) }),
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : null,
+      notices,
+      jobs: seasonJobs.map((j) => ({
+        key: j.key,
+        text: t("Finding sources · {title} · {n}/{total}", {
+          title: `${j.title}${j.season != null ? ` S${j.season}` : ""}`,
+          n: Math.min(j.progress.done + 1, j.progress.total),
+          total: j.progress.total,
+        }),
+        stop: t("Stop"),
+      })),
+      groups: groups.map((g) => {
+        if (g.kind === "movie") return { key: g.item.id, title: null, items: [nativeDownloadItem(g.item, false, confirmId === g.item.id, t)] };
+        const eps = [...g.items].sort((a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0));
+        const bytes = eps.reduce((sum, d) => (d.status === "done" ? sum + (d.totalBytes ?? d.receivedBytes) : sum), 0);
+        return {
+          key: `show:${g.metaId}`,
+          title: g.title,
+          sub: `${eps.length === 1 ? t("1 episode") : t("{count} episodes", { count: eps.length })}${bytes > 0 ? `  ·  ${fmtBytes(bytes)}` : ""}`,
+          img: g.poster ? [g.poster] : [],
+          items: eps.map((d) => nativeDownloadItem(d, true, confirmId === d.id, t)),
+        };
+      }),
+    };
+  }, [t, items, groups, wifiOnly, bgAllowed, active, seasonJobs, storage, confirmId]);
+  const native = useNativeBrowsePage("downloads", {
+    active: topKind === "downloads",
+    t,
+    header: { title: t("Downloads"), size: 28, subtitle: summary },
+    rows: [],
+    downloads: nativeDownloads,
+    message:
+      items.length === 0
+        ? {
+            title: t("No downloads yet"),
+            text: ANDROID
+              ? t("Open any movie or show and tap the download button (or Download season on a show). It saves in the app with its subtitles for offline watching.")
+              : t("Open any movie or show, hover an episode, and click the download icon. Pick the exact source you want and it saves here for offline watching."),
+          }
+        : null,
+    onDownloads: (what, id) => {
+      if (what === "notice") {
+        if (id === "wifi" && wifiOnly != null) {
+          nativeSetWifiOnly(!wifiOnly);
+          setWifiOnly(!wifiOnly);
+        } else if (id === "battery") nativeBgRequest();
+        return;
+      }
+      if (what === "stopjob") return stopSeasonDownload(id);
+      const d = items.find((x) => x.id === id);
+      if (!d) return;
+      switch (what) {
+        case "pause":
+          return pauseDownload(d.id);
+        case "resume":
+        case "retry":
+          return resumeDownload(d.id);
+        case "cancel":
+          return cancelDownload(d.id);
+        case "play":
+          return playDownload(d, openPlayer);
+        case "delete":
+          return setConfirmId(d.id);
+        case "confirm":
+          setConfirmId(null);
+          return removeDownload(d.id);
+        case "subs":
+          return fetchDownloadSubtitles(d.id);
+      }
+    },
+  });
+  if (native) return <main className="flex-1 overflow-hidden bg-canvas" />;
 
   return (
     <main className="flex-1 overflow-y-auto bg-canvas px-5 pb-24 pt-24 sm:px-8 lg:px-12 lg:pt-28">
@@ -386,24 +604,7 @@ function DownloadRow({ d, compact = false }: { d: DownloadItem; compact?: boolea
     const timer = window.setTimeout(() => setConfirmDelete(false), 3500);
     return () => window.clearTimeout(timer);
   }, [confirmDelete]);
-  const playLocal = () => {
-    // Android: the saved file + the subtitles saved next to it.
-    const local = ANDROID ? nativeFiles(d.id) : null;
-    openPlayer({
-      meta: {
-        id: d.metaId,
-        type: d.season != null ? "series" : "movie",
-        name: d.title,
-        poster: d.poster ?? undefined,
-      },
-      episode: d.season != null && d.episode != null ? { season: d.season, episode: d.episode } : undefined,
-      url: local?.video ?? d.path,
-      title: d.title,
-      subtitle: d.subtitle ?? undefined,
-      subtitles: local?.subtitles.map((x) => ({ url: x.url, lang: x.lang, label: x.label })),
-      notWebReady: true,
-    });
-  };
+  const playLocal = () => playDownload(d, openPlayer);
   return (
     <li className="group flex items-center gap-4 rounded-2xl border border-edge-soft bg-elevated/40 p-3 transition-colors hover:bg-elevated/70">
       <div

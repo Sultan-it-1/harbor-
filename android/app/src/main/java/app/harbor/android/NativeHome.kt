@@ -437,6 +437,10 @@ class NativeHome(
             }
             if (m.queue != null) out.add(Section(T_QUEUE, -12))
             if (m.calendar?.cells?.isNotEmpty() == true) out.add(Section(T_CALENDAR, -14))
+            m.downloads?.let { d ->
+                if (d.storage != null || d.notices.isNotEmpty() || d.jobs.isNotEmpty()) out.add(Section(T_DL_TOP, -15))
+                d.groups.forEachIndexed { i, g -> out.add(Section(T_DL_GROUP, stableId("dl:" + g.key), start = i)) }
+            }
             if (m.message != null) out.add(Section(T_MESSAGE, -10))
             if (m.rows.isEmpty() && m.message == null && m.empty != null) out.add(Section(T_EMPTY, -7))
             out.add(Section(T_END, -4))
@@ -483,6 +487,8 @@ class NativeHome(
             T_WINNER -> WinnerHolder()
             T_CALBAR -> CalendarBarHolder()
             T_CALENDAR -> CalendarHolder()
+            T_DL_TOP -> DownloadsTopHolder()
+            T_DL_GROUP -> DownloadGroupHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -510,6 +516,8 @@ class NativeHome(
                 is QueueHolder -> m.queue?.let { holder.bind(it) }
                 is CalendarBarHolder -> m.calendar?.let { holder.bind(it) }
                 is CalendarHolder -> m.calendar?.let { holder.bind(it) }
+                is DownloadsTopHolder -> m.downloads?.let { holder.bind(it) }
+                is DownloadGroupHolder -> m.downloads?.groups?.getOrNull(items[position].start)?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is WinnerHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
@@ -1586,6 +1594,236 @@ class NativeHome(
                     setOnClickListener { act("cal", what = "day", i = index) }
                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
             }
+        }
+    }
+
+    // ---- downloads -----------------------------------------------------------------------------
+
+    private val danger get() = 0xFFE5484D.toInt()
+    private val amber get() = withAlpha(0xFFFCD34D.toInt(), 0.85f)
+
+    /** Where files are kept and how much is free, the Wi-Fi / battery cards, the season searches. */
+    private inner class DownloadsTopHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.setPaddingRelative(dp(20), 0, dp(20), dp(4))
+        }
+
+        fun bind(d: HomeDownloads) {
+            col.removeAllViews()
+            d.storage?.let {
+                col.addView(label(it, 12.5f).apply { setTextColor(colors.subtle) },
+                    LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(20) })
+            }
+            for (n in d.notices) {
+                val card = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPaddingRelative(dp(16), dp(12), dp(16), dp(12))
+                    background = if (n.accent) rounded(withAlpha(colors.accent, 0.1f), dp(16).toFloat(), dp(1), withAlpha(colors.accent, 0.25f))
+                    else rounded(withAlpha(colors.surface, 0.3f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+                }
+                val res = if (n.icon == "battery") R.drawable.ic_battery_charging else R.drawable.ic_wifi
+                card.addView(ImageView(ctx).apply { setImageDrawable(icon(res, colors.accent)) }, LinearLayout.LayoutParams(dp(19), dp(19)))
+                card.addView(label(n.text, 12.5f).apply { setTextColor(colors.muted); setLineSpacing(0f, 1.15f) },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12); marginEnd = dp(12) })
+                n.action?.let { a ->
+                    card.addView(label(a, 12.5f, bold = true, lines = 1).apply {
+                        gravity = Gravity.CENTER
+                        setPaddingRelative(dp(12), 0, dp(12), 0)
+                        setTextColor(if (n.actionOn) colors.canvas else colors.ink)
+                        background = focusable(rounded(if (n.actionOn) colors.accent else withAlpha(colors.ink, 0.1f), dp(8).toFloat()))
+                        isClickable = true
+                        isFocusable = true
+                        setOnClickListener { act("dl", what = "notice", text = n.id) }
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)))
+                }
+                col.addView(card, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(20) })
+            }
+            for (j in d.jobs) {
+                val card = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPaddingRelative(dp(16), dp(6), dp(8), dp(6))
+                    background = rounded(withAlpha(colors.surface, 0.4f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+                }
+                card.addView(android.widget.ProgressBar(ctx).apply {
+                    isIndeterminate = true
+                    indeterminateTintList = android.content.res.ColorStateList.valueOf(colors.subtle)
+                }, LinearLayout.LayoutParams(dp(16), dp(16)))
+                card.addView(label(j.text, 12.5f, lines = 1).apply { setTextColor(colors.muted) },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
+                card.addView(iconButton(R.drawable.ic_x, j.stop) { act("dl", what = "stopjob", text = j.key) })
+                col.addView(card, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
+            }
+        }
+    }
+
+    /** A 36dp icon button (the page's row buttons). */
+    private fun iconButton(res: Int, desc: String, tint: Int = colors.subtle, onTap: () -> Unit): View = FrameLayout(ctx).apply {
+        isClickable = true
+        isFocusable = true
+        contentDescription = desc
+        background = focusable(rounded(Color.TRANSPARENT, dp(8).toFloat()))
+        addView(ImageView(ctx).apply { setImageDrawable(icon(res, tint)) }, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
+        setOnClickListener { onTap() }
+        layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+    }
+
+    /** A film's download, or a show's card: its poster, name and count over its episodes' rows. */
+    private inner class DownloadGroupHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(20)
+                marginEnd = dp(20)
+                bottomMargin = dp(10)
+            }
+        }
+
+        fun bind(g: DlGroup) {
+            col.removeAllViews()
+            if (g.title == null) {
+                col.background = null
+                col.setPadding(0, 0, 0, 0)
+                g.items.firstOrNull()?.let { col.addView(row(it), LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)) }
+                return
+            }
+            col.background = rounded(withAlpha(colors.surface, 0.25f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            col.clipToOutline = true
+            col.outlineProvider = roundOutline(dp(16).toFloat())
+            val head = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPaddingRelative(dp(12), dp(10), dp(12), dp(10))
+            }
+            head.addView(poster(g.images, g.title, dp(36), dp(52), dp(6)))
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(label(g.title, 14f, bold = true, lines = 1).apply { setTextColor(colors.ink) })
+            g.sub?.let { texts.addView(label(it, 11.5f, lines = 1).apply { setTextColor(colors.subtle) }) }
+            head.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
+            col.addView(head, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            col.addView(View(ctx).apply { setBackgroundColor(withAlpha(colors.ink, 0.05f)) }, LinearLayout.LayoutParams(MATCH, dp(1)))
+            val list = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+            }
+            g.items.forEachIndexed { i, it ->
+                list.addView(row(it), LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (i > 0) topMargin = dp(6) })
+            }
+            col.addView(list, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+
+        private fun poster(urls: List<String>, seed: String, w: Int, h: Int, r: Int): View = NetImage(ctx).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            clipToOutline = true
+            outlineProvider = roundOutline(r.toFloat())
+            background = rounded(plate(seed), r.toFloat())
+            layoutParams = LinearLayout.LayoutParams(w, h)
+            if (urls.isNotEmpty()) images.load(this, urls, w, h)
+        }
+
+        private fun row(d: DlItem): View {
+            val line = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                background = rounded(withAlpha(colors.surface, 0.4f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            }
+            line.addView(if (d.compact) poster(d.images, d.title, dp(30), dp(44), dp(8)) else poster(d.images, d.title, dp(46), dp(68), dp(8)))
+            val mid = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.BOTTOM
+            }
+            top.addView(label(d.title, 14.5f, bold = true, lines = 1).apply { setTextColor(colors.ink) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            d.side?.let {
+                top.addView(label(it, 12f, lines = 1).apply { setTextColor(colors.subtle) },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
+            }
+            mid.addView(top, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            val info = FlowRow(ctx, dp(6), dp(2))
+            if (d.progress >= 0f) {
+                // The bar: the done part (at least a sliver) and the rest, by weight.
+                val done = d.progress.coerceIn(0.02f, 1f)
+                val track = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    background = rounded(withAlpha(colors.ink, 0.1f), dp(3).toFloat())
+                    clipToOutline = true
+                    outlineProvider = roundOutline(dp(3).toFloat())
+                    weightSum = 1f
+                }
+                track.addView(View(ctx).apply { background = rounded(if (d.paused) withAlpha(colors.ink, 0.35f) else colors.accent, dp(3).toFloat()) },
+                    LinearLayout.LayoutParams(0, MATCH, done))
+                mid.addView(track, LinearLayout.LayoutParams(MATCH, dp(6)).apply { topMargin = dp(8) })
+                d.stats?.let { info.addView(label(it, 11.5f, lines = 1).apply { setTextColor(colors.muted); fontFeatureSettings = "tnum" }) }
+                d.note?.let { info.addView(label("· $it", 11.5f, lines = 1).apply { setTextColor(amber) }) }
+            } else {
+                if (d.status == "done") {
+                    info.addView(ImageView(ctx).apply {
+                        setImageDrawable(icon(R.drawable.ic_check, colors.accent))
+                        layoutParams = ViewGroup.LayoutParams(dp(13), dp(13))
+                    })
+                }
+                d.statusText?.let {
+                    info.addView(label(it, 12f).apply {
+                        setTextColor(
+                            when (d.status) {
+                                "error" -> danger
+                                "canceled" -> colors.subtle
+                                "interrupted" -> amber
+                                else -> colors.muted
+                            },
+                        )
+                    })
+                }
+            }
+            d.subs?.let { info.addView(label("· $it", 11.5f, lines = 1).apply { setTextColor(colors.subtle) }) }
+            d.subsAction?.let { a ->
+                info.addView(label(a, 11.5f, bold = true, lines = 1).apply {
+                    setTextColor(colors.accent)
+                    setPaddingRelative(dp(8), dp(2), dp(8), dp(2))
+                    background = focusable(rounded(withAlpha(colors.accent, 0.15f), dp(6).toFloat()))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { act("dl", what = "subs", text = d.id) }
+                })
+            }
+            for (k in 0 until info.childCount) {
+                val c = info.getChildAt(k)
+                if (c.layoutParams == null) c.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            if (info.childCount > 0) mid.addView(info, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+            line.addView(mid, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(16); marginEnd = dp(8) })
+            for (b in d.buttons) {
+                if (b.id == "confirm") {
+                    line.addView(label(b.label, 12.5f, bold = true, lines = 1).apply {
+                        gravity = Gravity.CENTER
+                        setPaddingRelative(dp(12), 0, dp(12), 0)
+                        setTextColor(Color.WHITE)
+                        background = focusable(rounded(withAlpha(danger, 0.9f), dp(8).toFloat()))
+                        isClickable = true
+                        isFocusable = true
+                        setOnClickListener { act("dl", what = "confirm", text = d.id) }
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)))
+                    continue
+                }
+                val res = when (b.id) {
+                    "pause" -> R.drawable.ic_pause
+                    "resume", "play" -> R.drawable.ic_play
+                    "cancel" -> R.drawable.ic_x
+                    "retry" -> R.drawable.ic_rotate_cw
+                    else -> R.drawable.ic_trash_2
+                }
+                line.addView(iconButton(res, b.label) { act("dl", what = b.id, text = d.id) })
+            }
+            return line
         }
     }
 
@@ -3537,6 +3775,8 @@ class NativeHome(
         private const val T_WINNER = 20
         private const val T_CALBAR = 21
         private const val T_CALENDAR = 22
+        private const val T_DL_TOP = 23
+        private const val T_DL_GROUP = 24
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

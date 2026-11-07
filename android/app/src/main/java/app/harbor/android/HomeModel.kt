@@ -49,6 +49,8 @@ class HomeModel(
     val queue: HomeQueue? = null,
     /** The release calendar's month: its bar (previous / Today / month / next) and its grid. */
     val calendar: HomeCalendar? = null,
+    /** The downloads page: where files are kept, its notices, the season searches and the downloads. */
+    val downloads: HomeDownloads? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -283,6 +285,41 @@ class HomeModel(
                         },
                         labels = buildMap {
                             if (l != null) for (k in l.keys()) l.optString(k).takeIf { it.isNotEmpty() }?.let { put(k, it) }
+                        },
+                    )
+                },
+                downloads = o.optJSONObject("downloads")?.let { d ->
+                    HomeDownloads(
+                        storage = d.str("storage"),
+                        notices = d.optJSONArray("notices").objects().map { n ->
+                            DlNotice(id = n.str("id") ?: "", icon = n.str("icon") ?: "", text = n.str("text") ?: "", action = n.str("action"), accent = n.optBoolean("accent", false), actionOn = n.optBoolean("actionOn", false))
+                        },
+                        jobs = d.optJSONArray("jobs").objects().map { j -> DlJob(key = j.str("key") ?: "", text = j.str("text") ?: "", stop = j.str("stop") ?: "Stop") },
+                        groups = d.optJSONArray("groups").objects().map { g ->
+                            DlGroup(
+                                key = g.str("key") ?: "",
+                                title = g.str("title"),
+                                sub = g.str("sub"),
+                                images = g.optJSONArray("img").strings(),
+                                items = g.optJSONArray("items").objects().map { x ->
+                                    DlItem(
+                                        id = x.str("id") ?: "",
+                                        title = x.str("title") ?: "",
+                                        side = x.str("side"),
+                                        images = x.optJSONArray("img").strings(),
+                                        compact = x.optBoolean("compact", false),
+                                        progress = x.optDouble("progress", -1.0).toFloat(),
+                                        paused = x.optBoolean("paused", false),
+                                        stats = x.str("stats"),
+                                        note = x.str("note"),
+                                        status = x.str("status") ?: "",
+                                        statusText = x.str("statusText"),
+                                        subs = x.str("subs"),
+                                        subsAction = x.str("subsAction"),
+                                        buttons = x.optJSONArray("buttons").objects().map { b -> DlButton(id = b.str("id") ?: "", label = b.str("label") ?: "") },
+                                    )
+                                },
+                            )
                         },
                     )
                 },
@@ -603,6 +640,47 @@ class HomeCalendar(
 class CalCell(val day: Int, val inMonth: Boolean, val today: Boolean, val count: Int, val items: List<CalItem>, val more: String?)
 
 class CalItem(val title: String, val images: List<String>)
+
+/**
+ * The downloads page as it lists them. Taps send {a:"dl", what, text}: a button's id with the
+ * download's id ("pause", "resume", "cancel", "retry", "play", "delete", "confirm", "subs"),
+ * "notice" with a notice's id, "stopjob" with a season search's key.
+ */
+class HomeDownloads(val storage: String?, val notices: List<DlNotice>, val jobs: List<DlJob>, val groups: List<DlGroup>)
+
+/** A card over the list (Wi-Fi only, battery limits): its icon ("wifi", "battery"), text, button. */
+class DlNotice(val id: String, val icon: String, val text: String, val action: String?, val accent: Boolean, val actionOn: Boolean)
+
+/** A "Download season" still finding sources ("Finding sources · Show S1 · 3/10"), with Stop. */
+class DlJob(val key: String, val text: String, val stop: String)
+
+/** A film's download alone ([title] null), or a show's episodes under its poster, name and count. */
+class DlGroup(val key: String, val title: String?, val sub: String?, val images: List<String>, val items: List<DlItem>)
+
+/**
+ * A download: its poster, name ([side] beside it), then either the bar ([progress] 0..1, grey
+ * while [paused]) with [stats] and [note], or its state ([status]: done, error, canceled,
+ * interrupted; [statusText]); [subs] (how many subtitles) or [subsAction] ("Get subtitles");
+ * the [buttons] at its end.
+ */
+class DlItem(
+    val id: String,
+    val title: String,
+    val side: String?,
+    val images: List<String>,
+    val compact: Boolean,
+    val progress: Float,
+    val paused: Boolean,
+    val stats: String?,
+    val note: String?,
+    val status: String,
+    val statusText: String?,
+    val subs: String?,
+    val subsAction: String?,
+    val buttons: List<DlButton>,
+)
+
+class DlButton(val id: String, val label: String)
 
 /** A line of credits: a label and the people (a tap opens one), or a label and a [value]. */
 class CreditGroup(val label: String, val people: List<CriticPerson>, val value: String?)
