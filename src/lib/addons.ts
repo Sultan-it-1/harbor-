@@ -320,7 +320,10 @@ export async function loadAddonRows(
   // Big addons list dozens of catalogs each: ask for a bounded number, a few at a time, and
   // start each one's timeout when it really starts (a phone used to fire hundreds at once and
   // time them out while they were still queued).
-  const jobs = addons.flatMap((addon) =>
+  // The budget is shared fairly: every addon's first catalogs before anyone's next ones. Taking the
+  // first N in install order let two big addons use all of it, so addons further down (and a newly
+  // installed one, always last) never got a row.
+  const perAddon = addons.map((addon) =>
     (Array.isArray(addon.manifest.catalogs) ? addon.manifest.catalogs : [])
       .filter((c) => c && c.name && c.type && c.id && !NON_CONTENT_TYPES.has(c.type.toLowerCase()))
       .map((cat) => async (): Promise<AddonRow | null> => {
@@ -352,27 +355,58 @@ export async function loadAddonRows(
         }
       }),
   );
+  type Job = { addon: number; order: number; run: () => Promise<AddonRow | null> };
+  const ordered: Job[][] = [];
+  let order = 0;
+  for (let a = 0; a < perAddon.length; a++) ordered.push(perAddon[a].map((run) => ({ addon: a, order: order++, run })));
+  const picked = fairPick(ordered, Math.max(cap * 2, 48));
   // Phone: the shell's native fetch has 12 threads, so catalogs go 6 at a time and leave room for
   // posters and streams. Desktop and web have no such pool: all at once, as before.
-  const picked = jobs.slice(0, Math.max(cap * 2, 48));
-  const results = await runLimited(picked, isAndroidApp() ? 6 : picked.length);
-  if (!dedup) {
-    const out: AddonRow[] = [];
-    for (const r of results) {
-      if (r) out.push(r);
-    }
-    return out.slice(0, cap);
-  }
+  const results = await runLimited(
+    picked.map((j) => j.run),
+    isAndroidApp() ? 6 : picked.length,
+  );
+  const got: Array<Job & { row: AddonRow }> = [];
+  results.forEach((row, i) => {
+    if (row) got.push({ ...picked[i], row });
+  });
+  if (!dedup) return fairPick(groupByAddon(got), cap).map((g) => g.row);
   const seen = new Set<string>();
-  const deduped: AddonRow[] = [];
-  for (const r of results) {
-    if (!r) continue;
-    const key = normalizeName(r.name, r.type);
+  const deduped: typeof got = [];
+  for (const g of got) {
+    const key = normalizeName(g.row.name, g.row.type);
     if (seen.has(key)) continue;
     seen.add(key);
-    deduped.push(r);
+    deduped.push(g);
   }
-  return deduped.slice(0, cap);
+  return fairPick(groupByAddon(deduped), cap).map((g) => g.row);
+}
+
+/** Up to [limit] items, round-robin over the groups (each group's first, then each one's second…),
+ *  returned in their original order. */
+function fairPick<T extends { order: number }>(groups: T[][], limit: number): T[] {
+  const out: T[] = [];
+  for (let round = 0; out.length < limit; round++) {
+    let any = false;
+    for (const g of groups) {
+      if (round >= g.length) continue;
+      any = true;
+      out.push(g[round]);
+      if (out.length >= limit) break;
+    }
+    if (!any) break;
+  }
+  return out.sort((a, b) => a.order - b.order);
+}
+
+function groupByAddon<T extends { addon: number }>(items: T[]): T[][] {
+  const groups = new Map<number, T[]>();
+  for (const it of items) {
+    const g = groups.get(it.addon);
+    if (g) g.push(it);
+    else groups.set(it.addon, [it]);
+  }
+  return [...groups.values()];
 }
 
 export async function fetchAddonMeta(base: string, type: string, id: string): Promise<Meta | null> {

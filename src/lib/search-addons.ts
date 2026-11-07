@@ -22,16 +22,24 @@ export async function searchAddonCatalogs(
   const q = query.trim();
   if (!q) return { movies: [], series: [] };
 
+  // Shared fairly: every addon's first searchable catalog before anyone's second. Taking the first
+  // twelve in install order let the first addons use them all, so one installed later was never
+  // searched.
+  const perAddon = addons.map((addon) =>
+    (addon.manifest.catalogs ?? [])
+      .filter((c) => c?.type && c?.id && (c.type === "movie" || c.type === "series") && c.extra?.some((e) => e.name === "search"))
+      .map((c) => ({ addon, type: c.type, id: c.id })),
+  );
   const targets: Array<{ addon: Addon; type: string; id: string }> = [];
-  for (const addon of addons) {
-    for (const c of addon.manifest.catalogs ?? []) {
-      if (!c?.type || !c?.id) continue;
-      if (c.type !== "movie" && c.type !== "series") continue;
-      if (!c.extra?.some((e) => e.name === "search")) continue;
-      targets.push({ addon, type: c.type, id: c.id });
+  for (let round = 0; targets.length < MAX_CATALOGS; round++) {
+    let any = false;
+    for (const list of perAddon) {
+      if (round >= list.length) continue;
+      any = true;
+      targets.push(list[round]);
       if (targets.length >= MAX_CATALOGS) break;
     }
-    if (targets.length >= MAX_CATALOGS) break;
+    if (!any) break;
   }
   if (targets.length === 0) return { movies: [], series: [] };
 
@@ -78,7 +86,9 @@ export type AddonResultGroup = {
   metas: Meta[];
 };
 
-const MAX_GROUPS = 8;
+// About as many requests as before (8 x 6), spread over more addons: 12 addons, 4 catalogs each.
+const MAX_GROUPS = 12;
+const MAX_TARGETS_PER_GROUP = 4;
 const CAP_PER_GROUP = 14;
 
 export async function searchAddonGroups(addons: Addon[], query: string, run: SearchRun): Promise<AddonResultGroup[]> {
@@ -92,7 +102,7 @@ export async function searchAddonGroups(addons: Addon[], query: string, run: Sea
       if (c.type === "other") continue;
       if (!c.extra?.some((e) => e.name === "search")) continue;
       const entry = byAddon.get(addon.manifest.id) ?? { addon, targets: [] };
-      if (entry.targets.length >= 6) continue;
+      if (entry.targets.length >= MAX_TARGETS_PER_GROUP) continue;
       entry.targets.push({ type: c.type, id: c.id });
       byAddon.set(addon.manifest.id, entry);
     }
