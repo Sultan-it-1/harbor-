@@ -300,6 +300,7 @@ export function nativeLabels(t: T, customize: string) {
     director: t("Director"),
     close: t("Close"),
     source: t("Open review source"),
+    live: t("Live"),
   };
 }
 
@@ -455,7 +456,7 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action" | "live" | "guide" | "channel" | "livehero" | "sports";
   /** Choices under the title (a series' seasons) and what picking one does. */
   chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
   onRowChip?: (id: string) => void;
@@ -545,6 +546,9 @@ export type NativeCardInput = {
   tone?: "accent" | "plain" | "danger";
   button?: string | null;
   busy?: boolean;
+  /** Live TV: the channel's logo and whether the programme's bar ([progress]) shows. */
+  logo?: string | null;
+  bar?: boolean;
 };
 
 /** The page's row editor (Discover, Movies, Shows): the page-rows customisation it edits. */
@@ -617,6 +621,8 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
         tone: c.tone ?? null,
         button: c.button ?? null,
         busy: !!c.busy,
+        logo: c.logo && isUrlOrData(c.logo) ? c.logo : null,
+        bar: !!c.bar,
       })),
       chips: r.chips ?? null,
       tools: r.tools ?? [],

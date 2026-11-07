@@ -102,6 +102,8 @@ class HomeModel(
                             tone = c.str("tone"),
                             button = c.str("button"),
                             busy = c.optBoolean("busy", false),
+                            logo = c.str("logo"),
+                            bar = c.optBoolean("bar", false),
                             desc = c.str("desc"),
                         )
                     }
@@ -139,6 +141,11 @@ class HomeModel(
                             "list" -> HomeRow.Kind.LIST
                             "winners" -> HomeRow.Kind.WINNERS
                             "action" -> HomeRow.Kind.ACTION
+                            "live" -> HomeRow.Kind.LIVE
+                            "guide" -> HomeRow.Kind.GUIDE
+                            "channel" -> HomeRow.Kind.CHANNEL
+                            "livehero" -> HomeRow.Kind.LIVEHERO
+                            "sports" -> HomeRow.Kind.SPORTS
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -439,7 +446,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -497,6 +504,10 @@ class HomeCard(
     val tone: String? = null,
     val button: String? = null,
     val busy: Boolean = false,
+    /** Live TV: the channel's logo (beside its name, or in the picture's place) and whether
+     *  the programme's bar ([progress]) shows. */
+    val logo: String? = null,
+    val bar: Boolean = false,
 )
 
 /** A row's controls in the page's editor. [numerals] / [hero]: 1 on, 0 off, -1 not offered. */

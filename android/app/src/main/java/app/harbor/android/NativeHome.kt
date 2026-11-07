@@ -363,6 +363,8 @@ class NativeHome(
     private fun logoWidth(): Int = min(((width() - gutter) / 2.6f).toInt(), dp(172))
     /** One card the width of the screen (Critics' Pick). */
     private fun featureWidth(): Int = width() - 2 * gutter
+    /** Live TV's landscape cards: most of the width, the next one peeking. */
+    private fun liveWidth(): Int = min(((width() - 2 * dp(16)) * 0.88f).toInt(), dp(360))
 
     // ---- outer list: hero, Customize, rows -----------------------------------------------------
 
@@ -424,6 +426,11 @@ class NativeHome(
                     if (r.edit?.hidden != true) r.items.forEachIndexed { i, _ -> out.add(Section(T_EPISODE, base + i, r, start = i)) }
                     continue
                 }
+                if (r.kind == HomeRow.Kind.LIVEHERO) {
+                    // Live TV's spotlight: one big card at a time.
+                    if (r.items.isNotEmpty()) out.add(Section(T_LIVEHERO, stableId(r.key), r))
+                    continue
+                }
                 if (!r.grid) {
                     out.add(Section(T_ROW, stableId(r.key), r))
                     continue
@@ -432,7 +439,11 @@ class NativeHome(
                 val base = stableId(r.key) shl 20
                 if (r.title.isNotBlank() || !r.note.isNullOrBlank()) out.add(Section(T_GRID_TITLE, base - 1, r))
                 val cols = gridCols(r)
-                val type = if (r.kind == HomeRow.Kind.TILE) T_GRID_TILE else T_GRID_POSTER
+                val type = when (r.kind) {
+                    HomeRow.Kind.TILE -> T_GRID_TILE
+                    HomeRow.Kind.CHANNEL -> T_GRID_CHANNEL
+                    else -> T_GRID_POSTER
+                }
                 var start = 0
                 var line = 0L
                 while (start < r.items.size) {
@@ -486,6 +497,8 @@ class NativeHome(
             T_MESSAGE -> MessageHolder()
             T_GRID_POSTER -> GridLineHolder(C_POSTER)
             T_GRID_TILE -> GridLineHolder(C_TILE)
+            T_GRID_CHANNEL -> GridLineHolder(C_CHANNEL)
+            T_LIVEHERO -> LiveHeroHolder()
             T_DETAIL -> DetailHolder()
             T_EPISODE -> EpisodeHolder()
             T_LISTITEM -> ListItemHolder()
@@ -521,6 +534,7 @@ class NativeHome(
                 is GridLineHolder -> items[position].row?.let { holder.bind(it, items[position].start) }
                 is DetailHolder -> m.detail?.let { holder.bind(it) }
                 is QueueHolder -> m.queue?.let { holder.bind(it) }
+                is LiveHeroHolder -> items[position].row?.let { holder.bind(it) }
                 is CalendarBarHolder -> m.calendar?.let { holder.bind(it) }
                 is CalendarHolder -> m.calendar?.let { holder.bind(it) }
                 is DownloadsTopHolder -> m.downloads?.let { holder.bind(it) }
@@ -1957,6 +1971,444 @@ class NativeHome(
         }
     }
 
+    // ---- Live TV ---------------------------------------------------------------------------------
+
+    private val liveRed get() = 0xFFE5484D.toInt()
+
+    /** "● LIVE": the page's red label (on a dark pill over pictures). */
+    private fun liveLabel(sizeSp: Float, pill: Boolean): LinearLayout = LinearLayout(ctx).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        if (pill) {
+            setPaddingRelative(dp(9), 0, dp(10), 0)
+            background = rounded(withAlpha(colors.canvas, 0.9f), dp(11).toFloat())
+        }
+        addView(View(ctx).apply {
+            background = GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(liveRed) }
+        }, LinearLayout.LayoutParams(dp(6), dp(6)).apply { marginEnd = dp(6) })
+        addView(label((model?.label("live", "Live") ?: "Live").let { if (model?.rtl == true) it else it.uppercase() }, sizeSp, bold = true, lines = 1).apply {
+            setTextColor(liveRed)
+            letterSpacing = if (model?.rtl == true) 0f else 0.16f
+        })
+    }
+
+    /** A programme's thin red bar (how far in), weighted like the downloads' bar. */
+    private fun liveBar(progress: Float, heightDp: Int, track: Int): LinearLayout = LinearLayout(ctx).apply {
+        orientation = LinearLayout.HORIZONTAL
+        weightSum = 1f
+        background = rounded(track, dp(2).toFloat())
+        clipToOutline = true
+        outlineProvider = roundOutline(dp(2).toFloat())
+        addView(View(ctx).apply { setBackgroundColor(liveRed) }, LinearLayout.LayoutParams(0, MATCH, progress.coerceIn(0f, 1f)))
+        layoutParams = LinearLayout.LayoutParams(MATCH, dp(heightDp))
+    }
+
+    /**
+     * Live TV's cards, as the page draws them:
+     * - [C_LIVE] a channel now (16:9): the programme's picture (or the channel's logo), "● LIVE",
+     *   the number, logo and name, the programme, its bar and the time left;
+     * - [C_GUIDE] On now: the logo, "● LIVE", the number and name, the programme and its bar,
+     *   "Next 21:00 · …";
+     * - [C_CHANNEL] the channel grid: the title's poster or the logo, "● LIVE", the name, the
+     *   programme with the time left and its bar (or the channel's group).
+     * Card fields: title, sub (channel name / programme), kicker (number), images (picture),
+     * logo, progress + bar, desc (time left / next / group).
+     */
+    private inner class LiveFace(private val kind: Int) {
+        val root: ViewGroup = if (kind == C_GUIDE || kind == C_CHANNEL || kind == C_SPORT) LinearLayout(ctx) else FrameLayout(ctx)
+
+        fun bind(c: HomeCard, w: Int) {
+            root.removeAllViews()
+            when (kind) {
+                C_GUIDE -> guide(c, w)
+                C_CHANNEL -> channel(c, w)
+                C_SPORT -> sport(c, w)
+                else -> now(c, w)
+            }
+        }
+
+        /**
+         * A game, as the page's score card: the state (red "● 2nd 12:31" while live, "Final",
+         * or the start time) and the league, then each side's logo, short name and score
+         * (the loser dimmed). Fields: title / sub = away / home, rating / desc = their scores,
+         * images / logo = their logos, kicker = state text, tone = accent (live) / plain (final)
+         * / otherwise not started, button = league,
+         * rank = 1 away dimmed, 2 home dimmed.
+         */
+        private fun sport(c: HomeCard, w: Int) {
+            val col = root as LinearLayout
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = LinearLayout.LayoutParams(w, dp(96))
+            col.setPadding(dp(12), dp(12), dp(12), dp(12))
+            col.background = rounded(colors.surface, dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.07f))
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            // (accent = live, plain = final, otherwise not started)
+            val state = when (c.tone) {
+                "accent" -> "in"
+                "plain" -> "post"
+                else -> "pre"
+            }
+            top.addView(when (state) {
+                "in" -> LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPaddingRelative(dp(6), 0, dp(6), 0)
+                    background = rounded(liveRed, dp(4).toFloat())
+                    addView(View(ctx).apply { background = GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(Color.WHITE) } }, LinearLayout.LayoutParams(dp(6), dp(6)).apply { marginEnd = dp(4) })
+                    addView(label((c.kicker ?: "").uppercase(), 10.5f, bold = true, lines = 1).apply { setTextColor(Color.WHITE) })
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(18))
+                }
+                else -> label(if (state == "post") (c.kicker ?: "").uppercase() else c.kicker ?: "", 11f, bold = true, lines = 1).apply {
+                    setTextColor(if (state == "post") colors.muted else colors.subtle)
+                }
+            })
+            top.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
+            top.addView(label((c.button ?: "").uppercase(), 10f, bold = true, lines = 1).apply { setTextColor(colors.subtle) })
+            col.addView(top)
+            col.addView(View(ctx), LinearLayout.LayoutParams(MATCH, 0, 1f))
+            val active = state == "in" || state == "post"
+            listOf(Triple(c.title, c.rating, (c.rank and 1) != 0), Triple(c.sub ?: "", c.desc, (c.rank and 2) != 0)).forEachIndexed { i, (name, score, dim) ->
+                val line = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                val logo = NetImage(ctx).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    background = GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(withAlpha(colors.canvas, 0.6f)) }
+                }
+                line.addView(logo, LinearLayout.LayoutParams(dp(20), dp(20)))
+                (if (i == 0) c.images.firstOrNull() else c.logo)?.takeIf { it.isNotBlank() }?.let { u ->
+                    images.load(logo, listOf(u), dp(20), dp(20), alpha = true) { ok -> if (ok) logo.background = null }
+                }
+                line.addView(label(name.uppercase(), 13f, bold = true, lines = 1).apply { setTextColor(if (dim) colors.subtle else colors.ink) },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
+                val position = score != null && Regex("^\\d+(st|nd|rd|th)$").matches(score)
+                line.addView(label(score ?: "", if (position) 13f else 20f, bold = true, lines = 1).apply {
+                    fontFeatureSettings = "tnum"
+                    textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+                    setTextColor(if (active) (if (dim) colors.muted else colors.ink) else colors.subtle)
+                }, LinearLayout.LayoutParams(if (position) ViewGroup.LayoutParams.WRAP_CONTENT else dp(36), ViewGroup.LayoutParams.WRAP_CONTENT))
+                col.addView(line, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (i > 0) topMargin = dp(2) })
+            }
+        }
+
+        private fun tvIcon(sizeDp: Int): ImageView = ImageView(ctx).apply {
+            setImageDrawable(icon(R.drawable.ic_tv, colors.subtle))
+            layoutParams = FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER)
+        }
+
+        private fun now(c: HomeCard, w: Int) {
+            val box = root as FrameLayout
+            val h = w * 9 / 16
+            box.layoutParams = LinearLayout.LayoutParams(w, h)
+            box.clipToOutline = true
+            box.outlineProvider = roundOutline(dp(8).toFloat())
+            box.background = rounded(colors.surface, dp(8).toFloat())
+            box.foreground = rounded(Color.TRANSPARENT, dp(8).toFloat(), dp(1), withAlpha(colors.ink, 0.07f))
+            val logoBox = FrameLayout(ctx).apply {
+                setBackgroundColor(withAlpha(colors.surface, 0.7f))
+                visibility = View.GONE
+            }
+            val bigLogo = NetImage(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+            logoBox.addView(bigLogo, FrameLayout.LayoutParams((w * 0.78f).toInt(), (h * 0.64f).toInt(), Gravity.CENTER))
+            box.addView(logoBox, FrameLayout.LayoutParams(MATCH, MATCH))
+            val art = NetImage(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+            box.addView(art, FrameLayout.LayoutParams(MATCH, MATCH))
+            val showLogo = {
+                art.visibility = View.GONE
+                logoBox.visibility = View.VISIBLE
+                if (c.logo != null) {
+                    images.load(bigLogo, listOf(c.logo), (w * 0.78f).toInt(), (h * 0.64f).toInt(), alpha = true) { ok ->
+                        if (!ok) logoBox.addView(tvIcon(34))
+                    }
+                } else {
+                    logoBox.addView(tvIcon(34))
+                }
+            }
+            if (c.images.isNotEmpty()) images.load(art, c.images, w, h) { ok -> if (!ok) showLogo() } else showLogo()
+            box.addView(View(ctx).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.35f), Color.TRANSPARENT))
+            }, FrameLayout.LayoutParams(MATCH, MATCH))
+            box.addView(liveLabel(10.5f, true), FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(22), Gravity.TOP or Gravity.START).apply {
+                marginStart = dp(12)
+                topMargin = dp(12)
+            })
+            val bottom = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(14), dp(14), dp(14))
+            }
+            val line = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            c.kicker?.let { line.addView(label(it, 11.5f, lines = 1).apply { setTextColor(colors.subtle); fontFeatureSettings = "tnum" }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) }) }
+            if (c.images.isNotEmpty() && c.logo != null) {
+                val small = NetImage(ctx).apply { scaleType = ImageView.ScaleType.FIT_START }
+                line.addView(small, LinearLayout.LayoutParams(dp(40), dp(16)).apply { marginEnd = dp(6) })
+                images.load(small, listOf(c.logo), dp(52), dp(16), alpha = true) { ok -> if (!ok) small.visibility = View.GONE }
+            }
+            line.addView(label(c.sub ?: "", 11.5f, lines = 1).apply { setTextColor(colors.muted) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            bottom.addView(line)
+            bottom.addView(label(c.title, 14.5f, bold = true, lines = 1).apply { setTextColor(colors.ink) }, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            if (c.bar) {
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                row.addView(liveBar(c.progress, 3, withAlpha(colors.canvas, 0.55f)).apply { layoutParams = LinearLayout.LayoutParams(0, dp(3), 1f) })
+                c.desc?.let { row.addView(label(it, 10.5f, lines = 1).apply { setTextColor(colors.subtle) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) }) }
+                bottom.addView(row, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            }
+            box.addView(bottom, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        }
+
+        private fun guide(c: HomeCard, w: Int) {
+            val col = root as LinearLayout
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = LinearLayout.LayoutParams(w, dp(132))
+            col.setPadding(dp(14), dp(14), dp(14), dp(14))
+            col.background = rounded(colors.surface, dp(8).toFloat(), dp(1), withAlpha(colors.ink, 0.07f))
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val logoBox = FrameLayout(ctx).apply { background = rounded(withAlpha(colors.canvas, 0.6f), dp(4).toFloat()) }
+            if (c.logo != null) {
+                val lg = NetImage(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+                logoBox.addView(lg, FrameLayout.LayoutParams(dp(40), dp(20), Gravity.CENTER))
+                images.load(lg, listOf(c.logo), dp(40), dp(20), alpha = true) { ok -> if (!ok) logoBox.addView(tvIcon(14)) }
+            } else {
+                logoBox.addView(tvIcon(14))
+            }
+            top.addView(logoBox, LinearLayout.LayoutParams(dp(48), dp(28)))
+            top.addView(liveLabel(10.5f, false), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
+            top.addView(label(listOfNotNull(c.kicker, c.sub).joinToString(" "), 11.5f, lines = 1).apply {
+                setTextColor(colors.subtle)
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
+            col.addView(top)
+            col.addView(View(ctx), LinearLayout.LayoutParams(MATCH, 0, 1f))
+            col.addView(label(c.title, 14f, bold = true, lines = 1).apply { setTextColor(colors.ink) })
+            if (c.bar) col.addView(liveBar(c.progress, 3, withAlpha(colors.canvas, 0.55f)).apply { (layoutParams as LinearLayout.LayoutParams).topMargin = dp(6) })
+            col.addView(View(ctx), LinearLayout.LayoutParams(MATCH, 0, 1f))
+            col.addView(label(c.desc ?: "", 11.5f, lines = 1).apply { setTextColor(colors.subtle) })
+        }
+
+        private fun channel(c: HomeCard, w: Int) {
+            val col = root as LinearLayout
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = LinearLayout.LayoutParams(w, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.clipToOutline = true
+            col.outlineProvider = roundOutline(dp(16).toFloat())
+            col.background = rounded(colors.surface, dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.07f))
+            val poster = c.images.isNotEmpty()
+            val top = FrameLayout(ctx).apply {
+                setBackgroundColor(if (poster) colors.canvas else withAlpha(colors.surface, 0.7f))
+            }
+            val topH = if (poster) dp(160) else dp(90)
+            if (poster) {
+                val img = NetImage(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+                top.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                top.addView(View(ctx).apply {
+                    background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(withAlpha(colors.canvas, 0.85f), Color.TRANSPARENT, Color.TRANSPARENT))
+                }, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, c.images, w, topH)
+            } else if (c.logo != null) {
+                val lg = NetImage(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+                top.addView(lg, FrameLayout.LayoutParams(MATCH, MATCH).apply { setMargins(dp(12), dp(12), dp(12), dp(12)) })
+                images.load(lg, listOf(c.logo), w, topH, alpha = true) { ok -> if (!ok) top.addView(tvIcon(22)) }
+            } else {
+                top.addView(tvIcon(22))
+            }
+            top.addView(liveLabel(10f, true), FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(20), Gravity.TOP or Gravity.START).apply {
+                marginStart = dp(10)
+                topMargin = dp(10)
+            })
+            col.addView(top, LinearLayout.LayoutParams(MATCH, topH))
+            val body = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+            }
+            body.addView(label(c.title, 14.5f, bold = true, lines = 1).apply { setTextColor(colors.ink) })
+            if (c.sub != null) {
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.BOTTOM
+                }
+                row.addView(label(c.sub, 12.5f, lines = 1).apply { setTextColor(colors.muted) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                c.desc?.let { row.addView(label(it, 10.5f, lines = 1).apply { setTextColor(colors.subtle) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) }) }
+                body.addView(row, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+                if (c.bar) body.addView(liveBar(c.progress, 3, withAlpha(colors.canvas, 0.55f)).apply { (layoutParams as LinearLayout.LayoutParams).topMargin = dp(6) })
+            } else {
+                body.addView(label(c.desc ?: "", 12.5f, lines = 1).apply { setTextColor(colors.subtle) }, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            }
+            col.addView(body)
+        }
+    }
+
+    /**
+     * Live TV's spotlight, as the page shows it: one channel at a time (every 9 s the next), its
+     * programme's picture (or its logo, large), the channel's logo in the corner, the dots,
+     * "LIVE" with the time left, the programme in large type, "channel · group", the red bar
+     * along the bottom. A tap plays it.
+     */
+    private inner class LiveHeroHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val wrap = itemView as FrameLayout
+        private val card = FrameLayout(ctx)
+        private var row: HomeRow? = null
+        private var idx = 0
+        private var key = ""
+        private val turn = Runnable { advance() }
+
+        init {
+            wrap.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            wrap.setPaddingRelative(dp(16), 0, dp(16), dp(32))
+            card.clipToOutline = true
+            card.outlineProvider = roundOutline(dp(8).toFloat())
+            card.isClickable = true
+            card.isFocusable = true
+            card.setOnClickListener { row?.let { act("open", row = it.key, i = idx) } }
+            wrap.addView(card, FrameLayout.LayoutParams(MATCH, dp(420)))
+            wrap.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) = schedule()
+                override fun onViewDetachedFromWindow(v: View) {
+                    wrap.removeCallbacks(turn)
+                }
+            })
+        }
+
+        private fun schedule() {
+            wrap.removeCallbacks(turn)
+            if ((row?.items?.size ?: 0) > 1) wrap.postDelayed(turn, 9000)
+        }
+
+        private fun advance() {
+            val r = row ?: return
+            if (r.items.size < 2) return
+            idx = (idx + 1) % r.items.size
+            draw(true)
+            schedule()
+        }
+
+        fun bind(r: HomeRow) {
+            val k = r.items.joinToString("|") { it.sub + it.title }
+            if (k != key) {
+                if (r.items.map { it.sub } != row?.items?.map { it.sub }) idx = 0
+                key = k
+            }
+            row = r
+            if (idx >= r.items.size) idx = 0
+            draw(false)
+            schedule()
+        }
+
+        private fun draw(fade: Boolean) {
+            val r = row ?: return
+            val c = r.items.getOrNull(idx) ?: return
+            val rtl = model?.rtl == true
+            val w = width() - 2 * dp(16)
+            val h = dp(420)
+            card.removeAllViews()
+            card.setBackgroundColor(colors.canvas)
+            card.contentDescription = listOfNotNull(c.title, c.sub).joinToString(" · ")
+            val art = NetImage(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+            val big = NetImage(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+            card.addView(big, FrameLayout.LayoutParams((w * 0.4f).toInt(), (h * 0.42f).toInt(), Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = (h * 0.38f - h * 0.21f).toInt() })
+            card.addView(art, FrameLayout.LayoutParams(MATCH, MATCH))
+            val logoInstead = {
+                art.visibility = View.GONE
+                if (c.logo != null) images.load(big, listOf(c.logo), (w * 0.4f).toInt(), (h * 0.42f).toInt(), alpha = true)
+            }
+            if (c.images.isNotEmpty()) images.load(art, c.images, w, h) { ok -> if (!ok) logoInstead() } else logoInstead()
+            card.addView(View(ctx).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.35f), Color.TRANSPARENT))
+            }, FrameLayout.LayoutParams(MATCH, MATCH))
+            card.addView(View(ctx).apply {
+                background = GradientDrawable(
+                    if (rtl) GradientDrawable.Orientation.RIGHT_LEFT else GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(withAlpha(colors.canvas, 0.65f), Color.TRANSPARENT, Color.TRANSPARENT),
+                )
+            }, FrameLayout.LayoutParams(MATCH, MATCH))
+            // The channel's logo in the corner.
+            if (c.logo != null) {
+                val bug = FrameLayout(ctx).apply {
+                    background = rounded(withAlpha(colors.canvas, 0.85f), dp(8).toFloat())
+                    setPadding(dp(12), 0, dp(12), 0)
+                }
+                val lg = NetImage(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+                bug.addView(lg, FrameLayout.LayoutParams(dp(92), dp(28), Gravity.CENTER))
+                images.load(lg, listOf(c.logo), dp(92), dp(28), alpha = true) { ok -> if (!ok) bug.visibility = View.GONE }
+                card.addView(bug, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48), Gravity.TOP or Gravity.START).apply {
+                    marginStart = dp(24)
+                    topMargin = dp(24)
+                })
+            }
+            // The dots (a tap shows that one).
+            if (r.items.size > 1) {
+                val dots = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                r.items.indices.forEach { i ->
+                    dots.addView(View(ctx).apply {
+                        background = rounded(if (i == idx) colors.ink else withAlpha(colors.muted, 0.6f), dp(3).toFloat())
+                        isClickable = true
+                        setOnClickListener {
+                            idx = i
+                            draw(true)
+                            schedule()
+                        }
+                    }, LinearLayout.LayoutParams(if (i == idx) dp(32) else dp(16), dp(6)).apply { marginStart = dp(8) })
+                }
+                card.addView(dots, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+                    marginEnd = dp(24)
+                    topMargin = dp(24)
+                })
+            }
+            val text = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(24), 0, dp(24), dp(28))
+            }
+            val badges = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            badges.addView(label((model?.label("live", "Live") ?: "Live").let { if (rtl) it else it.uppercase() }, 11f, bold = true, lines = 1).apply {
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                letterSpacing = if (rtl) 0f else 0.16f
+                setPaddingRelative(dp(10), 0, dp(10), 0)
+                background = rounded(liveRed, dp(6).toFloat())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(24)))
+            c.desc?.let {
+                badges.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_rotate_ccw, colors.ink)) }, LinearLayout.LayoutParams(dp(14), dp(14)).apply { marginStart = dp(12) })
+                badges.addView(label(it, 13f, bold = true, lines = 1).apply { setTextColor(colors.ink) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) })
+            }
+            text.addView(badges)
+            text.addView(label(c.title, 34f, bold = true, lines = 2).apply {
+                setTextColor(colors.ink)
+                typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                setLineSpacing(0f, 1.04f)
+                maxWidth = (w * 0.88f).toInt()
+            }, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+            c.sub?.let { text.addView(label(it, 14f, bold = true, lines = 1).apply { setTextColor(colors.muted) }, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) }) }
+            card.addView(text, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+            if (c.bar) {
+                card.addView(liveBar(c.progress, 5, 0x59000000).apply {
+                    background = null
+                    setBackgroundColor(0x59000000)
+                    clipToOutline = false
+                    layoutParams = FrameLayout.LayoutParams(MATCH, dp(5), Gravity.BOTTOM)
+                })
+            }
+            if (fade) {
+                text.alpha = 0f
+                text.translationY = dp(8).toFloat()
+                text.animate().alpha(1f).translationY(0f).setDuration(420).start()
+            }
+        }
+    }
+
     // ---- The discovery queue -------------------------------------------------------------------
 
     /**
@@ -2933,6 +3385,10 @@ class NativeHome(
             HomeRow.Kind.TILE -> C_TILE
             HomeRow.Kind.LOGO -> C_LOGO
             HomeRow.Kind.FEATURE -> C_FEATURE
+            HomeRow.Kind.LIVE -> C_LIVE
+            HomeRow.Kind.GUIDE -> C_GUIDE
+            HomeRow.Kind.CHANNEL -> C_CHANNEL
+            HomeRow.Kind.SPORTS -> C_SPORT
             else -> C_POSTER
         }
 
@@ -2981,6 +3437,8 @@ class NativeHome(
         private val kicker = label("", 11.5f, bold = true, lines = 1)
         private val stats = LinearLayout(ctx)
         private val featurePlay = LinearLayout(ctx)
+        /** Live TV's card (a channel now, On now, the channel grid), when this is one. */
+        private var live: LiveFace? = null
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -3127,7 +3585,14 @@ class NativeHome(
                 }
             }
             if (!titleBelow) title.visibility = View.GONE
+            if (kind == C_LIVE || kind == C_GUIDE || kind == C_CHANNEL || kind == C_SPORT) {
+                // Live TV's cards are drawn by their own face, in the poster's place.
+                box.visibility = View.GONE
+                title.visibility = View.GONE
+                live = LiveFace(kind).also { col.addView(it.root, 0) }
+            }
         }
+
 
         private fun tap(what: String) {
             val r = row ?: return
@@ -3149,6 +3614,11 @@ class NativeHome(
 
         fun bind(r: HomeRow, c: HomeCard) {
             row = r
+            live?.let {
+                it.bind(c, if (fixedWidth > 0) fixedWidth else if (kind == C_SPORT) dp(260) else liveWidth())
+                col.contentDescription = listOfNotNull(c.sub, c.title).joinToString(" · ")
+                return
+            }
             val w = if (fixedWidth > 0) fixedWidth else when (kind) {
                 C_CW -> cwWidth()
                 C_RANK -> rankWidth()
@@ -3908,6 +4378,8 @@ class NativeHome(
         private const val T_DL_TOP = 23
         private const val T_DL_GROUP = 24
         private const val T_ACTION = 25
+        private const val T_GRID_CHANNEL = 26
+        private const val T_LIVEHERO = 27
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101
@@ -3917,6 +4389,10 @@ class NativeHome(
         private const val C_LOGO = 105
         private const val C_FEATURE = 106
         private const val C_LEAD = 107
+        private const val C_LIVE = 108
+        private const val C_GUIDE = 109
+        private const val C_CHANNEL = 110
+        private const val C_SPORT = 111
         /** The hero turns to its next slide after this long. */
         private const val HERO_TURN_MS = 15_000L
     }

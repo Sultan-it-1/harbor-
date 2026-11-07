@@ -27,6 +27,9 @@ import { useIptvPlaylist } from "./live/hooks/use-iptv-playlist";
 import { MultiviewView } from "./multiview";
 import { ViewModeToggle, type ViewMode } from "./live/view-mode-toggle";
 import { isPhoneLayout, isWindowsDesktop } from "@/lib/platform";
+import { useNativeLive } from "./live/use-native-live";
+import { SportsCustomizeModal } from "./live/live-home/sports/sports-customize-modal";
+import { DEFAULT_SPORTS_LEAGUES } from "@/lib/sports/espn";
 
 const ACTIVE_KEY = "harbor.iptv.active";
 const MODE_KEY = "harbor.iptv.viewMode";
@@ -71,8 +74,8 @@ function writeMode(m: ViewMode) {
 
 export function LiveView({ active }: { active: boolean }) {
   const t = useT();
-  const { settings } = useSettings();
-  const { openMeta } = useView();
+  const { settings, update } = useSettings();
+  const { openMeta, topKind } = useView();
   const sources = settings.iptvPlaylists;
 
   const [activeId, setActiveId] = useState<string | null>(() => readActiveId());
@@ -242,6 +245,104 @@ export function LiveView({ active }: { active: boolean }) {
     !!playlist && sortedGroups.length > 0 && mode !== "multiview" && mode !== "home" && state.kind !== "error";
   const catsLabel =
     group === null ? t("Categories") : group === FAVORITES_GROUP_KEY ? t("Favorites") : group;
+
+  // Android: drawn natively (see ./live/use-native-live). The playlist menu, the categories
+  // drawer and the leagues window are the page's own and open over it while it steps aside.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerRequest, setPickerRequest] = useState(0);
+  const [sportsOpen, setSportsOpen] = useState(false);
+  const native = useNativeLive({
+    active: active && topKind === "live",
+    mode,
+    setMode,
+    hasSources: sources.length > 0,
+    sourceName: managedSources.find((s) => s.id === activeId)?.name ?? t("No playlist"),
+    channelCount: playlist?.channels.length ?? 0,
+    stateKind: state.kind,
+    errorMessage: state.kind === "error" ? state.message : null,
+    onRetry: () => {
+      if (activeId) clearPlaylistCache(activeId);
+      refresh();
+    },
+    onOpenPicker: () => setPickerRequest((n) => n + 1),
+    pickerOpen,
+    catsOpen,
+    onOpenCats: () => setCatsOpen(true),
+    hasCategories: !!playlist && sortedGroups.length > 0 && mode === "grid" && state.kind !== "error",
+    catsLabel,
+    group,
+    setGroup,
+    query,
+    setQuery,
+    shownChannels,
+    visible,
+    regionChannels,
+    topRows,
+    showTopRows,
+    epg,
+    nowMs,
+    sourceId: activeId ?? "",
+    region,
+    favorites,
+    hasPlaylist: !!playlist,
+    onPlay: handlePlay,
+    onInfo: (meta) => openMeta(meta, { liveContext: true }),
+    onCustomizeSports: () => setSportsOpen(true),
+    sportsOpen,
+  });
+  if (native) {
+    return (
+      <main data-rail-flush className="relative flex min-h-0 flex-1 flex-col pt-20">
+        <header className={`relative z-[40] flex shrink-0 items-center px-4 py-2.5 ${pickerOpen ? "" : "pointer-events-none opacity-0"}`}>
+          <SourcePicker
+            sources={managedSources}
+            activeId={activeId}
+            exportEnabled={!!playlist?.channels.length}
+            onSelect={(id) => {
+              setActiveId(id);
+              writeActiveId(id);
+            }}
+            onAdd={addPlaylist}
+            onEdit={editPlaylist}
+            onRename={renamePlaylist}
+            onRemove={removePlaylist}
+            onMove={reorderPlaylist}
+            onMoveTop={movePlaylistTop}
+            onRefresh={() => {
+              if (activeId) clearPlaylistCache(activeId);
+              refresh();
+            }}
+            onExport={exportPlaylist}
+            fetchedAt={playlist?.fetchedAt ?? null}
+            channelCount={playlist?.channels.length ?? null}
+            loading={state.kind === "loading"}
+            editRequest={editRequest}
+            openRequest={pickerRequest}
+            onOpenChange={setPickerOpen}
+          />
+        </header>
+        {catsOpen && (
+          <CategoryDrawer
+            groups={sortedGroups}
+            active={group}
+            onSelect={setGroup}
+            onClose={closeCats}
+            counts={counts}
+            groupLogos={groupLogos}
+            favoritesCount={favorites.count}
+            sourceId={activeId ?? ""}
+          />
+        )}
+        {sportsOpen && (
+          <SportsCustomizeModal
+            selected={settings.sportsLeagues?.length ? settings.sportsLeagues : DEFAULT_SPORTS_LEAGUES}
+            onSave={(keys) => update({ sportsLeagues: keys })}
+            onClose={() => setSportsOpen(false)}
+          />
+        )}
+      </main>
+    );
+  }
 
   if (sources.length === 0) {
     return (
