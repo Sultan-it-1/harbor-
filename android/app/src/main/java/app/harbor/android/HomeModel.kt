@@ -4,10 +4,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * What the native Home shows, as the page describes it (src/views/home/native-home.ts builds the
- * JSON). Plain JVM (org.json only), so it runs in unit tests (HomeModelTest).
+ * What a native screen (Home, Discover, Movies, Shows, Library) shows, as the page describes it
+ * (src/views/native/native-screens.ts and the pages build the JSON). Plain JVM (org.json only), so
+ * it runs in unit tests (HomeModelTest).
  */
 class HomeModel(
+    /** Which screen this is ("home", "discover", "movies", "shows", "library"). */
+    val page: String = "home",
     val rtl: Boolean,
     /** Changes when the page wants Home back at the top (the Home tab tapped again). */
     val top: Int,
@@ -22,6 +25,12 @@ class HomeModel(
     val showTogether: Boolean,
     /** Rating badges at the top of the poster instead of the bottom (Settings > badge placement). */
     val badgesTop: Boolean = false,
+    /** A heading at the top (Shows, Library). */
+    val header: HomeHeader? = null,
+    /** Rows of choices under the heading (Library: tab, type, sort). */
+    val chips: List<HomeChips> = emptyList(),
+    /** Shown when there are no rows (an empty Library tab): optional title, then the text. */
+    val empty: Pair<String?, String>? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -33,7 +42,10 @@ class HomeModel(
             val labels = HashMap<String, String>()
             o.optJSONObject("labels")?.let { l -> for (k in l.keys()) l.str(k)?.let { labels[k] = it } }
             val cw = o.optJSONObject("cwEmpty")
+            val head = o.optJSONObject("header")
+            val empty = o.optJSONObject("empty")
             return HomeModel(
+                page = o.str("page") ?: "home",
                 rtl = o.optBoolean("rtl", false),
                 top = o.optInt("top", 0),
                 colors = HomeColors.parse(o.optJSONObject("colors")),
@@ -82,6 +94,19 @@ class HomeModel(
                 showCustomize = o.optBoolean("customize", false),
                 showTogether = o.optBoolean("together", false),
                 badgesTop = o.optBoolean("badgesTop", false),
+                header = head?.let { h ->
+                    HomeHeader(kicker = h.str("kicker"), title = h.str("title") ?: "", subtitle = h.str("subtitle"))
+                        .takeIf { it.title.isNotEmpty() || it.kicker != null || it.subtitle != null }
+                },
+                chips = o.optJSONArray("chips").objects().mapNotNull { g ->
+                    val key = g.str("key") ?: return@mapNotNull null
+                    val items = g.optJSONArray("items").objects().mapNotNull { c ->
+                        val id = c.str("id") ?: return@mapNotNull null
+                        HomeChip(id = id, label = c.str("label") ?: id, on = c.optBoolean("on", false))
+                    }
+                    if (items.isEmpty()) null else HomeChips(key, items)
+                },
+                empty = empty?.str("text")?.let { empty.str("title") to it },
             )
         }
 
@@ -187,3 +212,10 @@ class HomeColors(
         }
     }
 }
+
+class HomeHeader(val kicker: String?, val title: String, val subtitle: String?)
+
+/** One row of choices; tapping one sends {a:"chip", row:key, what:id}. */
+class HomeChips(val key: String, val items: List<HomeChip>)
+
+class HomeChip(val id: String, val label: String, val on: Boolean)

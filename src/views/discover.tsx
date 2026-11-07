@@ -34,6 +34,7 @@ import {
   usePageRows,
 } from "@/lib/page-rows";
 
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 const MAX_RAIL_PAGES = 10;
 const MIN_PAGE_YIELD = 4;
 const ROW_COUNT = 14;
@@ -267,6 +268,48 @@ export function Discover({ active = true }: { active?: boolean }) {
     () => orderedRowKeys(railKeys, pageRows.custom),
     [railKeys, pageRows.custom],
   );
+
+  // Android: drawn natively (see @/views/native/native-screens); the page then stays empty. The
+  // genre / language / award tiles, the discovery queue and Critics' Pick stay on the web page.
+  const nativeRows = useMemo<NativeRowInput[]>(
+    () =>
+      visibleRails.map((item) => {
+        const def = dailyRows.find((r) => r.id === item.key);
+        const title = t(item.title);
+        const metas = deduped[item.key] ?? [];
+        return {
+          key: item.key,
+          title,
+          metas,
+          seeAll: def ? { title, fetcher: (page: number) => def.fetch(page), initial: metas } : undefined,
+          more: () => loadMore(item.key),
+        };
+      }),
+    [visibleRails, dailyRows, deduped, t, loadMore],
+  );
+  const nativeHero = useMemo(() => ({ metas: featured, rank: t("Featured") }), [featured, t]);
+  const { setEditMode } = pageRows;
+  const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);
+  const native = useNativeBrowsePage("discover", {
+    active,
+    blocked: pageRows.editMode,
+    t,
+    hero: nativeHero,
+    rows: nativeRows,
+    customize: nativeCustomize,
+  });
+  // The web page loads a rail when it scrolls into view; drawn natively, load them all, a few at a
+  // time.
+  useEffect(() => {
+    if (!native) return;
+    const keys = visibleRails.map((r) => r.key);
+    const timers: number[] = [];
+    keys.forEach((k, i) => {
+      timers.push(window.setTimeout(() => ensureLoadedRef.current(k), Math.floor(i / 4) * 700));
+    });
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [native, visibleRails]);
+  if (native) return <main ref={scrollCb} aria-hidden="true" className="flex-1 overflow-hidden" />;
 
   return (
     <main ref={scrollCb} className={`flex-1 overflow-y-auto ${PHONE ? "px-4 pb-10 pt-20" : "px-12 pb-20 pt-28"}`}>

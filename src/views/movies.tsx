@@ -10,7 +10,8 @@ import { topMovies, type Meta } from "@/lib/cinemeta";
 import { recentlyPlayed } from "@/lib/playback-history";
 import { useT } from "@/lib/i18n";
 import { listPager } from "@/lib/list-pager";
-import { hasPageRowChanges, resetPageRows, usePageRows } from "@/lib/page-rows";
+import { applyPageRows, hasPageRowChanges, resetPageRows, usePageRows } from "@/lib/page-rows";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 import { useSettings } from "@/lib/settings";
 import { useScrollMemory, useView } from "@/lib/view";
 import { buildMovieHero, HERO_POOL_TARGET, movieSpecs, rotateDaily } from "./movies/movie-specs";
@@ -180,6 +181,43 @@ export function Movies({ active = true }: { active?: boolean }) {
       })
       .filter((r) => r.metas.length >= 4);
   }, [rows, hero, top10]);
+
+  // Android: drawn natively (see @/views/native/native-screens); the page then stays empty.
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [];
+    if (top10.length >= 10) {
+      const trending = rows.find((r) => r.key === "trending");
+      out.push({
+        key: "top10",
+        title: t("Top 10 Movies Today"),
+        metas: top10,
+        rank: true,
+        seeAll: trending?.fetcher ? { title: t(trending.title), fetcher: trending.fetcher, initial: trending.metas } : undefined,
+      });
+    }
+    for (const r of applyPageRows(restRows, pageRows.custom, false)) {
+      out.push({
+        key: r.key,
+        title: t(r.title),
+        metas: r.metas,
+        seeAll: r.fetcher ? { title: t(r.title), fetcher: r.fetcher, initial: r.metas } : undefined,
+        more: r.hasMore ? () => loadMore(r.key) : undefined,
+      });
+    }
+    return out;
+  }, [top10, rows, restRows, pageRows.custom, t, loadMore]);
+  const nativeHero = useMemo(() => ({ metas: hero, rank: t("Featured tonight") }), [hero, t]);
+  const { setEditMode } = pageRows;
+  const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);
+  const native = useNativeBrowsePage("movies", {
+    active,
+    blocked: pageRows.editMode,
+    t,
+    hero: nativeHero,
+    rows: nativeRows,
+    customize: nativeCustomize,
+  });
+  if (native) return <main ref={scrollCb} aria-hidden="true" className="relative h-full overflow-hidden bg-canvas" />;
 
   return (
     <main ref={scrollCb} className="relative h-full overflow-y-auto bg-canvas">

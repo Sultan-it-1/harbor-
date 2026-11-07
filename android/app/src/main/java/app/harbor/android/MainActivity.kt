@@ -51,8 +51,8 @@ import java.security.SecureRandom
  *                                                 -> window.__harborNativeEvent(eventJson)
  *   window.HarborAndroid.saveFile(id, name, mime, base64) -> window.__harborFileSaved(id, "1"|"0")
  *   native back button                            -> window.__harborAndroidBack(): boolean
- *   window.HarborAndroid.homeSet(modelJson) / homeShow(on, bottom, width)
- *                                                 -> window.__harborNativeHome(actionJson)  (NativeHome)
+ *   window.HarborAndroid.homeSet(modelJson) / screenShow(page, bottom, width)
+ *                                                 -> window.__harborNativeHome(actionJson)  (NativeScreens)
  *
  * Bridge security: the Java object is injected as `__harborNative` into every frame (Android
  * can't limit addJavascriptInterface to one frame), and each method wants a per-launch secret
@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var downloads: Downloads
     private lateinit var images: ImageCache
     private lateinit var nativeImages: NativeImages
-    private lateinit var home: NativeHome
+    private lateinit var screens: NativeScreens
     private lateinit var assets: WebAssets
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -166,10 +166,10 @@ class MainActivity : ComponentActivity() {
         // an earlier activity (pauseTimers is process-wide): a new page must start with them on.
         webView.resumeTimers()
         root.addView(webView, 0, FrameLayout.LayoutParams(MATCH, MATCH))
-        // The native Home sits over the page (and under the player, added next); hidden until the
-        // page asks for it.
-        home = NativeHome(this, nativeImages) { action -> sendToJs("__harborNativeHome", action.toString()) }
-        root.addView(home.root, 1, FrameLayout.LayoutParams(MATCH, MATCH))
+        // The native screens (Home, Discover, Movies, Shows, Library) sit over the page and under
+        // the player (added next); hidden until the page asks for one.
+        screens = NativeScreens(this, nativeImages) { action -> sendToJs("__harborNativeHome", action.toString()) }
+        root.addView(screens.root, 1, FrameLayout.LayoutParams(MATCH, MATCH))
         player = NativePlayer(this, root, downloads) { event -> sendToJs("__harborNativeEvent", event) }
         val ua = webView.settings.userAgentString
         fetcher.userAgent = ua
@@ -303,7 +303,7 @@ class MainActivity : ComponentActivity() {
             old.destroy()
         } catch (_: Exception) {
         }
-        home.show(false, 0)
+        screens.show(null, 0)
         webView = buildWebView()
         webView.resumeTimers()
         webPaused = false
@@ -332,13 +332,13 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * D-pad / controller (handhelds, TV boxes): while the native Home is on screen, arrow keys move
+     * D-pad / controller (handhelds, TV boxes): while a native screen is up, arrow keys move
      * through its rows instead of going to the page hidden underneath.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && event.keyCode in DPAD_KEYS &&
-            ::home.isInitialized && home.isShowing && !home.root.hasFocus() &&
-            !(::player.isInitialized && player.isShowing) && home.takeFocus()
+            ::screens.isInitialized && screens.isShowing && !screens.root.hasFocus() &&
+            !(::player.isInitialized && player.isShowing) && screens.takeFocus()
         ) {
             return true
         }
@@ -585,7 +585,7 @@ class MainActivity : ComponentActivity() {
     /** Android is short of memory: the page drops pages it keeps mounted and its caches. */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        nativeImages.trim(severe = level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE || (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN && !home.isShowing))
+        nativeImages.trim(severe = level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE || (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN && !screens.isShowing))
         if (pageLoaded) webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('harbor:trim-memory',{detail:$level}))", null)
     }
 
@@ -782,25 +782,26 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun dlWifiOnly(t: String): Boolean = ok(t) && guard("dlWifiOnly", true) { downloads.wifiOnly }
 
-        // ---- native Home (see NativeHome.kt) ----
-        /** What Home shows (HomeModel JSON); drawn natively while [homeShow] has it on. */
+        // ---- native screens (see NativeScreens.kt / NativeHome.kt) ----
+        /** What a native screen shows (HomeModel JSON, its "page" says which screen). */
         @JavascriptInterface
         fun homeSet(t: String, json: String) {
-            if (ok(t)) onUi("homeSet") { home.setModel(json) }
+            if (ok(t)) onUi("homeSet") { screens.setModel(json) }
         }
 
         /**
-         * Native Home on (Home on screen, nothing over it) or off. [bottomCss] is the page's tab bar
-         * height and [cssWidth] the page's width, both in CSS pixels (to turn them into screen ones).
+         * Which native screen is on screen ("" = none: the page shows itself). [bottomCss] is the
+         * page's tab bar height and [cssWidth] the page's width, both in CSS pixels (to turn them
+         * into screen ones).
          */
         @JavascriptInterface
-        fun homeShow(t: String, on: Boolean, bottomCss: Double, cssWidth: Double) {
+        fun screenShow(t: String, page: String, bottomCss: Double, cssWidth: Double) {
             if (!ok(t)) return
-            onUi("homeShow") {
+            onUi("screenShow") {
                 val scale = if (cssWidth > 0 && webView.width > 0) webView.width / cssWidth else resources.displayMetrics.density.toDouble()
-                val hadFocus = home.root.hasFocus()
-                home.show(on, (bottomCss * scale).toInt())
-                if (!home.isShowing && hadFocus) webView.requestFocus()
+                val hadFocus = screens.root.hasFocus()
+                screens.show(page, (bottomCss * scale).toInt())
+                if (!screens.isShowing && hadFocus) webView.requestFocus()
             }
         }
     }

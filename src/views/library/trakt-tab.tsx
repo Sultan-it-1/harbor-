@@ -93,7 +93,7 @@ export function TraktTab() {
             {watchlistEntries.length === 0 ? tr("Nothing saved on Trakt yet.") : tr("No matches for these filters.")}
           </p>
         ) : (
-          <GroupedGrid groups={sortedGroups(visibleW, settings.librarySort)} />
+          <GroupedGrid groups={sortedGroups(visibleW, settings.librarySort)} section={tr("Trakt watchlist")} />
         )}
       </div>
       <div className="flex flex-col gap-4">
@@ -108,7 +108,7 @@ export function TraktTab() {
             {historyEntries.length === 0 ? tr("No history yet.") : tr("No matches for these filters.")}
           </p>
         ) : (
-          <GroupedGrid groups={sortedGroups(visibleH, settings.librarySort)} />
+          <GroupedGrid groups={sortedGroups(visibleH, settings.librarySort)} section={tr("Trakt history")} />
         )}
       </div>
       {status === "error" && (

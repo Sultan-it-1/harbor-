@@ -21,6 +21,8 @@ import { useCwAdvance } from "./home/hooks/use-cw-advance";
 import { detectAnimeForCw, useDetectedAnimeVersion } from "@/lib/anime-detect";
 import { AnilistRowControls } from "./anime/anilist-row-controls";
 import { AnilistTopRow, AnilistTrendingRow } from "./anime/anilist-top-row";
+import { useAnilistTop, useAnilistTrending } from "@/lib/use-anilist-top";
+import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
 import {
   EMPTY_ROW,
   HERO_KEYS,
@@ -409,6 +411,91 @@ export function AnimeView({ active = true }: { active?: boolean }) {
     return () => window.removeEventListener("harbor:anime-focus-row", handler as EventListener);
   }, []);
 
+  // Android: drawn natively (see @/views/native/native-screens); the page then stays empty.
+  const nativeEnabled = useNativeScreensEnabled();
+  const [anilistNative, setAnilistNative] = useState<AnilistNativeRows>({ trending: [], top: [] });
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [];
+    if (!anilistHidden.includes("trending") && anilistNative.trending.length > 0) {
+      out.push({ key: "anilist-trending", title: t("Trending on AniList"), metas: anilistNative.trending });
+    }
+    if (!anilistHidden.includes("top100") && anilistNative.top.length > 0) {
+      out.push({ key: "anilist-top", title: t("Top 100 on AniList"), metas: anilistNative.top });
+    }
+    if (awardWinnerMetas.length > 0) {
+      out.push({ key: "anime-awards", title: t("Award Winning Anime"), metas: awardWinnerMetas });
+    }
+    for (const spec of SPECS) {
+      if (spec.key === TOP_PICKS_KEY) continue;
+      const r = filteredRowsByKey[spec.key] ?? EMPTY_ROW;
+      if (!r.ready || r.metas.length === 0) continue;
+      const seeAll = {
+        title: t(spec.title),
+        fetcher: (p: number) => spec.fetcher(p).then((ms) => ms.map(cleanMeta)),
+        initial: r.metas,
+      };
+      if (spec.rank && r.metas.length >= 10) {
+        out.push({
+          key: spec.key,
+          title: t("Top 10 {name}", { name: t(spec.title).replace(/^Top\s*/i, "") }),
+          metas: r.metas,
+          rank: true,
+          seeAll,
+        });
+      } else {
+        out.push({ key: spec.key, title: t(spec.title), metas: r.metas, seeAll, more: r.hasMore ? () => loadMore(spec.key) : undefined });
+      }
+    }
+    for (const row of dedupedAddonRows) {
+      const metas = row.metas.map(cleanMeta);
+      const more = row.more;
+      out.push({
+        key: `addon:${row.key}`,
+        title: row.name,
+        metas,
+        seeAll:
+          more && row.metas.length > 0
+            ? {
+                title: row.name,
+                fetcher: async (p: number) =>
+                  (await fetchAddonCatalogPage(more.base, more.type, more.id, (p - 1) * row.metas.length)).map(cleanMeta),
+                initial: metas,
+              }
+            : undefined,
+      });
+    }
+    return out;
+  }, [anilistHidden, anilistNative, awardWinnerMetas, filteredRowsByKey, dedupedAddonRows, t, loadMore]);
+  const nativeHero = useMemo(() => ({ metas: heroMetas }), [heroMetas]);
+  const nativeCw = useMemo(() => ({ title: t("Continue Watching"), items: cwItems }), [t, cwItems]);
+  const nativeCustomize = useMemo(() => ({ label: t("Tune picks"), onTap: () => setShowPicker(true) }), [t]);
+  const native = useNativeBrowsePage("anime", {
+    active,
+    t,
+    hero: nativeHero,
+    cw: nativeCw,
+    rows: nativeRows,
+    customize: nativeCustomize,
+  });
+  const genrePicker = showPicker && (
+    <AnimeGenrePicker
+      initial={favoriteGenres}
+      onSave={(g) => update({ animeFavoriteGenres: g, animePicksDismissedAt: Date.now() })}
+      onClose={() => {
+        setShowPicker(false);
+        update({ animePicksDismissedAt: Date.now() });
+      }}
+    />
+  );
+  if (native) {
+    return (
+      <main ref={scrollCb} aria-hidden="true" className="flex-1 overflow-hidden">
+        {nativeEnabled && <AnilistNativeFeed hidden={anilistHidden} onRows={setAnilistNative} />}
+        {genrePicker}
+      </main>
+    );
+  }
+
   return (
     <main
       ref={scrollCb}
@@ -534,20 +621,36 @@ export function AnimeView({ active = true }: { active?: boolean }) {
         </div>
       </ScrollRootContext.Provider>
       <BackToTop scrollRef={scrollRef} />
-      {showPicker && (
-        <AnimeGenrePicker
-          initial={favoriteGenres}
-          onSave={(g) =>
-            update({ animeFavoriteGenres: g, animePicksDismissedAt: Date.now() })
-          }
-          onClose={() => {
-            setShowPicker(false);
-            update({ animePicksDismissedAt: Date.now() });
-          }}
-        />
-      )}
+      {genrePicker}
     </main>
   );
 }
 
+/** The AniList rows' data for the native screen (only the rows that aren't hidden are fetched). */
+type AnilistNativeRows = { trending: Meta[]; top: Meta[] };
+function AnilistNativeFeed({
+  hidden,
+  onRows,
+}: {
+  hidden: string[];
+  onRows: React.Dispatch<React.SetStateAction<AnilistNativeRows>>;
+}) {
+  return (
+    <>
+      {!hidden.includes("trending") && <AnilistTrendingFeed onRows={onRows} />}
+      {!hidden.includes("top100") && <AnilistTopFeed onRows={onRows} />}
+    </>
+  );
+}
 
+function AnilistTrendingFeed({ onRows }: { onRows: React.Dispatch<React.SetStateAction<AnilistNativeRows>> }) {
+  const metas = useAnilistTrending();
+  useEffect(() => onRows((r) => (r.trending === metas ? r : { ...r, trending: metas })), [metas, onRows]);
+  return null;
+}
+
+function AnilistTopFeed({ onRows }: { onRows: React.Dispatch<React.SetStateAction<AnilistNativeRows>> }) {
+  const metas = useAnilistTop();
+  useEffect(() => onRows((r) => (r.top === metas ? r : { ...r, top: metas })), [metas, onRows]);
+  return null;
+}

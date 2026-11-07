@@ -122,8 +122,8 @@ export function LibraryPanel({
         />
         {nativeHomeAvailable() && (
           <ToggleRow
-            label={t("Native Home screen")}
-            sub={t("Draws Home and its poster rows with Android's own views instead of the web page: smoother, and posters show even on devices whose WebView can't draw them. Turn it off to use the web Home.")}
+            label={t("Native screens")}
+            sub={t("Draws Home, Discover, Movies, Shows, Anime and Library with Android's own views instead of the web page: smoother, and posters show even on devices whose WebView can't draw them. Turn it off to use the web pages.")}
             value={settings.nativeHome}
             onChange={(v) => update({ nativeHome: v })}
           />

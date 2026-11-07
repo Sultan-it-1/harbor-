@@ -72,6 +72,36 @@ class HomeModelTest {
     }
 
     @Test
+    fun libraryScreen() {
+        val m = HomeModel.parse(
+            """
+            {"page":"library","header":{"kicker":"My library","title":"Your collection.","subtitle":null},
+             "chips":[{"key":"tab","items":[{"id":"watchlist","label":"Watchlist","on":true},{"id":"history","label":"History"},{"label":"no id"}]},
+                      {"key":"empty","items":[]},{"items":[{"id":"x"}]}],
+             "rows":[],"empty":{"title":null,"text":"Your watchlist is empty"}}
+            """.trimIndent(),
+        )
+        assertEquals("library", m.page)
+        assertEquals("Your collection.", m.header?.title)
+        assertNull(m.header?.subtitle)
+        // Rows of choices without a key or without choices are left out; so are choices without an id.
+        assertEquals(listOf("tab"), m.chips.map { it.key })
+        assertEquals(listOf("watchlist", "history"), m.chips[0].items.map { it.id })
+        assertTrue(m.chips[0].items[0].on)
+        assertFalse(m.chips[0].items[1].on)
+        assertEquals(null to "Your watchlist is empty", m.empty)
+    }
+
+    @Test
+    fun defaultsToHome() {
+        val m = HomeModel.parse("{}")
+        assertEquals("home", m.page)
+        assertNull(m.header)
+        assertTrue(m.chips.isEmpty())
+        assertNull(m.empty)
+    }
+
+    @Test
     fun hexColours() {
         assertEquals(0xFFE8A45E.toInt(), HomeColors.parseHex("#e8a45e"))
         assertEquals(0x80FFFFFF.toInt(), HomeColors.parseHex("#80ffffff"))

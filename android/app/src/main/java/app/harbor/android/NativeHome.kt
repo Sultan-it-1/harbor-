@@ -36,11 +36,18 @@ import kotlin.math.min
  * handles every tap, so nothing of that is written twice. Contract (src/views/home/native-home.ts):
  *   page   -> HarborAndroid.homeSet(modelJson)   what to show (HomeModel)
  *   page   -> HarborAndroid.homeShow(on, …)       shown only while Home is on screen with nothing over it
- *   native -> window.__harborNativeHome(json)    {a:"hero",i,what:"open"|"play"|"list"} {a:"open",row,i}
- *                                                {a:"play",row,i} {a:"all",row} {a:"more",row}
- *                                                {a:"customize"} {a:"together"} {a:"failed"}
+ *   native -> window.__harborNativeHome(json)    {p:page, a:"hero",i,what:"open"|"play"|"list"}
+ *                                                {a:"open"|"hold"|"play",row,i} {a:"all",row} {a:"more",row}
+ *                                                {a:"chip",row,what} {a:"customize"} {a:"together"} {a:"failed"}
+ * The same screen serves Discover, Movies, Shows and the Library (NativeScreens keeps one per page).
  */
-class NativeHome(private val ctx: Context, private val images: NativeImages, private val onAction: (JSONObject) -> Unit) {
+class NativeHome(
+    private val ctx: Context,
+    private val images: NativeImages,
+    /** Which screen this draws ("home", "discover", "movies", "shows", "library"); sent with every tap. */
+    val page: String,
+    private val onAction: (JSONObject) -> Unit,
+) {
     val root = FrameLayout(ctx)
     private val list = RecyclerView(ctx)
     private val sections = SectionsAdapter()
@@ -158,7 +165,7 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
     fun takeFocus(): Boolean = isShowing && (list.requestFocus() || root.requestFocus())
 
     private fun act(a: String, row: String? = null, i: Int? = null, what: String? = null) {
-        val o = JSONObject().put("a", a)
+        val o = JSONObject().put("p", page).put("a", a)
         if (row != null) o.put("row", row)
         if (i != null) o.put("i", i)
         if (what != null) o.put("what", what)
@@ -180,7 +187,7 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
 
     // ---- outer list: hero, Customize, rows -----------------------------------------------------
 
-    private class Section(val type: Int, val id: Long, val row: HomeRow? = null)
+    private class Section(val type: Int, val id: Long, val row: HomeRow? = null, val chipsIndex: Int = -1)
 
     private inner class SectionsAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private var items: List<Section> = emptyList()
@@ -191,13 +198,20 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
 
         fun submit(m: HomeModel) {
             val out = ArrayList<Section>()
+            if (m.header != null) out.add(Section(T_HEADER, -6))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
             if (m.showCustomize) out.add(Section(T_TOOLS, -2))
             else if (m.hero.isNotEmpty()) out.add(Section(T_GAP, -5))
+            m.chips.forEachIndexed { i, _ -> out.add(Section(T_CHIPS, -100L - i, chipsIndex = i)) }
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
             for (r in m.rows) out.add(Section(T_ROW, stableId(r.key), r))
+            if (m.rows.isEmpty() && m.empty != null) out.add(Section(T_EMPTY, -7))
             out.add(Section(T_END, -4))
             items = out
+            // Text at the top (no hero, or a heading above it): keep it clear of the floating
+            // Watch together button.
+            val top = if (m.hero.isEmpty() || m.header != null) dp(64) else 0
+            if (list.paddingTop != top) list.setPadding(0, top, 0, 0)
             notifyDataSetChanged()
         }
 
@@ -208,7 +222,9 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder = when (viewType) {
             T_HERO -> HeroHolder()
             T_TOOLS -> ToolsHolder()
-            T_CW_EMPTY -> CwEmptyHolder()
+            T_CW_EMPTY, T_EMPTY -> CwEmptyHolder()
+            T_HEADER -> HeaderHolder()
+            T_CHIPS -> ChipsHolder()
             T_ROW -> RowHolder()
             T_GAP -> SpacerHolder(dp(28))
             else -> SpacerHolder(dp(28))
@@ -219,7 +235,13 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
             when (holder) {
                 is HeroHolder -> holder.bind(m)
                 is ToolsHolder -> holder.bind(m)
-                is CwEmptyHolder -> holder.bind(m)
+                is CwEmptyHolder -> if (items[position].type == T_EMPTY) {
+                    m.empty?.let { holder.bind(it.first, it.second) }
+                } else {
+                    m.cwEmpty?.let { holder.bind(it.first, it.second) }
+                }
+                is HeaderHolder -> m.header?.let { holder.bind(it) }
+                is ChipsHolder -> m.chips.getOrNull(items[position].chipsIndex)?.let { holder.bind(it) }
                 is RowHolder -> items[position].row?.let { holder.bind(it) }
             }
         }
@@ -276,9 +298,9 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
             col.addView(box, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
 
-        fun bind(m: HomeModel) {
-            val (t, text) = m.cwEmpty ?: ("" to "")
-            title.text = t
+        fun bind(t: String?, text: String) {
+            title.text = t ?: ""
+            title.visibility = if (t.isNullOrBlank()) View.GONE else View.VISIBLE
             title.setTextColor(colors.ink)
             box.text = text
             box.setTextColor(colors.muted)
@@ -287,6 +309,74 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
                 cornerRadius = dp(16).toFloat()
                 setColor(Color.TRANSPARENT)
                 setStroke(dp(1), dash, dp(5).toFloat(), dp(4).toFloat())
+            }
+        }
+    }
+
+    /** A page's heading (Shows, Library): small kicker, big title, a line under it. */
+    private inner class HeaderHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private val kicker = label("", 11f, bold = true)
+        private val title = label("", 30f, lines = 2)
+        private val subtitle = label("", 14f, lines = 3)
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.setPaddingRelative(gutter, 0, gutter, dp(18))
+            kicker.letterSpacing = 0.28f
+            title.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            col.addView(kicker)
+            col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            col.addView(subtitle, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+        }
+
+        fun bind(h: HomeHeader) {
+            kicker.text = h.kicker?.uppercase() ?: ""
+            kicker.visibility = if (h.kicker.isNullOrBlank()) View.GONE else View.VISIBLE
+            kicker.setTextColor(colors.subtle)
+            // Arabic has no letter case and its letters must stay joined.
+            kicker.letterSpacing = if (model?.rtl == true) 0f else 0.28f
+            title.text = h.title
+            title.visibility = if (h.title.isBlank()) View.GONE else View.VISIBLE
+            title.setTextColor(colors.ink)
+            subtitle.text = h.subtitle ?: ""
+            subtitle.visibility = if (h.subtitle.isNullOrBlank()) View.GONE else View.VISIBLE
+            subtitle.setTextColor(colors.muted)
+        }
+    }
+
+    /** A row of choices (Library tab, type, sort); the chosen one is filled. Scrolls sideways. */
+    private inner class ChipsHolder : RecyclerView.ViewHolder(android.widget.HorizontalScrollView(ctx)) {
+        private val scroller = itemView as android.widget.HorizontalScrollView
+        private val strip = LinearLayout(ctx)
+
+        init {
+            scroller.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            scroller.isHorizontalScrollBarEnabled = false
+            scroller.overScrollMode = View.OVER_SCROLL_NEVER
+            scroller.clipToPadding = false
+            strip.orientation = LinearLayout.HORIZONTAL
+            strip.setPaddingRelative(gutter, dp(2), gutter, dp(12))
+            scroller.addView(strip)
+        }
+
+        fun bind(g: HomeChips) {
+            strip.removeAllViews()
+            for (c in g.items) {
+                val chip = label(c.label, 13f, bold = c.on, lines = 1).apply {
+                    gravity = Gravity.CENTER
+                    setPaddingRelative(dp(14), 0, dp(14), 0)
+                    isClickable = true
+                    isFocusable = true
+                    setTextColor(if (c.on) colors.canvas else colors.muted)
+                    background = focusable(
+                        if (c.on) rounded(colors.ink, dp(18).toFloat())
+                        else rounded(withAlpha(colors.surface, 0.9f), dp(18).toFloat(), dp(1), withAlpha(colors.ink, 0.1f)),
+                    )
+                    setOnClickListener { act("chip", row = g.key, what = c.id) }
+                }
+                strip.addView(chip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)).apply { marginEnd = dp(8) })
             }
         }
     }
@@ -623,6 +713,10 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
             col.isClickable = true
             col.isFocusable = true
             col.setOnClickListener { tap("open") }
+            col.setOnLongClickListener {
+                tap("hold")
+                true
+            }
             col.setOnFocusChangeListener { _, has -> box.foreground = if (has) ring() else null }
 
             box.clipToOutline = true
@@ -685,7 +779,7 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
             val r = row ?: return
             val p = bindingAdapterPosition
             if (p == RecyclerView.NO_POSITION) return
-            act(if (what == "play") "play" else "open", row = r.key, i = p)
+            act(what, row = r.key, i = p)
         }
 
         fun bind(r: HomeRow, c: HomeCard) {
@@ -849,6 +943,9 @@ class NativeHome(private val ctx: Context, private val images: NativeImages, pri
         private const val T_ROW = 4
         private const val T_END = 5
         private const val T_GAP = 6
+        private const val T_HEADER = 7
+        private const val T_CHIPS = 8
+        private const val T_EMPTY = 9
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

@@ -118,7 +118,7 @@ export function SimklTab() {
               : tr("No matches for these filters.")}
           </p>
         ) : (
-          <GroupedGrid groups={sortedGroups(visibleW, settings.librarySort)} />
+          <GroupedGrid groups={sortedGroups(visibleW, settings.librarySort)} section={tr("Simkl plan to watch")} />
         )}
       </div>
       <div className="flex flex-col gap-4">
@@ -135,7 +135,7 @@ export function SimklTab() {
             {historyEntries.length === 0 ? tr("No Simkl history yet.") : tr("No matches for these filters.")}
           </p>
         ) : (
-          <GroupedGrid groups={sortedGroups(visibleH, settings.librarySort)} />
+          <GroupedGrid groups={sortedGroups(visibleH, settings.librarySort)} section={tr("Simkl history")} />
         )}
       </div>
       {status === "error" && (

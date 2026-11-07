@@ -1,6 +1,6 @@
 import { isPhoneLayout } from "@/lib/platform";
 import { Bookmark, Clock, HardDrive } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import traktLogo from "@/assets/trakt.svg";
 import simklLogo from "@/assets/simkl.png";
 import { useSimkl } from "@/lib/simkl/provider";
@@ -10,7 +10,17 @@ import { useT } from "@/lib/i18n";
 import { watchlistHas } from "@/lib/watchlist";
 import { HistoryTab } from "./library/history-tab";
 import { LocalTab } from "./library/local-tab";
-import { TabBtn, type Tab } from "./library/shared";
+import {
+  NativeLibrarySinkContext,
+  TabBtn,
+  type NativeLibraryFilter,
+  type NativeLibraryGrid,
+  type NativeLibrarySink,
+  type Tab,
+} from "./library/shared";
+import { useSettings } from "@/lib/settings";
+import type { Meta } from "@/lib/cinemeta";
+import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
 import { SimklTab } from "./library/simkl-tab";
 import { TraktTab } from "./library/trakt-tab";
 import { WatchlistTab } from "./library/watchlist-tab";
@@ -69,6 +79,25 @@ export function LibraryView({ active }: { active: boolean }) {
     return pushActivityHint({ details: label, state: "Library" });
   }, [active, tab]);
 
+  const native = useNativeLibrary({ active, tab, setTab, traktConnected, simklConnected });
+  const tabs = (
+    <>
+      {tab === "watchlist" && <WatchlistTab />}
+      {tab === "history" && <HistoryTab />}
+      {tab === "local" && <LocalTab />}
+      {tab === "trakt" && traktConnected && <TraktTab />}
+      {tab === "simkl" && simklConnected && <SimklTab />}
+    </>
+  );
+  if (native.inUse) {
+    // Drawn natively: the tabs still run (their filter bar and grids report to the native screen).
+    return (
+      <main ref={scrollRef} aria-hidden="true" className="flex-1 overflow-hidden">
+        <NativeLibrarySinkContext.Provider value={native.sink}>{tabs}</NativeLibrarySinkContext.Provider>
+      </main>
+    );
+  }
+
   return (
     <main
       ref={scrollRef}
@@ -81,14 +110,161 @@ export function LibraryView({ active }: { active: boolean }) {
           traktConnected={traktConnected}
           simklConnected={simklConnected}
         />
-        {tab === "watchlist" && <WatchlistTab />}
-        {tab === "history" && <HistoryTab />}
-        {tab === "local" && <LocalTab />}
-        {tab === "trakt" && traktConnected && <TraktTab />}
-        {tab === "simkl" && simklConnected && <SimklTab />}
+        {tabs}
       </div>
     </main>
   );
+}
+
+/**
+ * Android: the Library drawn natively (see @/views/native/native-screens). The tabs keep all their
+ * own logic; their filter bar and grids report to the sink, and this turns that into the screen:
+ * the tab, type and sort as chips, each group as a row, long-press to remove (where the page can).
+ */
+function useNativeLibrary({
+  active,
+  tab,
+  setTab,
+  traktConnected,
+  simklConnected,
+}: {
+  active: boolean;
+  tab: Tab;
+  setTab: (t: Tab) => void;
+  traktConnected: boolean;
+  simklConnected: boolean;
+}) {
+  const t = useT();
+  const { settings, update } = useSettings();
+  const enabled = useNativeScreensEnabled();
+  const [filter, setFilter] = useState<NativeLibraryFilter | null>(null);
+  const grids = useRef(new Map<string, { sig: string; grid: NativeLibraryGrid }>());
+  const [gridsVer, setGridsVer] = useState(0);
+  const sink = useMemo<NativeLibrarySink | null>(
+    () =>
+      enabled
+        ? {
+            setFilter: (f) =>
+              setFilter((prev) =>
+                f && prev && prev.type === f.type && prev.setType === f.setType && prev.counts.all === f.counts.all &&
+                prev.counts.movie === f.counts.movie && prev.counts.series === f.counts.series
+                  ? prev
+                  : f,
+              ),
+            setGrid: (id, g) => {
+              const m = grids.current;
+              if (!g) {
+                if (m.delete(id)) setGridsVer((v) => v + 1);
+                return;
+              }
+              // Grids report on every render: only a change of what they show redraws.
+              const sig = `${g.section ?? ""}|${g.onRemove ? 1 : 0}|${g.groups.map((x) => `${x.label}:${x.items.map((i) => i.key).join(",")}`).join(";")}`;
+              const prev = m.get(id);
+              m.set(id, { sig, grid: g });
+              if (!prev || prev.sig !== sig) setGridsVer((v) => v + 1);
+            },
+          }
+        : null,
+    [enabled],
+  );
+
+  const rows = useMemo<NativeRowInput[]>(() => {
+    void gridsVer;
+    const out: NativeRowInput[] = [];
+    for (const [id, { grid }] of grids.current) {
+      grid.groups.forEach((g, gi) => {
+        if (g.items.length === 0) return;
+        out.push({
+          key: `${id}|${gi}`,
+          title: `${grid.section ? `${grid.section} · ` : ""}${t(g.label)} · ${g.items.length}`,
+          metas: g.items.map((i) => i.meta),
+        });
+      });
+    }
+    return out;
+  }, [gridsVer, t]);
+
+  const header = useMemo(
+    () => ({
+      kicker: t("My library"),
+      title: t("Your collection."),
+      subtitle: t("Watchlist is what you've saved for later. History is everything you've watched."),
+    }),
+    [t],
+  );
+
+  const chips = useMemo(() => {
+    const out = [
+      {
+        key: "tab",
+        items: [
+          { id: "watchlist", label: t("Watchlist"), on: tab === "watchlist" },
+          { id: "history", label: t("History"), on: tab === "history" },
+          ...(traktConnected ? [{ id: "trakt", label: "Trakt", on: tab === "trakt" }] : []),
+          ...(simklConnected ? [{ id: "simkl", label: "Simkl", on: tab === "simkl" }] : []),
+        ],
+      },
+    ];
+    if (filter) {
+      out.push({
+        key: "type",
+        items: [
+          { id: "all", label: `${t("All")} ${filter.counts.all}`, on: filter.type === "all" },
+          { id: "movie", label: `${t("Movies")} ${filter.counts.movie}`, on: filter.type === "movie" },
+          { id: "series", label: `${t("Shows")} ${filter.counts.series}`, on: filter.type === "series" },
+        ],
+      });
+      out.push({
+        key: "sort",
+        items: (
+          [
+            ["recent", t("Recent")],
+            ["title", t("A-Z")],
+            ["year", t("Year")],
+          ] as const
+        ).map(([id, label]) => ({ id, label, on: settings.librarySort === id })),
+      });
+    }
+    return out;
+  }, [t, tab, traktConnected, simklConnected, filter, settings.librarySort]);
+
+  const empty = useMemo(() => {
+    if (rows.length > 0) return null;
+    if (filter && filter.counts.all > 0) return { text: t("No matches for these filters.") };
+    if (tab === "watchlist") {
+      return {
+        title: t("Your watchlist is empty"),
+        text: t("Long-press any title in Harbor or tap \"Add to Watchlist\" on its detail page to save it here."),
+      };
+    }
+    if (tab === "history") {
+      return { title: t("Nothing watched yet"), text: t("Press play on something. It'll show up here once you start watching.") };
+    }
+    return { text: t("Loading…") };
+  }, [rows.length, filter, tab, t]);
+
+  const inUse = useNativeBrowsePage("library", {
+    active,
+    t,
+    header,
+    rows,
+    chips,
+    empty,
+    onChip: (group, id) => {
+      if (group === "tab") setTab(id as Tab);
+      else if (group === "type") filter?.setType(id as NativeLibraryFilter["type"]);
+      else if (group === "sort") update({ librarySort: id as typeof settings.librarySort });
+    },
+    onHold: (rowKey, m: Meta) => {
+      const grid = grids.current.get(rowKey.split("|")[0])?.grid;
+      const gi = Number(rowKey.split("|")[1]);
+      const item = grid?.groups[gi]?.items.find((i) => i.meta.id === m.id);
+      if (!grid?.onRemove || !item?.stremioId) return false;
+      if (window.confirm(`${t("Remove from library")}: ${m.name}?`)) grid.onRemove(item.stremioId);
+      return true;
+    },
+  });
+  return { inUse, sink };
 }
 
 function Header({

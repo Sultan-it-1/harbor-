@@ -13,7 +13,8 @@ import { topSeries, type Meta } from "@/lib/cinemeta";
 import { useT } from "@/lib/i18n";
 import { publishResumeStates } from "@/lib/hover-preview/store";
 import { listPager } from "@/lib/list-pager";
-import { hasPageRowChanges, resetPageRows, usePageRows } from "@/lib/page-rows";
+import { applyPageRows, hasPageRowChanges, resetPageRows, usePageRows } from "@/lib/page-rows";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 import { useSettings } from "@/lib/settings";
 import { cwSortKey, isCwMember, library, type LibraryItem } from "@/lib/stremio";
 import { useScrollMemory, useView } from "@/lib/view";
@@ -204,6 +205,50 @@ export function Shows({ active = true }: { active?: boolean }) {
       }))
       .filter((r) => r.metas.length >= 4);
   }, [rows, hero, top10.length]);
+
+  // Android: drawn natively (see @/views/native/native-screens); the page then stays empty.
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [];
+    if (top10.length >= 10) {
+      const trending = rows.find((r) => r.key === "trending");
+      out.push({
+        key: "top10",
+        title: t("Top 10 Series Today"),
+        metas: top10,
+        rank: true,
+        seeAll: trending?.fetcher ? { title: t(trending.title), fetcher: trending.fetcher, initial: trending.metas } : undefined,
+      });
+    }
+    for (const r of applyPageRows(restRows, pageRows.custom, false)) {
+      out.push({
+        key: r.key,
+        title: t(r.title),
+        metas: r.metas,
+        seeAll: r.fetcher ? { title: t(r.title), fetcher: r.fetcher, initial: r.metas } : undefined,
+        more: r.hasMore ? () => loadMore(r.key) : undefined,
+      });
+    }
+    return out;
+  }, [top10, rows, restRows, pageRows.custom, t, loadMore]);
+  const nativeHero = useMemo(() => ({ metas: hero }), [hero]);
+  const nativeHeader = useMemo(() => {
+    const copy = bucketCopy();
+    return { kicker: t(copy.kicker), title: t(copy.title), subtitle: t(copy.subtitle) };
+  }, [t]);
+  const nativeCw = useMemo(() => ({ title: t("Pick up where you left off"), items: continueWatching }), [t, continueWatching]);
+  const { setEditMode } = pageRows;
+  const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);
+  const native = useNativeBrowsePage("shows", {
+    active,
+    blocked: pageRows.editMode,
+    t,
+    header: nativeHeader,
+    hero: nativeHero,
+    cw: nativeCw,
+    rows: nativeRows,
+    customize: nativeCustomize,
+  });
+  if (native) return <main ref={scrollCb} aria-hidden="true" className="relative h-full overflow-hidden bg-canvas" />;
 
   return (
     <main ref={scrollCb} className="relative h-full overflow-y-auto bg-canvas">

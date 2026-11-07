@@ -1,7 +1,7 @@
 import { isPhoneLayout } from "@/lib/platform";
 import { Bookmark, Trash2 } from "lucide-react";
 import { WatchedMark } from "@/components/watched-mark";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { Poster } from "@/components/poster";
 import { narrowMediaType, type Meta } from "@/lib/cinemeta";
 import { resolveMeta } from "@/lib/meta-resource";
@@ -15,6 +15,22 @@ export type Tab = "watchlist" | "history" | "local" | "trakt" | "simkl";
 export type TypeKey = "all" | "movie" | "series";
 
 export type WatchlistMerged = { key: string; meta: Meta; date: number | null; stremioId?: string };
+
+// ---- Android: the Library drawn natively (see library.tsx and @/views/native/native-screens) ----
+// While it is, the tabs keep all their own logic but their filter bar and grids hand what they
+// would show to this sink instead of drawing it.
+
+export type NativeLibraryFilter = { type: TypeKey; setType: (t: TypeKey) => void; counts: { all: number; movie: number; series: number } };
+export type NativeLibraryGrid = {
+  section?: string;
+  groups: Array<{ label: string; items: Array<{ key: string; meta: Meta; stremioId?: string }> }>;
+  onRemove?: (stremioId: string) => void;
+};
+export type NativeLibrarySink = {
+  setFilter: (f: NativeLibraryFilter | null) => void;
+  setGrid: (id: string, g: NativeLibraryGrid | null) => void;
+};
+export const NativeLibrarySinkContext = createContext<NativeLibrarySink | null>(null);
 
 export function TabBtn({
   active,
@@ -60,6 +76,15 @@ export function FilterBar({
   trailing?: React.ReactNode;
 }) {
   const t = useT();
+  const sink = useContext(NativeLibrarySinkContext);
+  useEffect(() => {
+    if (!sink) return;
+    sink.setFilter({ type, setType, counts });
+    return () => sink.setFilter(null);
+    // counts by value: the tabs build a new object every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sink, type, setType, counts.all, counts.movie, counts.series]);
+  if (sink) return null;
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="flex items-center gap-1 rounded-full bg-elevated/40 p-0.5 ring-1 ring-edge-soft/60">
@@ -211,11 +236,21 @@ export function GroupedGrid<
 >({
   groups,
   onRemove,
+  section,
 }: {
   groups: Array<{ label: string; items: T[] }>;
   onRemove?: (stremioId: string) => void;
+  /** Which list this is when a tab has two (Trakt watchlist / history): names its native rows. */
+  section?: string;
 }) {
   const t = useT();
+  const sink = useContext(NativeLibrarySinkContext);
+  const id = useId();
+  useEffect(() => {
+    sink?.setGrid(id, { section, groups, onRemove });
+  });
+  useEffect(() => (sink ? () => sink.setGrid(id, null) : undefined), [sink, id]);
+  if (sink) return null;
   return (
     <div className="flex flex-col gap-7">
       {groups.map((g) => (
