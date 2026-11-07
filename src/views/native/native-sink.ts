@@ -30,6 +30,7 @@ export function useNativeRowSink(enabled: boolean): [NativeRowSink | null, Nativ
                 order,
                 row.title,
                 row.sub ?? "",
+                row.note ?? "",
                 row.grid ? 1 : 0,
                 row.lead ? `${row.lead.title}|${row.lead.sub ?? ""}|${(row.lead.img ?? []).join(",")}` : "",
                 row.more ? 1 : 0,

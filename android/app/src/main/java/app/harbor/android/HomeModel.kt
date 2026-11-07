@@ -109,7 +109,9 @@ class HomeModel(
                     }
                     // In the editor a row shows even with nothing in it (hidden, or not loaded); a
                     // row led by a spotlight card shows with only that card; credits have no cards.
-                    if (items.isEmpty() && ed == null && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
+                    // A row of only choices or buttons (recent searches, Surprise me) shows too.
+                    val onlyChoices = r.optJSONObject("chips") != null || (r.optJSONArray("tools")?.length() ?: 0) > 0
+                    if (items.isEmpty() && ed == null && !onlyChoices && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
                     HomeRow(
                         key = key,
                         title = r.str("title") ?: "",
@@ -122,6 +124,8 @@ class HomeModel(
                             "critic" -> HomeRow.Kind.CRITIC
                             "credits" -> HomeRow.Kind.CREDITS
                             "episodes" -> HomeRow.Kind.EPISODES
+                            "people" -> HomeRow.Kind.PEOPLE
+                            "list" -> HomeRow.Kind.LIST
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -198,7 +202,14 @@ class HomeModel(
                 addSource = o.optBoolean("addSource", false),
                 back = o.str("back"),
                 search = o.optJSONObject("search")?.let { q ->
-                    HomeSearch(key = q.str("key") ?: "", hint = q.str("hint") ?: "", text = q.str("text") ?: "", busy = q.optBoolean("busy", false))
+                    HomeSearch(
+                        key = q.str("key") ?: "",
+                        hint = q.str("hint") ?: "",
+                        text = q.str("text") ?: "",
+                        busy = q.optBoolean("busy", false),
+                        big = q.optBoolean("big", false),
+                        focus = q.optBoolean("focus", false),
+                    )
                 },
                 note = o.str("note"),
                 detail = o.optJSONObject("detail")?.let { d ->
@@ -325,7 +336,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -477,7 +488,16 @@ class DetailPill(val id: String, val label: String, val kind: String)
 class CreditGroup(val label: String, val people: List<CriticPerson>, val value: String?)
 
 /** A search field; typing sends {a:"query", text}. A new [key] (another list) starts it afresh. */
-class HomeSearch(val key: String, val hint: String, val text: String, val busy: Boolean)
+class HomeSearch(
+    val key: String,
+    val hint: String,
+    val text: String,
+    val busy: Boolean,
+    /** The search screen's own field: bigger, at the very top. */
+    val big: Boolean = false,
+    /** Typing straight away when it opens (the keyboard comes up). */
+    val focus: Boolean = false,
+)
 
 /** A centred message; [action] is a button's label (sends {a:"message"}). */
 class HomeMessage(val title: String?, val text: String?, val action: String?)

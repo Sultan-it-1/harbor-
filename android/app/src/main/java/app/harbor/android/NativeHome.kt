@@ -140,6 +140,10 @@ class NativeHome(
             searchField.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
             searchField.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             searchField.setOnEditorActionListener { v, _, _ ->
+                // Search on the keyboard: what's typed now, then the page's Enter (its top match).
+                root.removeCallbacks(searchSend)
+                act("query", text = searchField.text?.toString() ?: "")
+                act("submit")
                 hideKeyboard(v)
                 true
             }
@@ -234,8 +238,28 @@ class NativeHome(
         }
         searchBar.visibility = View.VISIBLE
         searchBar.setBackgroundColor(withAlpha(colors.canvas, 0.9f))
-        searchBox.background = rounded(colors.surface, dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.1f))
-        searchIcon.setImageDrawable(icon(R.drawable.ic_search, colors.subtle))
+        // The search screen's field: bigger, rounder (like the page's).
+        val blp = searchBox.layoutParams
+        val bh = if (q.big) dp(56) else dp(44)
+        if (blp.height != bh) {
+            blp.height = bh
+            searchBox.layoutParams = blp
+        }
+        searchField.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (q.big) 18f else 14.5f)
+        val ilp = searchIcon.layoutParams
+        val isz = if (q.big) dp(20) else dp(16)
+        if (ilp.width != isz) {
+            ilp.width = isz
+            ilp.height = isz
+            searchIcon.layoutParams = ilp
+        }
+        searchBox.background = rounded(
+            if (q.big) withAlpha(colors.surface, 0.85f) else colors.surface,
+            if (q.big) dp(16).toFloat() else dp(12).toFloat(),
+            dp(1),
+            withAlpha(colors.ink, 0.1f),
+        )
+        searchIcon.setImageDrawable(icon(R.drawable.ic_search, if (q.big) colors.muted else colors.subtle))
         searchClear.setImageDrawable(icon(R.drawable.ic_x, colors.subtle))
         searchClear.contentDescription = m.label("clear", "Clear")
         searchField.setTextColor(colors.ink)
@@ -249,7 +273,16 @@ class NativeHome(
             root.removeCallbacks(searchSend)
             searchQuiet = true
             searchField.setText(q.text)
+            searchField.setSelection(searchField.text?.length ?: 0)
             searchQuiet = false
+            if (q.focus) {
+                root.postDelayed({
+                    if (!isShowing || searchKey != q.key) return@postDelayed
+                    searchField.requestFocus()
+                    (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                        ?.showSoftInput(searchField, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }, 150)
+            }
         }
     }
 
@@ -258,7 +291,8 @@ class NativeHome(
         if (searchBar.visibility != View.VISIBLE) return
         val pos = sections.positionOf(T_SEARCH)
         if (pos < 0) return
-        val pinned = dp(60).toFloat()
+        val m = model
+        val pinned = (if (m != null && m.back == null && !m.showTogether) dp(4) else dp(60)).toFloat()
         val v = list.findViewHolderForAdapterPosition(pos)?.itemView
         val first = (list.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
         searchBar.translationY = when {
@@ -362,6 +396,13 @@ class NativeHome(
             if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
             for (r in m.rows) {
+                if (r.kind == HomeRow.Kind.LIST) {
+                    // Titles listed down the page (search results): the heading, then one a line.
+                    out.add(Section(T_ROW, stableId(r.key), r))
+                    val base = stableId(r.key) shl 20
+                    r.items.forEachIndexed { i, _ -> out.add(Section(T_LISTITEM, base + i, r, start = i)) }
+                    continue
+                }
                 if (r.kind == HomeRow.Kind.EPISODES) {
                     // A series' episodes: the heading (seasons, tools), then one episode a line.
                     out.add(Section(T_ROW, stableId(r.key), r))
@@ -395,6 +436,8 @@ class NativeHome(
             // very top itself.
             val top = when {
                 m.detail != null -> 0
+                // Nothing floats at the top (the search screen): its field starts right there.
+                m.search?.big == true && m.back == null && !m.showTogether && m.header == null -> dp(4)
                 m.header?.backdrop?.isNotEmpty() == true -> 0
                 m.hero.isEmpty() || m.header != null -> dp(64)
                 else -> 0
@@ -425,6 +468,7 @@ class NativeHome(
             T_GRID_TILE -> GridLineHolder(C_TILE)
             T_DETAIL -> DetailHolder()
             T_EPISODE -> EpisodeHolder()
+            T_LISTITEM -> ListItemHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -450,6 +494,7 @@ class NativeHome(
                 is GridLineHolder -> items[position].row?.let { holder.bind(it, items[position].start) }
                 is DetailHolder -> m.detail?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
+                is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
             }
         }
 
@@ -852,6 +897,97 @@ class NativeHome(
                 askedMore[row.key] = row.items.size
                 act("more", row = row.key)
             }
+        }
+    }
+
+    /** A person: a round photo (their initial until it comes), the name, what they're known for. */
+    private fun personChip(name: String, image: String?, sub: String?, onTap: () -> Unit): View = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        isClickable = true
+        isFocusable = true
+        contentDescription = name
+        setOnClickListener { onTap() }
+        val face = FrameLayout(ctx).apply {
+            clipToOutline = true
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) = outline.setOval(0, 0, view.width, view.height)
+            }
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL }.also {
+                it.setColor(withAlpha(colors.surface, 0.9f))
+                it.setStroke(dp(1), withAlpha(colors.ink, 0.12f))
+            }
+        }
+        val initial = label(name.take(1), 18f, lines = 1).apply {
+            gravity = Gravity.CENTER
+            setTextColor(colors.subtle)
+        }
+        face.addView(initial, FrameLayout.LayoutParams(MATCH, MATCH))
+        if (image != null) {
+            val img = NetImage(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+            face.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+            images.load(img, listOf(image), dp(84), dp(84)) { ok -> initial.visibility = if (ok) View.GONE else View.VISIBLE }
+        }
+        addView(face, LinearLayout.LayoutParams(dp(84), dp(84)))
+        addView(label(name, 13f, bold = true, lines = 2).apply {
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            setTextColor(colors.ink)
+        }, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        if (!sub.isNullOrBlank()) {
+            addView(label(sub, 11.5f, lines = 1).apply {
+                gravity = Gravity.CENTER
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+                setTextColor(colors.subtle)
+            }, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) })
+        }
+        layoutParams = LinearLayout.LayoutParams(dp(100), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10) }
+    }
+
+    /** A title in a list (search results): its small poster, the name, the line under it. */
+    private inner class ListItemHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val line = itemView as LinearLayout
+        private val thumb = FrameLayout(ctx)
+        val image = NetImage(ctx)
+        private val title = label("", 16f, bold = true, lines = 1)
+        private val sub = label("", 12.5f, lines = 1)
+        private var rowKey = ""
+        private var index = -1
+
+        init {
+            line.orientation = LinearLayout.HORIZONTAL
+            line.gravity = Gravity.CENTER_VERTICAL
+            line.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            line.setPaddingRelative(dp(16), dp(8), dp(16), dp(8))
+            line.isClickable = true
+            line.isFocusable = true
+            line.setOnClickListener { act("open", row = rowKey, i = index) }
+            line.setOnLongClickListener {
+                act("hold", row = rowKey, i = index)
+                true
+            }
+            thumb.clipToOutline = true
+            thumb.outlineProvider = roundOutline(dp(12).toFloat())
+            image.scaleType = ImageView.ScaleType.CENTER_CROP
+            thumb.addView(image, FrameLayout.LayoutParams(MATCH, MATCH))
+            line.addView(thumb, LinearLayout.LayoutParams(dp(64), dp(96)))
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(title)
+            texts.addView(sub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            line.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(16) })
+        }
+
+        fun bind(r: HomeRow, i: Int, c: HomeCard) {
+            rowKey = r.key
+            index = i
+            line.contentDescription = c.title
+            thumb.background = rounded(plate(c.title), dp(12).toFloat())
+            images.load(image, c.images, dp(64), dp(96))
+            title.text = c.title
+            title.setTextColor(colors.ink)
+            sub.text = c.sub ?: ""
+            sub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
+            sub.setTextColor(colors.muted)
         }
     }
 
@@ -1488,6 +1624,8 @@ class NativeHome(
         private var critic: CriticCard? = null
         /** Credits: lines of names and facts instead of the strip. */
         private var creditsBox: LinearLayout? = null
+        /** People (search): round photos and names instead of the strip. */
+        private var peopleScroll: android.widget.HorizontalScrollView? = null
         /** The row's own choices (seasons) and buttons (Random, Download season…). */
         private val rowChips = android.widget.HorizontalScrollView(ctx)
         private val rowChipsStrip = LinearLayout(ctx)
@@ -1588,8 +1726,29 @@ class NativeHome(
             val info = row.critic
             val isCritic = row.kind == HomeRow.Kind.CRITIC
             val isCredits = row.kind == HomeRow.Kind.CREDITS
-            val isEpisodes = row.kind == HomeRow.Kind.EPISODES
-            strip.visibility = if (hidden || isCritic || isCredits || isEpisodes || row.items.isEmpty()) View.GONE else View.VISIBLE
+            val isEpisodes = row.kind == HomeRow.Kind.EPISODES || row.kind == HomeRow.Kind.LIST
+            val isPeople = row.kind == HomeRow.Kind.PEOPLE
+            strip.visibility = if (hidden || isCritic || isCredits || isEpisodes || isPeople || row.items.isEmpty()) View.GONE else View.VISIBLE
+            if (isPeople && !hidden) {
+                val sc = peopleScroll ?: android.widget.HorizontalScrollView(ctx).apply {
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    clipToPadding = false
+                    addView(LinearLayout(ctx).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setPaddingRelative(gutter, 0, gutter, 0)
+                        tag = "strip"
+                    })
+                    peopleScroll = this
+                    col.addView(this, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+                }
+                sc.visibility = View.VISIBLE
+                val st = sc.findViewWithTag<LinearLayout>("strip")
+                st.removeAllViews()
+                row.items.forEachIndexed { i, c -> st.addView(personChip(c.title, c.images.firstOrNull(), c.sub) { act("open", row = row.key, i = i) }) }
+            } else {
+                peopleScroll?.visibility = View.GONE
+            }
             // A row without a title (a title's credits): no heading line at all.
             header.visibility = if (row.title.isBlank() && !row.seeAll && row.note == null && ed == null) View.GONE else View.VISIBLE
             if (isCredits && !hidden) {
@@ -2711,6 +2870,7 @@ class NativeHome(
         private const val T_GRID_TILE = 15
         private const val T_DETAIL = 16
         private const val T_EPISODE = 17
+        private const val T_LISTITEM = 18
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

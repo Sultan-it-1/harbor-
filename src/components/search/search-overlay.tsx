@@ -1,7 +1,11 @@
 import { isPhoneLayout } from "@/lib/platform";
 import { PHONE_TABBAR_H } from "@/chrome/phone-tabbar";
 import { Search, X, Loader2, CornerDownLeft, CalendarRange, Tag } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Meta } from "@/lib/cinemeta";
+import { useSettings } from "@/lib/settings";
+import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
+import { NativeRowSinkContext, useNativeRowSink } from "@/views/native/native-sink";
 import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
 import { useSearch } from "@/lib/search-context";
@@ -26,7 +30,8 @@ const PHONE = isPhoneLayout();
 export function SearchOverlay() {
   const { open, setOpen, query, setQuery, results, status, clear, recordRecent } = useSearch();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { openFilter, openMeta } = useView();
+  const { openFilter, openMeta, openPerson, openAddonDetail, openPlayer } = useView();
+  const { settings } = useSettings();
   const t = useT();
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -40,8 +45,242 @@ export function SearchOverlay() {
     };
   }, [open]);
 
-  if (!open) return null;
+  // Android: the search screen drawn natively (see @/views/native/native-screens) like the page:
+  // the big field at the top (the keyboard up at once), then before typing: recent searches, Jump
+  // to, Try a genre, Surprise me (handed over by EmptyState); after: Browse <genre/year>, the top
+  // match, Live TV, Addons, People, Movies and Series listed, Anime, then each addon's results.
+  // A magnet or video link, and the AI suggestions, keep the page for now.
+  const nativeOn = useNativeScreensEnabled();
+  const [sink, sinkRows] = useNativeRowSink(nativeOn);
+  const [openSeq, setOpenSeq] = useState(0);
+  useEffect(() => {
+    if (open) setOpenSeq((n) => n + 1);
+  }, [open]);
+  const tq = query.trim();
+  const directNow = !!tq && (isMagnetInput(tq) || isDirectVideoUrl(tq));
+  const aiNow = !!tq && !!settings.aiSearchKey.trim();
+  const closeSearch = () => {
+    if (tq && results) recordRecent(query);
+    setOpen(false);
+  };
+  const latestClose = useRef(closeSearch);
+  latestClose.current = closeSearch;
+  const resultRows = useMemo<NativeRowInput[]>(() => {
+    if (!tq || !results) return [];
+    const done = (f: () => void) => {
+      latestClose.current();
+      f();
+    };
+    const out: NativeRowInput[] = [];
+    const intent = results.intent;
+    if (intent) {
+      out.push({
+        key: "intent",
+        title: "",
+        metas: [],
+        cards: [],
+        tools: [{ id: "intent", label: `${t("Browse")} · ${intent.label}` }],
+        onTool: () => {
+          if (intent.kind === "genre") {
+            const id = (intent.mediaType === "movie" ? MOVIE_GENRES : TV_GENRES)[intent.genre];
+            if (typeof id === "number") done(() => openFilter({ kind: "genre", mediaType: intent.mediaType, name: intent.genre, id }));
+          } else {
+            done(() => openFilter({ kind: "year", mediaType: "movie", value: intent.year }));
+          }
+        },
+      });
+    }
+    const top = results.topMatch;
+    if (top) {
+      out.push({
+        key: "top",
+        title: t("Top match"),
+        kind: "feature",
+        metas: [top.meta],
+        cards: [
+          {
+            title: top.meta.name,
+            kicker: top.kind === "movie" ? t("Movie") : t("Series"),
+            sub: top.overview ?? top.meta.description ?? null,
+            img: [top.backdrop, top.meta.background, top.meta.poster].filter((u, i, a): u is string => !!u && a.indexOf(u) === i),
+            rating: top.meta.imdbRating ?? (top.voteAverage ? top.voteAverage.toFixed(1) : null),
+          },
+        ],
+        onOpen: () => done(() => openMeta(top.meta)),
+      });
+    }
+    if (results.liveTv.length > 0) {
+      const hits = results.liveTv;
+      out.push({
+        key: "live",
+        title: t("Live TV"),
+        kind: "logo",
+        metas: [],
+        cards: hits.map((h) => ({ title: h.name, img: h.logo ? [h.logo] : [] })),
+        onOpen: (i) => {
+          const hit = hits[i];
+          if (!hit) return;
+          const meta: Meta = {
+            id: `iptv:${hit.playlistId}:${hit.channelId}`,
+            type: "tv",
+            name: hit.name,
+            poster: hit.logo ?? undefined,
+            logo: hit.logo ?? undefined,
+            background: hit.logo ?? undefined,
+            description: hit.group ? `Live channel · ${hit.group}` : "Live channel",
+            releaseInfo: "Live",
+          } as Meta;
+          done(() => openPlayer({ meta, url: hit.url, title: hit.name, subtitle: hit.group ?? "Live", notWebReady: true }));
+        },
+      });
+    }
+    if (results.addons.length > 0) {
+      const addons = results.addons;
+      out.push({
+        key: "addons",
+        title: t("Addons"),
+        kind: "logo",
+        metas: [],
+        cards: addons.map((a) => ({ title: a.name, img: a.logo ? [a.logo] : [] })),
+        onOpen: (i) => {
+          const a = addons[i];
+          if (a) done(() => openAddonDetail(a.id));
+        },
+      });
+    }
+    if (results.people.length > 0) {
+      const people = results.people;
+      out.push({
+        key: "people",
+        title: t("People"),
+        kind: "people",
+        metas: [],
+        cards: people.map((p) => ({ title: p.name, sub: p.knownFor || null, img: p.profile ? [`https://image.tmdb.org/t/p/w185${p.profile}`] : [] })),
+        onOpen: (i) => {
+          const p = people[i];
+          if (p) done(() => openPerson(p.id));
+        },
+      });
+    }
+    const listed = (key: string, title: string, items: Meta[]) => {
+      if (items.length === 0) return;
+      out.push({
+        key,
+        title,
+        kind: "list",
+        metas: items,
+        cards: items.map((m) => ({
+          title: m.name,
+          sub: [m.releaseInfo, m.imdbRating ? `★ ${m.imdbRating}` : null].filter(Boolean).join("  ·  ") || null,
+          img: [m.poster, /^tt\d+/.test(m.id) ? `https://images.metahub.space/poster/medium/${m.id.split(":")[0]}/img` : null].filter(
+            (u): u is string => !!u,
+          ),
+        })),
+        onOpen: (i) => {
+          const m = items[i];
+          if (m) done(() => openMeta(m));
+        },
+      });
+    };
+    listed("movies", t("Movies"), results.movies);
+    listed("series", t("Series"), results.series);
+    if (results.anime.length > 0) {
+      const anime = results.anime;
+      out.push({
+        key: "anime",
+        title: t("Anime"),
+        kind: "poster",
+        metas: [],
+        cards: anime.map((h) => ({ title: h.name, img: h.poster ? [h.poster] : [] })),
+        onOpen: (i) => {
+          const hit = anime[i];
+          if (!hit) return;
+          const meta = {
+            id: hit.kitsuId ? `kitsu:${hit.kitsuId}` : `mal:${hit.malId}`,
+            type: "anime",
+            name: hit.name,
+            poster: hit.poster ?? undefined,
+            background: hit.background ?? hit.poster ?? undefined,
+            description: hit.overview,
+            releaseInfo: hit.year ?? undefined,
+            imdbRating: hit.score > 0 ? hit.score.toFixed(1) : undefined,
+          } as Meta;
+          done(() => openMeta(meta));
+        },
+      });
+    }
+    for (const g of results.addonGroups) {
+      if (g.metas.length === 0) continue;
+      out.push({
+        key: `ag:${g.id}`,
+        title: g.name,
+        sub: t("From your addons"),
+        metas: g.metas,
+        onOpen: (i) => {
+          const m = g.metas[i];
+          if (m) done(() => openMeta(m));
+        },
+      });
+    }
+    return out;
+  }, [tq, results, t, openFilter, openMeta, openPerson, openAddonDetail, openPlayer]);
+  const resultsIn =
+    !!results &&
+    !!(results.topMatch || results.people.length || results.movies.length || results.series.length || results.liveTv.length || results.anime.length || results.addons.length || results.addonGroups.length);
+  const stillSearching = !!tq && !directNow && status !== "done";
+  const nativeSearch = useMemo(
+    () => ({
+      key: `search:${openSeq}`,
+      hint: t("Search movies, shows, people, genres, years..."),
+      text: query,
+      busy: (status === "loading" || status === "typing") && !!tq,
+      onQuery: setQuery,
+      big: true,
+      focus: true,
+      onSubmit: () => {
+        const m = results?.topMatch?.meta;
+        if (!m) return;
+        recordRecent(query);
+        setOpen(false);
+        openMeta(m);
+      },
+    }),
+    [openSeq, t, query, status, tq, setQuery, results, recordRecent, setOpen, openMeta],
+  );
+  const native = useNativeBrowsePage("search", {
+    active: open,
+    blocked: directNow || aiNow,
+    hidden: guideOpen,
+    noTogether: true,
+    t,
+    search: nativeSearch,
+    rows: tq ? resultRows : sinkRows,
+    message: !tq
+      ? null
+      : stillSearching
+        ? { text: resultsIn ? t("Searching more sources…") : t("Looking…") }
+        : !resultsIn && results && status === "done"
+          ? {
+              title: t('No matches for "{query}"', { query: tq }),
+              text: t('Try a different spelling, a person\'s name, a year like "1972", or a genre like "Horror".'),
+            }
+          : null,
+  });
 
+  if (!open) return null;
+  if (native) {
+    return createPortal(
+      <>
+        {!tq && (
+          <NativeRowSinkContext.Provider value={sink}>
+            <EmptyState onClose={closeSearch} onOpenGuide={() => setGuideOpen(true)} />
+          </NativeRowSinkContext.Provider>
+        )}
+        {guideOpen && <GuideModal onClose={() => setGuideOpen(false)} />}
+      </>,
+      document.body,
+    );
+  }
   const close = () => {
     if (query.trim() && results) recordRecent(query);
     setOpen(false);

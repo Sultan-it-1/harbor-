@@ -206,7 +206,8 @@ export function useNativeScreen(
     };
   }, [o.inUse, page, openTogether]);
 
-  const want = o.inUse && o.active && !searchOpen && onboarded && json != null;
+  // The search screen covers the others; it is itself the native "search" page.
+  const want = o.inUse && o.active && (!searchOpen || page === "search") && onboarded && json != null;
   useEffect(() => {
     wants.set(page, want);
     sendShown();
@@ -454,7 +455,7 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list";
   /** Choices under the title (a series' seasons) and what picking one does. */
   chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
   onRowChip?: (id: string) => void;
@@ -629,7 +630,20 @@ export type NativePageInput = {
   /** A page opened over another: the Back pill at the top. */
   back?: boolean;
   /** A search field under the heading, held at the top while the page scrolls. */
-  search?: { key: string; hint: string; text: string; busy?: boolean; onQuery: (text: string) => void } | null;
+  search?: {
+    key: string;
+    hint: string;
+    text: string;
+    busy?: boolean;
+    onQuery: (text: string) => void;
+    /** The search screen's own field (bigger, at the very top), with the keyboard up at once. */
+    big?: boolean;
+    focus?: boolean;
+    /** The keyboard's Search key. */
+    onSubmit?: () => void;
+  } | null;
+  /** No Watch together button at the top (the search screen). */
+  noTogether?: boolean;
   /** A line of small text over the rows. */
   note?: string | null;
   /** A centred message with an optional button (no results…). */
@@ -677,6 +691,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const searchHint = input.search?.hint;
   const searchText = input.search?.text;
   const searchBusy = !!input.search?.busy;
+  const searchBig = !!input.search?.big;
+  const searchFocus = !!input.search?.focus;
+  const noTogether = !!input.noTogether;
   const msgTitle = input.message?.title ?? null;
   const msgText = input.message?.text ?? null;
   const msgAction = input.message?.action ?? null;
@@ -700,8 +717,13 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     for (const r of rows) {
       const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
       const editable = editing && editCustom && editKeys?.includes(r.key);
+      const choices = !!r.chips || (r.tools ?? []).length > 0;
       const empty =
-        r.kind === "episodes" ? false : r.kind === "credits" ? (r.credits ?? []).length === 0 : (r.cards ? r.cards.length : shown.length) === 0;
+        r.kind === "episodes" || choices
+          ? false
+          : r.kind === "credits"
+            ? (r.credits ?? []).length === 0
+            : (r.cards ? r.cards.length : shown.length) === 0;
       if (!editable && (empty || r.key === "cw")) continue;
       map.set(r.key, { ...r, metas: shown });
       const json = nativeRowJson(r, cards) as Record<string, unknown>;
@@ -725,12 +747,16 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       customize: !!customizeLabel,
       edit: editing,
       back: back ? t("common.back") : null,
-      search: searchKey != null ? { key: searchKey, hint: searchHint ?? "", text: searchText ?? "", busy: searchBusy } : null,
+      search:
+        searchKey != null
+          ? { key: searchKey, hint: searchHint ?? "", text: searchText ?? "", busy: searchBusy, big: searchBig, focus: searchFocus }
+          : null,
+      ...(noTogether ? { together: false } : {}),
       note: note ?? null,
       message: hasMessage ? { title: msgTitle, text: msgText, action: msgAction } : null,
       detail: detailModel ?? null,
     };
-  }, [detailModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [searchBig, searchFocus, noTogether, detailModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -803,6 +829,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "query":
           cur.search?.onQuery(a.text ?? "");
+          return;
+        case "submit":
+          cur.search?.onSubmit?.();
           return;
         case "lead":
           p.rows.get(a.row ?? "")?.onLead?.();

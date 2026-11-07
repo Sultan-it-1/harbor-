@@ -28,6 +28,7 @@ const TV_GENRE_FOR_MOVIE: Record<string, number> = {
 import { useParental } from "@/lib/parental";
 import { useT } from "@/lib/i18n";
 import { useSearch } from "@/lib/search-context";
+import { useReportNativeRow } from "@/views/native/native-sink";
 import { useSettings } from "@/lib/settings";
 import { surpriseMe } from "@/lib/surprise-me";
 import { tmdbDiscover } from "@/lib/providers/tmdb";
@@ -246,6 +247,110 @@ export function EmptyState({ onClose, onOpenGuide }: { onClose: () => void; onOp
       setSurpriseBusy(false);
     }
   };
+
+  // Android: the search screen is drawn natively; this hands its rows over (native-sink) like the
+  // page lays them out: recent searches, Jump to, Try a genre, Surprise me; a genre being browsed:
+  // its heading with the filters and Back, then its titles in a grid (more as you scroll).
+  const browseNote =
+    items.length === 0 && !loading && genreBrowse
+      ? `${t("No titles found for {genre}", { genre: genreBrowse })}${isServiceTab ? ` on ${SERVICES[filterTab as StreamingService].name}` : ""}.`
+      : null;
+  const nativeOn = useReportNativeRow(
+    "search:a",
+    0,
+    genreBrowse
+      ? {
+          key: "browse",
+          title: t(genreBrowse),
+          sub: t("Browsing"),
+          note: browseNote,
+          metas: [],
+          cards: [],
+          chips: {
+            key: "filter",
+            items: [
+              { id: "all", label: t("All"), on: filterTab === "all" },
+              { id: "movies", label: t("Movies"), on: filterTab === "movies" },
+              { id: "shows", label: t("Shows"), on: filterTab === "shows" },
+              ...enabledServices.map((sv) => ({ id: sv, label: SERVICES[sv].name, on: filterTab === sv })),
+            ],
+          },
+          tools: [{ id: "back", label: t("Back") }],
+          onRowChip: (id) => setFilterTab(id as FilterTab),
+          onTool: () => {
+            setGenreBrowse(null);
+            setItems([]);
+            setFilterTab("all");
+          },
+        }
+      : recent.length > 0
+        ? {
+            key: "recent",
+            title: t("Recent searches"),
+            metas: [],
+            cards: [],
+            chips: { key: "recent", items: recent.map((q) => ({ id: q, label: q, on: false })) },
+            tools: [{ id: "clear", label: t("Clear history") }],
+            onRowChip: (q) => setQuery(q),
+            onTool: () => clearRecent(),
+          }
+        : null,
+  );
+  useReportNativeRow(
+    "search:b",
+    1,
+    genreBrowse
+      ? items.length > 0
+        ? {
+            key: "browse-grid",
+            title: "",
+            metas: items,
+            grid: true,
+            min: 140,
+            more: exhausted ? undefined : () => void loadMore(),
+          }
+        : null
+      : {
+          key: "jump",
+          title: t("Jump to"),
+          metas: [],
+          cards: [],
+          chips: {
+            key: "jump",
+            items: [...visibleJumps.map((j) => ({ id: j.view, label: t(j.label), on: false })), { id: "guide", label: t("TV Guide"), on: false }],
+          },
+          onRowChip: (id) => {
+            if (id === "guide") {
+              onOpenGuide();
+              return;
+            }
+            onClose();
+            setView(id as (typeof JUMP_TARGETS)[number]["view"]);
+          },
+        },
+  );
+  useReportNativeRow(
+    "search:c",
+    2,
+    genreBrowse
+      ? null
+      : {
+          key: "genres",
+          title: t("Try a genre"),
+          metas: [],
+          cards: [],
+          chips: { key: "genres", items: visibleGenres.map((name) => ({ id: name, label: t(name), on: false })) },
+          onRowChip: (name) => setGenreBrowse(name),
+        },
+  );
+  useReportNativeRow(
+    "search:d",
+    3,
+    genreBrowse
+      ? null
+      : { key: "surprise", title: "", metas: [], cards: [], tools: [{ id: "surprise", label: surpriseBusy ? t("Picking…") : t("Surprise me") }], onTool: () => void onSurprise() },
+  );
+  if (nativeOn) return null;
 
   if (genreBrowse) {
     return (
