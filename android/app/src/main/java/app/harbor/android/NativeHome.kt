@@ -362,6 +362,13 @@ class NativeHome(
             if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
             for (r in m.rows) {
+                if (r.kind == HomeRow.Kind.EPISODES) {
+                    // A series' episodes: the heading (seasons, tools), then one episode a line.
+                    out.add(Section(T_ROW, stableId(r.key), r))
+                    val base = stableId(r.key) shl 20
+                    if (r.edit?.hidden != true) r.items.forEachIndexed { i, _ -> out.add(Section(T_EPISODE, base + i, r, start = i)) }
+                    continue
+                }
                 if (!r.grid) {
                     out.add(Section(T_ROW, stableId(r.key), r))
                     continue
@@ -417,6 +424,7 @@ class NativeHome(
             T_GRID_POSTER -> GridLineHolder(C_POSTER)
             T_GRID_TILE -> GridLineHolder(C_TILE)
             T_DETAIL -> DetailHolder()
+            T_EPISODE -> EpisodeHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -441,6 +449,7 @@ class NativeHome(
                 is MessageHolder -> m.message?.let { holder.bind(it) }
                 is GridLineHolder -> items[position].row?.let { holder.bind(it, items[position].start) }
                 is DetailHolder -> m.detail?.let { holder.bind(it) }
+                is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
             }
         }
 
@@ -843,6 +852,140 @@ class NativeHome(
                 askedMore[row.key] = row.items.size
                 act("more", row = row.key)
             }
+        }
+    }
+
+    // ---- a series' episodes ------------------------------------------------------------------------
+
+    /**
+     * One episode as the page's list shows it: the still (number, watched check, rating, how far
+     * in) and beside it the name, the line under it (S1 E3 · 45 min · date · watched…) and the
+     * overview; then its info and download buttons. Tap: play; long-press: the page's menu.
+     */
+    private inner class EpisodeHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val line = itemView as LinearLayout
+        private val thumb = FrameLayout(ctx)
+        val image = NetImage(ctx)
+        private val number = label("", 11f, bold = true, lines = 1)
+        private val check = FrameLayout(ctx)
+        private val rating = LinearLayout(ctx)
+        private val track = FrameLayout(ctx)
+        private val bar = View(ctx)
+        private val texts = LinearLayout(ctx)
+        private val title = label("", 14f, bold = true, lines = 1)
+        private val badge = label("", 10f, bold = true, lines = 1)
+        private val sub = label("", 12f, lines = 2)
+        private val desc = label("", 13.5f, lines = 2)
+        private val info = FrameLayout(ctx)
+        private val download = FrameLayout(ctx)
+        private var rowKey = ""
+        private var index = -1
+
+        init {
+            line.orientation = LinearLayout.HORIZONTAL
+            line.gravity = Gravity.CENTER_VERTICAL
+            line.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            line.setPaddingRelative(dp(16), dp(10), dp(8), dp(10))
+            line.isClickable = true
+            line.isFocusable = true
+            line.setOnClickListener { act("open", row = rowKey, i = index) }
+            line.setOnLongClickListener {
+                act("hold", row = rowKey, i = index)
+                true
+            }
+            thumb.clipToOutline = true
+            thumb.outlineProvider = roundOutline(dp(8).toFloat())
+            image.scaleType = ImageView.ScaleType.CENTER_CROP
+            thumb.addView(image, FrameLayout.LayoutParams(MATCH, MATCH))
+            number.setPaddingRelative(dp(6), dp(2), dp(6), dp(2))
+            thumb.addView(number, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+                marginStart = dp(6)
+                topMargin = dp(6)
+            })
+            check.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(12), dp(12), Gravity.CENTER))
+            thumb.addView(check, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.TOP or Gravity.END).apply {
+                marginEnd = dp(6)
+                topMargin = dp(6)
+            })
+            thumb.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START).apply {
+                marginStart = dp(6)
+                bottomMargin = dp(7)
+            })
+            track.addView(bar, FrameLayout.LayoutParams(0, MATCH, Gravity.START))
+            thumb.addView(track, FrameLayout.LayoutParams(MATCH, dp(3), Gravity.BOTTOM))
+            line.addView(thumb, LinearLayout.LayoutParams(dp(132), dp(132) * 9 / 16))
+
+            texts.orientation = LinearLayout.VERTICAL
+            val titleLine = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                badge.setPaddingRelative(dp(6), dp(1), dp(6), dp(1))
+                addView(badge, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) })
+            }
+            texts.addView(titleLine, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            texts.addView(sub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            desc.setLineSpacing(0f, 1.2f)
+            texts.addView(desc, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            line.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
+
+            for ((b, what) in listOf(info to "info", download to "dl")) {
+                b.isClickable = true
+                b.isFocusable = true
+                b.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER))
+                b.setOnClickListener { act(what, row = rowKey, i = index) }
+                line.addView(b, LinearLayout.LayoutParams(dp(40), dp(40)))
+            }
+        }
+
+        fun bind(r: HomeRow, i: Int, c: HomeCard) {
+            val m = model ?: return
+            rowKey = r.key
+            index = i
+            line.contentDescription = c.title
+            thumb.background = rounded(plate(c.title), dp(8).toFloat())
+            images.load(image, c.images, dp(132), dp(132) * 9 / 16)
+            number.text = if (c.rank > 0) c.rank.toString() else ""
+            number.visibility = if (c.rank > 0) View.VISIBLE else View.GONE
+            number.setTextColor(colors.ink)
+            number.background = rounded(withAlpha(colors.canvas, 0.95f), dp(6).toFloat())
+            check.visibility = if (c.watched) View.VISIBLE else View.GONE
+            if (c.watched) {
+                check.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }.also {
+                    it.setColor(0x3834D399)
+                    it.setStroke(dp(1), 0x6634D399)
+                }
+                check.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_check, 0xFFA7F3D0.toInt()))
+            }
+            rating.removeAllViews()
+            c.rating?.let { rating.addView(imdbBadge(it, 9.5f, trailing = 0)) }
+            rating.visibility = if (c.rating != null) View.VISIBLE else View.GONE
+            track.visibility = if (c.progress > 0.01f) View.VISIBLE else View.GONE
+            track.setBackgroundColor(0x8C000000.toInt())
+            bar.setBackgroundColor(colors.accent)
+            val blp = bar.layoutParams
+            blp.width = (dp(132) * c.progress.coerceIn(0.02f, 1f)).toInt()
+            bar.layoutParams = blp
+
+            title.text = c.title
+            title.setTextColor(colors.ink)
+            badge.text = c.kicker ?: ""
+            badge.visibility = if (c.kicker.isNullOrBlank()) View.GONE else View.VISIBLE
+            badge.setTextColor(colors.canvas)
+            badge.background = rounded(colors.accent, dp(6).toFloat())
+            sub.text = c.sub ?: ""
+            sub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
+            sub.setTextColor(colors.subtle)
+            desc.text = c.desc ?: ""
+            desc.visibility = if (c.desc.isNullOrBlank()) View.GONE else View.VISIBLE
+            desc.setTextColor(colors.muted)
+            info.contentDescription = m.label("episodeInfo", "Episode details")
+            info.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_eye, colors.subtle))
+            info.background = focusable(rounded(Color.TRANSPARENT, dp(20).toFloat()))
+            download.visibility = if (c.play) View.VISIBLE else View.GONE
+            download.contentDescription = m.label("download", "Download")
+            download.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_download, colors.subtle))
+            download.background = focusable(rounded(Color.TRANSPARENT, dp(20).toFloat()))
         }
     }
 
@@ -1345,6 +1488,11 @@ class NativeHome(
         private var critic: CriticCard? = null
         /** Credits: lines of names and facts instead of the strip. */
         private var creditsBox: LinearLayout? = null
+        /** The row's own choices (seasons) and buttons (Random, Download season…). */
+        private val rowChips = android.widget.HorizontalScrollView(ctx)
+        private val rowChipsStrip = LinearLayout(ctx)
+        private val rowTools = android.widget.HorizontalScrollView(ctx)
+        private val rowToolsStrip = LinearLayout(ctx)
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -1370,6 +1518,16 @@ class NativeHome(
                 marginEnd = gutter
                 bottomMargin = dp(10)
             })
+            for ((scroller, strip) in listOf(rowChips to rowChipsStrip, rowTools to rowToolsStrip)) {
+                scroller.isHorizontalScrollBarEnabled = false
+                scroller.overScrollMode = View.OVER_SCROLL_NEVER
+                scroller.clipToPadding = false
+                scroller.visibility = View.GONE
+                strip.orientation = LinearLayout.HORIZONTAL
+                strip.setPaddingRelative(gutter, 0, gutter, 0)
+                scroller.addView(strip)
+                col.addView(scroller, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+            }
 
             strip.layoutManager = layout
             strip.adapter = cards
@@ -1426,10 +1584,12 @@ class NativeHome(
             header.isFocusable = row.seeAll && ed == null
             // A hidden row in the editor: its name dimmed and its controls, no cards.
             title.alpha = if (hidden) 0.45f else 1f
+            bindRowChips(m, row, if (ed == null) row else null)
             val info = row.critic
             val isCritic = row.kind == HomeRow.Kind.CRITIC
             val isCredits = row.kind == HomeRow.Kind.CREDITS
-            strip.visibility = if (hidden || isCritic || isCredits || row.items.isEmpty()) View.GONE else View.VISIBLE
+            val isEpisodes = row.kind == HomeRow.Kind.EPISODES
+            strip.visibility = if (hidden || isCritic || isCredits || isEpisodes || row.items.isEmpty()) View.GONE else View.VISIBLE
             // A row without a title (a title's credits): no heading line at all.
             header.visibility = if (row.title.isBlank() && !row.seeAll && row.note == null && ed == null) View.GONE else View.VISIBLE
             if (isCredits && !hidden) {
@@ -1494,6 +1654,50 @@ class NativeHome(
                 if (ed.hero >= 0) button(R.drawable.ic_sparkles, m.label("heroSource", "Feature in the hero"), on = ed.hero == 1, what = "hero")
                 button(R.drawable.ic_pencil, m.label("rename", "Rename row"), on = ed.renamed, what = "rename") { rename(m, row, ed) }
                 if (ed.delete) button(R.drawable.ic_trash_2, m.label("delete", "Delete"), what = "del")
+            }
+        }
+
+        private fun bindRowChips(m: HomeModel, row: HomeRow, shown: HomeRow?) {
+            val chips = shown?.chips
+            rowChips.visibility = if (chips == null) View.GONE else View.VISIBLE
+            rowChipsStrip.removeAllViews()
+            chips?.items?.forEach { c ->
+                rowChipsStrip.addView(label(c.label, 13f, bold = c.on, lines = 1).apply {
+                    gravity = Gravity.CENTER
+                    setPaddingRelative(dp(14), 0, dp(14), 0)
+                    isClickable = true
+                    isFocusable = true
+                    setTextColor(if (c.on) colors.canvas else colors.muted)
+                    background = focusable(
+                        if (c.on) rounded(colors.ink, dp(18).toFloat())
+                        else rounded(withAlpha(colors.surface, 0.9f), dp(18).toFloat(), dp(1), withAlpha(colors.ink, 0.1f)),
+                    )
+                    setOnClickListener { act("rowchip", row = row.key, what = c.id) }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)).apply { marginEnd = dp(8) })
+            }
+            val tools = shown?.tools ?: emptyList()
+            rowTools.visibility = if (tools.isEmpty()) View.GONE else View.VISIBLE
+            rowToolsStrip.removeAllViews()
+            for (tl in tools) {
+                val ic = when (tl.id) {
+                    "random" -> R.drawable.ic_shuffle
+                    "download" -> R.drawable.ic_download
+                    "watched" -> R.drawable.ic_check
+                    "unwatched" -> R.drawable.ic_rotate_ccw
+                    else -> 0
+                }
+                rowToolsStrip.addView(LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPaddingRelative(dp(12), 0, dp(14), 0)
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = tl.label
+                    background = focusable(rounded(withAlpha(colors.surface, 0.9f), dp(18).toFloat(), dp(1), withAlpha(colors.ink, 0.1f)))
+                    if (ic != 0) addView(ImageView(ctx).apply { setImageDrawable(icon(ic, colors.muted)) }, LinearLayout.LayoutParams(dp(15), dp(15)).apply { marginEnd = dp(8) })
+                    addView(label(tl.label, 13f, lines = 1).apply { setTextColor(colors.muted) })
+                    setOnClickListener { act("tool", row = row.key, what = tl.id) }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)).apply { marginEnd = dp(8) })
             }
         }
 
@@ -2506,6 +2710,7 @@ class NativeHome(
         private const val T_GRID_POSTER = 14
         private const val T_GRID_TILE = 15
         private const val T_DETAIL = 16
+        private const val T_EPISODE = 17
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

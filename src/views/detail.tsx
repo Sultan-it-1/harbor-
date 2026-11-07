@@ -56,6 +56,7 @@ import {
   type DetailCustomization,
 } from "@/lib/detail-customization";
 import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
+import { NativeRowSinkContext, useNativeRowSink } from "@/views/native/native-sink";
 import { EpisodeDownloadButton } from "./detail/episode-download-button";
 import { isTitleUpcoming } from "./detail/helpers";
 import { HeroAwardsCorner } from "./detail/hero-awards";
@@ -689,7 +690,17 @@ export function DetailView({
   // lists, downloads and seasons).
   const { topKind, openPerson, openCollection } = useView();
   const nativeOn = useNativeScreensEnabled();
-  const nativeBlocked = meta.type !== "movie" || isSeries || isAnime || detectingAnime || !!liveContext || layoutEdit;
+  // Series too once their seasons are known (the list then hands its row over, native-sink);
+  // anime, live channels and addon-only series (no seasons) keep the page for now.
+  const nativeBlocked =
+    (meta.type !== "movie" && meta.type !== "series") ||
+    isAnime ||
+    detectingAnime ||
+    !!liveContext ||
+    layoutEdit ||
+    (isSeries && !loading && (!detail || detail.seasons.length === 0));
+  const [episodesSink, episodesRows] = useNativeRowSink(nativeOn && !nativeBlocked);
+  const showEpisodes = !!detail && isSeries && detail.seasons.length > 0;
   const overflowRef = useRef<HTMLDivElement>(null);
   const [collectionParts, setCollectionParts] = useState<Meta[]>([]);
   const collectionId = detail?.collection?.id;
@@ -798,6 +809,10 @@ export function DetailView({
     const order = orderedSectionKeys([...sections.keys()], layout).filter((k) => !layout.hidden.includes(k));
     return order.map((k) => sections.get(k)).filter((r): r is NativeRowInput => !!r);
   }, [detail, collectionParts, recommendations, similar, layout, t, openPerson, openCollection]);
+  const nativeAllRows = useMemo(
+    () => (showEpisodes ? [...episodesRows, ...nativeRows] : nativeRows),
+    [showEpisodes, episodesRows, nativeRows],
+  );
   const native = useNativeBrowsePage("detail", {
     active: topKind === "meta",
     blocked: nativeBlocked,
@@ -805,7 +820,7 @@ export function DetailView({
     t,
     back: true,
     detail: nativeDetail,
-    rows: nativeRows,
+    rows: nativeAllRows,
     onDetail: (what) => {
       if (what === "play") void smartPlay();
       else if (what === "more") overflowRef.current?.querySelector<HTMLButtonElement>("button")?.click();
@@ -813,14 +828,15 @@ export function DetailView({
     onPill: (id) => {
       if (id === "year") {
         const n = Number(String(year).slice(0, 4));
-        if (Number.isFinite(n)) openFilter({ kind: "year", mediaType: "movie", value: n });
+        if (Number.isFinite(n)) openFilter({ kind: "year", mediaType: isSeries ? "tv" : "movie", value: n });
       } else if (id === "runtime") {
+        if (isSeries) return;
         const minutes = parseInt(String(runtime), 10);
         if (Number.isFinite(minutes)) openFilter({ kind: "runtime", mediaType: "movie", value: minutes });
       } else if (id.startsWith("genre:")) {
         const g = id.slice(6);
-        const gid = MOVIE_GENRES[g];
-        if (gid) openFilter({ kind: "genre", mediaType: "movie", name: g, id: gid });
+        const gid = (isSeries ? TV_GENRES : MOVIE_GENRES)[g];
+        if (gid) openFilter({ kind: "genre", mediaType: isSeries ? "tv" : "movie", name: g, id: gid });
       }
     },
   });
@@ -838,8 +854,8 @@ export function DetailView({
             }
             hasTrailer={!!trailerCandidate}
             onTrailer={() => setTrailerOpen(true)}
-            canDownload
-            showWatched={settings.showWatchedButton}
+            canDownload={meta.type === "movie"}
+            showWatched={settings.showWatchedButton && meta.type === "movie"}
             watchedMark={isWatchedNow}
             onWatched={() => {
               setWatchedMark(true);
@@ -850,9 +866,23 @@ export function DetailView({
             onToggleWatchlist={() =>
               toggleWatchlist({ id: meta.id, type: meta.type, name: title || meta.name, poster: meta.poster ?? detail?.poster, imdbId: detail?.imdbId })
             }
-            simkl={{ harborId: meta.id, type: "movie" }}
+            simkl={{ harborId: meta.id, type: meta.type === "movie" ? "movie" : "series" }}
           />
         </div>
+        {showEpisodes && detail && (
+          <NativeRowSinkContext.Provider value={episodesSink}>
+            <SeriesEpisodes
+              meta={playMeta}
+              tvId={detail.id}
+              imdbId={detail.imdbId ?? (meta.id.startsWith("tt") ? meta.id : null)}
+              seasons={detail.seasons}
+              lastEpisodeAir={detail.lastEpisodeAir}
+              scrollRef={scrollRef}
+              cinemetaVideos={cinemetaFull?.videos}
+              stremioWatched={stremioWatched}
+            />
+          </NativeRowSinkContext.Provider>
+        )}
         {trailerOpen && trailerCandidate && (
           <TrailerOverlay id={trailerCandidate} title={title} logo={logo} onClose={() => setTrailerOpen(false)} />
         )}

@@ -25,7 +25,16 @@ import { EpisodeLayoutToggle } from "./episode-layout-toggle";
 import { EpisodeRow } from "./series-episode-row";
 import { EpisodeGridSkeleton } from "./episode-grid-skeleton";
 import { EpisodeStrip } from "./episode-strip";
-import { RandomEpisodeButton } from "./random-episode-button";
+import { pickRandomEpisode, RandomEpisodeButton } from "./random-episode-button";
+import { useReportNativeRow } from "@/views/native/native-sink";
+import { useView } from "@/lib/view";
+import { useAuth } from "@/lib/auth";
+import { useDebridClients } from "@/lib/debrid/registry";
+import { seasonJobKey, startSeasonDownload, stopSeasonDownload, useSeasonDownload } from "@/lib/download/season-download";
+import { formatAirDate } from "@/lib/dates";
+import { formatRelativeWatched } from "@/lib/episode-progress";
+import { stillSize } from "@/lib/phone-images";
+import { isNewEpisode, isUpcomingEpisode } from "./helpers";
 import { SeasonPicker } from "./series-episodes/season-picker";
 
 export function SeriesEpisodes({
@@ -287,6 +296,132 @@ export function SeriesEpisodes({
       for (const e of enrichedEpisodes) void unmarkEpisodeWatched(showIds, active, e.episodeNumber);
     }
   };
+
+  // Android: the title's page is drawn natively; this list hands its row over (native-sink): the
+  // seasons, Random / Download season / Mark season, then each episode as the page's list shows
+  // it. The page's own episode menu still opens over it (long-press).
+  const { openPicker, openEpisodeDetail } = useView();
+  const { authKey } = useAuth();
+  const debrids = useDebridClients();
+  const seasonEps = enrichedEpisodes.map((ep) => ({
+    season: ep.seasonNumber,
+    episode: ep.episodeNumber,
+    name: ep.name || undefined,
+    overview: ep.overview || undefined,
+  }));
+  const dlKey = seasonJobKey(meta.id, seasonEps);
+  const dlProgress = useSeasonDownload(dlKey);
+  const dlRunning = !!dlProgress && !dlProgress.finished;
+  const stillOf = (ep: Episode) => {
+    const tmdb = ep.stillPath ? `https://image.tmdb.org/t/p/${stillSize(settings.hdEpisodeImages)}${ep.stillPath}` : undefined;
+    const cm = cinemetaVideos?.find((v) => v.season === ep.seasonNumber && v.episode === ep.episodeNumber)?.thumbnail;
+    return [tmdb, cm].filter((u, i, a): u is string => !!u && a.indexOf(u) === i);
+  };
+  const playEpisodeOf = (ep: Episode) => ({
+    season: ep.seasonNumber,
+    episode: ep.episodeNumber,
+    name: ep.name || undefined,
+    still: stillOf(ep)[0],
+    overview: ep.overview || undefined,
+  });
+  const nativeEpisodes = useReportNativeRow(
+    "episodes",
+    0,
+    {
+      key: "episodes",
+      title: t("Episodes"),
+      sub:
+        activeSeason && (activeSeason.airDate || activeSeason.episodeCount > 0)
+          ? `${activeSeason.episodeCount === 1 ? t("{n} episode", { n: activeSeason.episodeCount }) : t("{n} episodes", { n: activeSeason.episodeCount })}${activeSeason.airDate ? ` · ${activeSeason.airDate.slice(0, 4)}` : ""}`
+          : null,
+      kind: "episodes",
+      metas: [],
+      chips:
+        seasons.length > 1
+          ? { key: "season", items: seasons.map((s) => ({ id: String(s.seasonNumber), label: s.name || t("Season {n}", { n: s.seasonNumber }), on: s.seasonNumber === active })) }
+          : null,
+      tools: [
+        { id: "random", label: t("Play a random episode") },
+        ...(!loading && enrichedEpisodes.length > 0
+          ? [
+              dlRunning ? { id: "stopdl", label: t("Stop") } : { id: "download", label: t("Download season") },
+              allWatched ? { id: "unwatched", label: t("Mark season as unwatched") } : { id: "watched", label: t("Mark season as watched") },
+            ]
+          : []),
+      ],
+      cards: enrichedEpisodes.map((ep) => {
+        const n = ep.episodeNumber;
+        const pr = progressByEp.get(n) ?? { ratio: 0, watched: false, startedAt: 0 };
+        const sp = spoilerFor(n);
+        const ago = pr.startedAt > 0 ? formatRelativeWatched(pr.startedAt) : "";
+        const line = [`S${ep.seasonNumber} E${n}`, ep.runtime ? t("{n} min", { n: ep.runtime }) : null, formatAirDate(ep.airDate) || null]
+          .filter(Boolean)
+          .join("  ·  ");
+        const progressText =
+          pr.watched && ago
+            ? t("Watched {ago}", { ago })
+            : !pr.watched && pr.ratio > 0.01 && ago
+              ? `${t("{pct}% watched", { pct: Math.round(pr.ratio * 100) })} · ${ago}`
+              : "";
+        const rating = ep.imdbRating ?? ep.voteAverage;
+        return {
+          title: sp?.title ? t("Episode {n}", { n }) : ep.name || t("Episode {n}", { n }),
+          sub: progressText ? `${line}  ·  ${progressText}` : line,
+          desc: sp?.desc ? null : ep.overview || null,
+          img: sp?.thumb ? [] : stillOf(ep),
+          rank: n,
+          progress: pr.ratio,
+          watched: pr.watched && settings.showWatchedMarks !== false,
+          rating: settings.showEpisodeRating && rating != null && rating > 0 ? String(rating) : null,
+          kicker: isUpcomingEpisode(ep) ? t("Upcoming") : isNewEpisode(ep) ? t("New") : null,
+          play: true,
+        };
+      }),
+      onOpen: (i) => {
+        const ep = enrichedEpisodes[i];
+        if (ep) openPicker(meta, playEpisodeOf(ep), { autoPlay: settings.instantPlay });
+      },
+      onRowChip: (id) => {
+        const n = Number(id);
+        if (!Number.isFinite(n)) return;
+        userPickedRef.current = true;
+        setLastSeason(meta.id, n);
+        setActive(n);
+      },
+      onTool: (id) => {
+        if (id === "random") {
+          const pick = pickRandomEpisode(seasons);
+          if (pick) openPicker(meta, pick, { autoPlay: settings.instantPlay });
+        } else if (id === "download") {
+          const q = seasonEps.length === 1 ? t("Download 1 episode?") : t("Download {n} episodes?", { n: seasonEps.length });
+          if (window.confirm(q)) startSeasonDownload(dlKey, { meta, episodes: seasonEps, authKey, settings, debrids });
+        } else if (id === "stopdl") {
+          stopSeasonDownload(dlKey);
+        } else if (id === "watched" || id === "unwatched") {
+          markSeason(id === "watched");
+        }
+      },
+      onAction: (a, i) => {
+        const ep = enrichedEpisodes[i];
+        if (!ep) return false;
+        if (a === "info") openEpisodeDetail(meta.id, ep.seasonNumber, ep.episodeNumber, meta);
+        else if (a === "dl") openPicker(meta, playEpisodeOf(ep), { intent: "download" });
+        else if (a === "hold") {
+          setWatchedMenu({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+            season: ep.seasonNumber,
+            episode: ep.episodeNumber,
+            watched: progressByEp.get(ep.episodeNumber)?.watched ?? false,
+          });
+        }
+        return true;
+      },
+    },
+  );
+  if (nativeEpisodes) {
+    return watchedMenu ? <EpisodeWatchedMenu metaId={meta.id} target={watchedMenu} onClose={() => setWatchedMenu(null)} /> : null;
+  }
 
   return (
     <div data-episodes className="flex scroll-mt-24 flex-col gap-6">

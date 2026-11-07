@@ -92,6 +92,7 @@ class HomeModel(
                             kicker = c.str("kicker"),
                             play = c.optBoolean("play", false),
                             emblem = c.optBoolean("emblem", false),
+                            desc = c.str("desc"),
                         )
                     }
                     val ed = r.optJSONObject("ed")?.let { e ->
@@ -108,7 +109,7 @@ class HomeModel(
                     }
                     // In the editor a row shows even with nothing in it (hidden, or not loaded); a
                     // row led by a spotlight card shows with only that card; credits have no cards.
-                    if (items.isEmpty() && ed == null && r.optJSONObject("lead") == null && r.str("kind") != "credits") return@mapNotNull null
+                    if (items.isEmpty() && ed == null && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
                     HomeRow(
                         key = key,
                         title = r.str("title") ?: "",
@@ -120,6 +121,7 @@ class HomeModel(
                             "feature" -> HomeRow.Kind.FEATURE
                             "critic" -> HomeRow.Kind.CRITIC
                             "credits" -> HomeRow.Kind.CREDITS
+                            "episodes" -> HomeRow.Kind.EPISODES
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -130,6 +132,18 @@ class HomeModel(
                         critic = r.optJSONObject("critic")?.let { parseCritic(it) },
                         sub = r.str("sub"),
                         gallery = r.optBoolean("gallery", false),
+                        chips = r.optJSONObject("chips")?.let { g ->
+                            val ck = g.str("key") ?: return@let null
+                            val its = g.optJSONArray("items").objects().mapNotNull { c ->
+                                val id = c.str("id") ?: return@mapNotNull null
+                                HomeChip(id = id, label = c.str("label") ?: id, on = c.optBoolean("on", false))
+                            }
+                            if (its.isEmpty()) null else HomeChips(ck, its)
+                        },
+                        tools = r.optJSONArray("tools").objects().mapNotNull { c ->
+                            val id = c.str("id") ?: return@mapNotNull null
+                            HomeChip(id = id, label = c.str("label") ?: id, on = c.optBoolean("on", false))
+                        },
                         credits = r.optJSONArray("credits").objects().map { g ->
                             CreditGroup(
                                 label = g.str("label") ?: "",
@@ -295,6 +309,10 @@ class HomeRow(
     val gallery: Boolean = false,
     /** CREDITS: who made it (names open the person) and facts about it. */
     val credits: List<CreditGroup> = emptyList(),
+    /** Choices under the title (a series' seasons): sends {a:"rowchip", row:key, what:id}. */
+    val chips: HomeChips? = null,
+    /** Buttons under them (Random, Download season…): sends {a:"tool", row:key, what:id}. */
+    val tools: List<HomeChip> = emptyList(),
     /** Drawn as a grid down the page (a list's "See all", a collection) instead of a strip. */
     val grid: Boolean = false,
     /** A grid's narrowest card, in dp (as many across as fit). 0 = the usual. */
@@ -307,7 +325,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -357,6 +375,8 @@ class HomeCard(
     val play: Boolean = false,
     /** Tiles: the picture is an emblem shown whole in the top part (awards), not a backdrop. */
     val emblem: Boolean = false,
+    /** An episode's overview (two lines). */
+    val desc: String? = null,
 )
 
 /** A row's controls in the page's editor. [numerals] / [hero]: 1 on, 0 off, -1 not offered. */

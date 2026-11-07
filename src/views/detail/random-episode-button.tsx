@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 
-function pickRandomEpisode(seasons: Season[]): { season: number; episode: number } | null {
+export function pickRandomEpisode(seasons: Season[]): { season: number; episode: number } | null {
   const today = new Date().toISOString().slice(0, 10);
   const real = seasons.filter((s) => s.seasonNumber >= 1 && s.episodeCount > 0);
   const aired = real.filter((s) => !s.airDate || s.airDate.slice(0, 10) <= today);

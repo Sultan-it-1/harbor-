@@ -34,6 +34,11 @@ export function useNativeRowSink(enabled: boolean): [NativeRowSink | null, Nativ
                 row.lead ? `${row.lead.title}|${row.lead.sub ?? ""}|${(row.lead.img ?? []).join(",")}` : "",
                 row.more ? 1 : 0,
                 row.metas.map((x) => x.id).join(","),
+                // Rows of cards (episodes…): what each card shows, and the row's choices.
+                JSON.stringify(row.cards ?? null),
+                JSON.stringify(row.chips ?? null),
+                JSON.stringify(row.tools ?? null),
+                JSON.stringify(row.credits ?? null),
               ].join("|");
               const prev = m.get(id);
               m.set(id, { order, sig, row });
@@ -47,11 +52,19 @@ export function useNativeRowSink(enabled: boolean): [NativeRowSink | null, Nativ
     void ver;
     return [...entries.current.entries()]
       .sort((a, b) => a[1].order - b[1].order)
-      .map(([id, e]) => ({
-        ...e.row,
-        more: e.row.more ? () => entries.current.get(id)?.row.more?.() : undefined,
-        onLead: e.row.onLead ? () => entries.current.get(id)?.row.onLead?.() : undefined,
-      }));
+      .map(([id, e]) => {
+        const latest = () => entries.current.get(id)?.row;
+        return {
+          ...e.row,
+          more: e.row.more ? () => latest()?.more?.() : undefined,
+          onLead: e.row.onLead ? () => latest()?.onLead?.() : undefined,
+          onOpen: e.row.onOpen ? (i: number) => latest()?.onOpen?.(i) : undefined,
+          onAll: e.row.onAll ? () => latest()?.onAll?.() : undefined,
+          onRowChip: e.row.onRowChip ? (x: string) => latest()?.onRowChip?.(x) : undefined,
+          onTool: e.row.onTool ? (x: string) => latest()?.onTool?.(x) : undefined,
+          onAction: e.row.onAction ? (a: string, i: number) => latest()?.onAction?.(a, i) : undefined,
+        };
+      });
   }, [ver]);
   return [sink, rows];
 }

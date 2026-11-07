@@ -454,7 +454,15 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes";
+  /** Choices under the title (a series' seasons) and what picking one does. */
+  chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
+  onRowChip?: (id: string) => void;
+  /** Buttons under them (Random, Download season…) and what they do. */
+  tools?: Array<{ id: string; label: string }>;
+  onTool?: (id: string) => void;
+  /** Other taps on a card ("info", "dl", "hold" on an episode); return true when handled. */
+  onAction?: (a: string, i: number) => boolean | void;
   /** "credits": who made it (names open the person) and facts, as lines of text. */
   credits?: Array<{ label: string; people?: Array<{ id: number; name: string }>; value?: string | null }>;
   /** Pictures shown full screen by the native screen itself on a tap (a title's stills). */
@@ -515,6 +523,11 @@ export type NativeCardInput = {
   play?: boolean;
   /** Tile: the picture is an emblem shown whole (awards). */
   emblem?: boolean;
+  /** An episode: its number, how far in, watched, overview. */
+  rank?: number;
+  progress?: number;
+  watched?: boolean;
+  desc?: string | null;
 };
 
 /** The page's row editor (Discover, Movies, Shows): the page-rows customisation it edits. */
@@ -577,7 +590,13 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
         rating: c.rating ?? null,
         play: !!c.play,
         emblem: !!c.emblem,
+        rank: c.rank ?? 0,
+        progress: c.progress ?? 0,
+        watched: !!c.watched,
+        desc: c.desc ?? null,
       })),
+      chips: r.chips ?? null,
+      tools: r.tools ?? [],
     };
   }
   const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
@@ -681,7 +700,8 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     for (const r of rows) {
       const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
       const editable = editing && editCustom && editKeys?.includes(r.key);
-      const empty = r.kind === "credits" ? (r.credits ?? []).length === 0 : (r.cards ? r.cards.length : shown.length) === 0;
+      const empty =
+        r.kind === "episodes" ? false : r.kind === "credits" ? (r.credits ?? []).length === 0 : (r.cards ? r.cards.length : shown.length) === 0;
       if (!editable && (empty || r.key === "cw")) continue;
       map.set(r.key, { ...r, metas: shown });
       const json = nativeRowJson(r, cards) as Record<string, unknown>;
@@ -729,6 +749,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
         case "hold": {
           const row = a.row === "cw" ? undefined : p.rows.get(a.row ?? "");
           if (a.a === "open" && row?.onOpen) return row.onOpen(i);
+          if (a.a === "hold" && row?.onAction?.("hold", i)) return;
           const m = a.row === "cw" ? (p.cw[i] ? cwMeta(p.cw[i]) : undefined) : row?.metas[i];
           if (a.a === "open") return meta.open(m);
           if (m && a.row && cur.onHold?.(a.row, m)) return;
@@ -791,6 +812,16 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "d":
           if (a.what) cur.onDetail?.(a.what);
+          return;
+        case "rowchip":
+          if (a.what) p.rows.get(a.row ?? "")?.onRowChip?.(a.what);
+          return;
+        case "tool":
+          if (a.what) p.rows.get(a.row ?? "")?.onTool?.(a.what);
+          return;
+        case "info":
+        case "dl":
+          p.rows.get(a.row ?? "")?.onAction?.(a.a, i);
           return;
         case "pill":
           if (a.what) cur.onPill?.(a.what);
