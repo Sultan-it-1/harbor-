@@ -43,6 +43,8 @@ class HomeModel(
     val note: String? = null,
     /** A centred message with an optional button (no search results…): sends {a:"message"}. */
     val message: HomeMessage? = null,
+    /** A title's page: its hero (backdrop, logo, pills, Play, More) and synopsis, over the rows. */
+    val detail: HomeDetail? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -105,8 +107,8 @@ class HomeModel(
                         )
                     }
                     // In the editor a row shows even with nothing in it (hidden, or not loaded); a
-                    // row led by a spotlight card shows with only that card.
-                    if (items.isEmpty() && ed == null && r.optJSONObject("lead") == null) return@mapNotNull null
+                    // row led by a spotlight card shows with only that card; credits have no cards.
+                    if (items.isEmpty() && ed == null && r.optJSONObject("lead") == null && r.str("kind") != "credits") return@mapNotNull null
                     HomeRow(
                         key = key,
                         title = r.str("title") ?: "",
@@ -117,6 +119,7 @@ class HomeModel(
                             "logo" -> HomeRow.Kind.LOGO
                             "feature" -> HomeRow.Kind.FEATURE
                             "critic" -> HomeRow.Kind.CRITIC
+                            "credits" -> HomeRow.Kind.CREDITS
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -126,6 +129,18 @@ class HomeModel(
                         note = r.str("note"),
                         critic = r.optJSONObject("critic")?.let { parseCritic(it) },
                         sub = r.str("sub"),
+                        gallery = r.optBoolean("gallery", false),
+                        credits = r.optJSONArray("credits").objects().map { g ->
+                            CreditGroup(
+                                label = g.str("label") ?: "",
+                                people = g.optJSONArray("people").objects().mapNotNull { p ->
+                                    val id = p.optLong("id", 0L)
+                                    val name = p.str("name") ?: return@mapNotNull null
+                                    CriticPerson(id = id, name = name, image = null)
+                                },
+                                value = g.str("value"),
+                            )
+                        },
                         grid = r.optBoolean("grid", false),
                         min = r.optInt("min", 0),
                         ratio = r.optDouble("ratio", 0.0).toFloat().takeIf { !it.isNaN() && it > 0f } ?: 0f,
@@ -172,6 +187,22 @@ class HomeModel(
                     HomeSearch(key = q.str("key") ?: "", hint = q.str("hint") ?: "", text = q.str("text") ?: "", busy = q.optBoolean("busy", false))
                 },
                 note = o.str("note"),
+                detail = o.optJSONObject("detail")?.let { d ->
+                    HomeDetail(
+                        backdrop = d.optJSONArray("backdrop").strings(),
+                        logo = d.str("logo"),
+                        title = d.str("title") ?: "",
+                        tagline = d.str("tagline"),
+                        pills = d.optJSONArray("pills").objects().mapNotNull { p ->
+                            val id = p.str("id") ?: return@mapNotNull null
+                            DetailPill(id = id, label = p.str("label") ?: "", kind = p.str("kind") ?: "pill")
+                        },
+                        awards = d.str("awards"),
+                        play = d.str("play"),
+                        more = d.optBoolean("more", false),
+                        synopsis = d.str("synopsis"),
+                    )
+                },
                 message = o.optJSONObject("message")?.let { g ->
                     HomeMessage(title = g.str("title"), text = g.str("text"), action = g.str("action"))
                         .takeIf { it.title != null || it.text != null }
@@ -260,6 +291,10 @@ class HomeRow(
     val critic: CriticInfo? = null,
     /** A second, small line under the title (a genre page's "TRENDING NOW"). */
     val sub: String? = null,
+    /** Pictures (a title's stills): a tap shows them full screen, here. */
+    val gallery: Boolean = false,
+    /** CREDITS: who made it (names open the person) and facts about it. */
+    val credits: List<CreditGroup> = emptyList(),
     /** Drawn as a grid down the page (a list's "See all", a collection) instead of a strip. */
     val grid: Boolean = false,
     /** A grid's narrowest card, in dp (as many across as fit). 0 = the usual. */
@@ -272,7 +307,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -400,6 +435,26 @@ class HomeHeader(
     /** The title opens a list of these (a genre page: the other genres): sends {a:"chip", row:"switch", what:id}. */
     val switch: List<HomeChip> = emptyList(),
 )
+
+/** A title's hero. [pills]: kind "pill" (a tap sends {a:"pill", what:id}), "imdb" (the IMDb tag), "score". */
+class HomeDetail(
+    val backdrop: List<String>,
+    val logo: String?,
+    val title: String,
+    val tagline: String?,
+    val pills: List<DetailPill>,
+    val awards: String?,
+    /** The Play button's label (null = none). Sends {a:"d", what:"play"}. */
+    val play: String?,
+    /** The round "…" button: the page's own menu (watchlist, favourite, trailer, download, Trakt…). */
+    val more: Boolean,
+    val synopsis: String?,
+)
+
+class DetailPill(val id: String, val label: String, val kind: String)
+
+/** A line of credits: a label and the people (a tap opens one), or a label and a [value]. */
+class CreditGroup(val label: String, val people: List<CriticPerson>, val value: String?)
 
 /** A search field; typing sends {a:"query", text}. A new [key] (another list) starts it afresh. */
 class HomeSearch(val key: String, val hint: String, val text: String, val busy: Boolean)

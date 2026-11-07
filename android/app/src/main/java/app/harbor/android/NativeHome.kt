@@ -352,6 +352,7 @@ class NativeHome(
 
         fun submit(m: HomeModel) {
             val out = ArrayList<Section>()
+            if (m.detail != null) out.add(Section(T_DETAIL, -11))
             if (m.header != null) out.add(Section(T_HEADER, -6))
             if (m.search != null) out.add(Section(T_SEARCH, -8))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
@@ -386,6 +387,7 @@ class NativeHome(
             // Watch together and Back buttons. A heading with a picture behind it starts at the
             // very top itself.
             val top = when {
+                m.detail != null -> 0
                 m.header?.backdrop?.isNotEmpty() == true -> 0
                 m.hero.isEmpty() || m.header != null -> dp(64)
                 else -> 0
@@ -414,6 +416,7 @@ class NativeHome(
             T_MESSAGE -> MessageHolder()
             T_GRID_POSTER -> GridLineHolder(C_POSTER)
             T_GRID_TILE -> GridLineHolder(C_TILE)
+            T_DETAIL -> DetailHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -437,6 +440,7 @@ class NativeHome(
                 }
                 is MessageHolder -> m.message?.let { holder.bind(it) }
                 is GridLineHolder -> items[position].row?.let { holder.bind(it, items[position].start) }
+                is DetailHolder -> m.detail?.let { holder.bind(it) }
             }
         }
 
@@ -842,6 +846,239 @@ class NativeHome(
         }
     }
 
+    // ---- a title's page --------------------------------------------------------------------------
+
+    /** Which titles' synopses are open in full. */
+    private val synopsisOpen = HashSet<String>()
+
+    /**
+     * A title's hero as the page draws it: the backdrop darkened from the bottom and the start, the
+     * tagline, the logo (or the name), the pills (year, ratings, runtime, genres), the awards, Play
+     * and the round "…" (the page's own menu); then the synopsis, four lines until opened.
+     */
+    private inner class DetailHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private val frame = FrameLayout(ctx)
+        private val backdrop = NetImage(ctx)
+        private val shadeUp = View(ctx)
+        private val shadeSide = View(ctx)
+        private val content = LinearLayout(ctx)
+        private val tagline = label("", 13f, bold = true, lines = 2)
+        private val logo = NetImage(ctx)
+        private val title = label("", 36f, lines = 3)
+        private val pills = FlowRow(ctx, dp(10), dp(10))
+        private val awards = label("", 13f, lines = 2)
+        private val actions = LinearLayout(ctx)
+        private val play = LinearLayout(ctx)
+        private val playIcon = ImageView(ctx)
+        private val playText = label("", 15f, bold = true, lines = 1)
+        private val more = FrameLayout(ctx)
+        private val moreIcon = ImageView(ctx)
+        private val synopsis = label("", 16f)
+        private val synopsisToggle = label("", 13.5f, bold = true, lines = 1)
+        private var key = ""
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            backdrop.scaleType = ImageView.ScaleType.CENTER_CROP
+            frame.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
+            frame.addView(shadeUp, FrameLayout.LayoutParams(MATCH, MATCH))
+            frame.addView(shadeSide, FrameLayout.LayoutParams(MATCH, MATCH))
+            content.orientation = LinearLayout.VERTICAL
+            content.setPaddingRelative(gutter, 0, gutter, dp(28))
+            content.addView(tagline, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
+            logo.scaleType = ImageView.ScaleType.FIT_START
+            content.addView(logo, LinearLayout.LayoutParams((width() * 0.72f).toInt(), dp(96)))
+            title.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            title.setShadowLayer(dp(12).toFloat(), 0f, dp(3).toFloat(), 0x73000000)
+            content.addView(title)
+            content.addView(pills, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
+            content.addView(awards, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+
+            actions.orientation = LinearLayout.HORIZONTAL
+            actions.gravity = Gravity.CENTER_VERTICAL
+            play.orientation = LinearLayout.HORIZONTAL
+            play.gravity = Gravity.CENTER
+            play.isClickable = true
+            play.isFocusable = true
+            play.setPaddingRelative(dp(24), 0, dp(28), 0)
+            play.setOnClickListener { act("d", what = "play") }
+            play.addView(playIcon, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) })
+            play.addView(playText)
+            actions.addView(play, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
+            more.isClickable = true
+            more.isFocusable = true
+            more.setOnClickListener { act("d", what = "more") }
+            more.addView(moreIcon, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+            actions.addView(more, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(12) })
+            content.addView(actions, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(30) })
+            frame.addView(content, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+            col.addView(frame, LinearLayout.LayoutParams(MATCH, heroHeight()))
+
+            synopsis.setLineSpacing(0f, 1.4f)
+            synopsis.setOnClickListener { toggleSynopsis() }
+            col.addView(synopsis, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = gutter
+                marginEnd = gutter
+                topMargin = dp(20)
+            })
+            synopsisToggle.isClickable = true
+            synopsisToggle.isFocusable = true
+            synopsisToggle.setPadding(0, dp(8), dp(8), dp(8))
+            synopsisToggle.setOnClickListener { toggleSynopsis() }
+            col.addView(synopsisToggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = gutter
+                marginEnd = gutter
+                bottomMargin = dp(28)
+            })
+        }
+
+        private fun toggleSynopsis() {
+            if (!synopsisOpen.add(key)) synopsisOpen.remove(key)
+            model?.detail?.let { bind(it) }
+        }
+
+        fun bind(d: HomeDetail) {
+            val m = model ?: return
+            val rtl = m.rtl
+            key = d.title
+            val flp = frame.layoutParams
+            if (flp.height != heroHeight()) {
+                flp.height = heroHeight()
+                frame.layoutParams = flp
+            }
+            frame.setBackgroundColor(colors.canvas)
+            images.load(backdrop, d.backdrop, width(), heroHeight())
+            shadeUp.background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.55f), Color.TRANSPARENT),
+            )
+            shadeSide.background = GradientDrawable(
+                if (rtl) GradientDrawable.Orientation.RIGHT_LEFT else GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(withAlpha(colors.canvas, 0.85f), withAlpha(colors.canvas, 0.35f), Color.TRANSPARENT),
+            )
+            tagline.text = d.tagline?.let { if (rtl) it else it.uppercase() } ?: ""
+            tagline.visibility = if (d.tagline.isNullOrBlank()) View.GONE else View.VISIBLE
+            tagline.letterSpacing = if (rtl) 0f else 0.2f
+            tagline.setTextColor(colors.subtle)
+
+            title.text = d.title
+            title.setTextColor(colors.ink)
+            title.visibility = View.VISIBLE
+            logo.scaleType = if (rtl) ImageView.ScaleType.FIT_END else ImageView.ScaleType.FIT_START
+            logo.visibility = View.GONE
+            if (d.logo != null) {
+                logo.visibility = View.INVISIBLE
+                images.load(logo, listOf(d.logo), (width() * 0.72f).toInt(), dp(96), alpha = true) { ok ->
+                    logo.visibility = if (ok) View.VISIBLE else View.GONE
+                    title.visibility = if (ok) View.GONE else View.VISIBLE
+                }
+            }
+
+            pills.removeAllViews()
+            for (p in d.pills) pills.addView(pill(p))
+            pills.visibility = if (d.pills.isEmpty()) View.GONE else View.VISIBLE
+            awards.text = d.awards ?: ""
+            awards.visibility = if (d.awards.isNullOrBlank()) View.GONE else View.VISIBLE
+            awards.setTextColor(colors.accent)
+
+            play.visibility = if (d.play == null) View.GONE else View.VISIBLE
+            play.background = focusable(rounded(colors.ink, dp(24).toFloat()))
+            playIcon.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
+            playText.text = d.play ?: ""
+            playText.setTextColor(colors.canvas)
+            more.visibility = if (d.more) View.VISIBLE else View.GONE
+            more.background = focusable(rounded(withAlpha(colors.canvas, 0.8f), dp(24).toFloat(), dp(1), withAlpha(colors.ink, 0.18f)))
+            more.contentDescription = m.label("moreActions", "More actions")
+            moreIcon.setImageDrawable(icon(R.drawable.ic_ellipsis, colors.ink))
+
+            val text = d.synopsis
+            synopsis.visibility = if (text.isNullOrBlank()) View.GONE else View.VISIBLE
+            synopsis.text = text ?: ""
+            synopsis.setTextColor(colors.muted)
+            val open = key in synopsisOpen
+            synopsis.maxLines = if (open) Int.MAX_VALUE else 4
+            synopsis.ellipsize = if (open) null else TextUtils.TruncateAt.END
+            synopsisToggle.text = if (open) m.label("less", "Show less") else m.label("more", "Read more")
+            synopsisToggle.setTextColor(colors.ink)
+            synopsisToggle.visibility = View.GONE
+            if (!text.isNullOrBlank()) {
+                synopsis.post {
+                    val lay = synopsis.layout ?: return@post
+                    val cut = lay.lineCount > 0 && lay.getEllipsisCount(lay.lineCount - 1) > 0
+                    synopsisToggle.visibility = if (open || cut) View.VISIBLE else View.GONE
+                }
+            }
+        }
+
+        /** Year / runtime / genre (a tap opens that list), the IMDb tag with its score, other scores. */
+        private fun pill(p: DetailPill): View {
+            if (p.kind == "imdb") {
+                return imdbBadge(p.label, 13f, trailing = 0).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                }
+            }
+            return label(p.label, 13f, bold = p.kind == "score", lines = 1).apply {
+                setTextColor(colors.muted)
+                gravity = Gravity.CENTER
+                setPaddingRelative(dp(12), dp(5), dp(12), dp(5))
+                background = rounded(withAlpha(colors.canvas, 0.5f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.14f))
+                if (p.kind == "pill") {
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { act("pill", what = p.id) }
+                }
+            }
+        }
+    }
+
+    /** Children side by side, onto the next line when one doesn't fit (the hero's pills). */
+    private class FlowRow(ctx: Context, private val gapX: Int, private val gapY: Int) : ViewGroup(ctx) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val maxW = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+            var x = 0
+            var y = 0
+            var lineH = 0
+            for (i in 0 until childCount) {
+                val c = getChildAt(i)
+                if (c.visibility == View.GONE) continue
+                c.measure(MeasureSpec.makeMeasureSpec(maxW, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+                if (x > 0 && x + c.measuredWidth > maxW) {
+                    x = 0
+                    y += lineH + gapY
+                    lineH = 0
+                }
+                x += c.measuredWidth + gapX
+                lineH = max(lineH, c.measuredHeight)
+            }
+            setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), y + lineH + paddingTop + paddingBottom)
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            val maxW = r - l - paddingLeft - paddingRight
+            val rtl = layoutDirection == View.LAYOUT_DIRECTION_RTL
+            var x = 0
+            var y = paddingTop
+            var lineH = 0
+            for (i in 0 until childCount) {
+                val c = getChildAt(i)
+                if (c.visibility == View.GONE) continue
+                val w = c.measuredWidth
+                val h = c.measuredHeight
+                if (x > 0 && x + w > maxW) {
+                    x = 0
+                    y += lineH + gapY
+                    lineH = 0
+                }
+                val left = if (rtl) r - l - paddingRight - x - w else paddingLeft + x
+                c.layout(left, y, left + w, y + h)
+                x += w + gapX
+                lineH = max(lineH, h)
+            }
+        }
+    }
+
     // ---- hero ----------------------------------------------------------------------------------
 
     private inner class HeroHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
@@ -1106,6 +1343,8 @@ class NativeHome(
         private val controls = LinearLayout(ctx)
         /** Critics' Pick: its own card instead of the strip (made the first time one is shown). */
         private var critic: CriticCard? = null
+        /** Credits: lines of names and facts instead of the strip. */
+        private var creditsBox: LinearLayout? = null
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -1189,7 +1428,22 @@ class NativeHome(
             title.alpha = if (hidden) 0.45f else 1f
             val info = row.critic
             val isCritic = row.kind == HomeRow.Kind.CRITIC
-            strip.visibility = if (hidden || isCritic || row.items.isEmpty()) View.GONE else View.VISIBLE
+            val isCredits = row.kind == HomeRow.Kind.CREDITS
+            strip.visibility = if (hidden || isCritic || isCredits || row.items.isEmpty()) View.GONE else View.VISIBLE
+            // A row without a title (a title's credits): no heading line at all.
+            header.visibility = if (row.title.isBlank() && !row.seeAll && row.note == null && ed == null) View.GONE else View.VISIBLE
+            if (isCredits && !hidden) {
+                val box = creditsBox ?: LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPaddingRelative(gutter, 0, gutter, dp(8))
+                    creditsBox = this
+                    col.addView(this, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+                }
+                box.visibility = View.VISIBLE
+                fillCredits(box, m, row)
+            } else {
+                creditsBox?.visibility = View.GONE
+            }
             if (isCritic && info != null && !hidden) {
                 val card = critic ?: CriticCard().also {
                     critic = it
@@ -1336,6 +1590,8 @@ class NativeHome(
         /** Tiles and the feature card: their name (and a line under it) on the picture. */
         private val overlay = LinearLayout(ctx)
         private val bigTitle = label("", if (kind == C_FEATURE) 24f else if (kind == C_LEAD) 26f else 17f, lines = 2)
+        /** A person's part under their name (a title's cast). */
+        private val posterSub = label("", 12f, lines = 1)
         /** In a grid line (not a strip): which card this is, and its width. */
         var fixedPos = -1
         var fixedWidth = 0
@@ -1479,6 +1735,10 @@ class NativeHome(
                 col.addView(rankLine, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
             } else {
                 col.addView(title, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+                if (kind == C_POSTER) {
+                    posterSub.visibility = View.GONE
+                    col.addView(posterSub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) })
+                }
             }
             if (!titleBelow) title.visibility = View.GONE
         }
@@ -1493,6 +1753,11 @@ class NativeHome(
                 if (it == RecyclerView.NO_POSITION) return else it - (if (r.lead != null) 1 else 0)
             }
             if (p < 0) return
+            // A title's stills: full screen, here.
+            if (r.gallery) {
+                if (what == "open") showStills(r.items.mapNotNull { it.images.firstOrNull() }, p)
+                return
+            }
             act(what, row = r.key, i = p)
         }
 
@@ -1570,8 +1835,15 @@ class NativeHome(
             }
             title.text = c.title
             title.setTextColor(colors.ink)
+            if (kind == C_POSTER) {
+                posterSub.text = c.sub ?: ""
+                posterSub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
+                posterSub.setTextColor(colors.muted)
+                // A person's name fits on one line; their part goes under it.
+                title.minLines = if (c.sub.isNullOrBlank()) 2 else 1
+            }
             if (kind == C_POSTER || kind == C_RANK) {
-                title.minLines = 2
+                if (kind == C_RANK || c.sub.isNullOrBlank()) title.minLines = 2
                 check.visibility = if (c.watched) View.VISIBLE else View.GONE
                 if (c.watched) {
                     check.background = GradientDrawable().apply {
@@ -2036,6 +2308,50 @@ class NativeHome(
         }
     }
 
+    /** A title's credits as the page writes them: a small label, then the names (a tap opens one). */
+    private fun fillCredits(box: LinearLayout, m: HomeModel, row: HomeRow) {
+        box.removeAllViews()
+        row.credits.forEachIndexed { gi, g ->
+            val group = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            group.addView(label(caps(m, g.label), 12f, lines = 1).apply {
+                setTextColor(colors.subtle)
+                letterSpacing = if (m.rtl) 0f else 0.18f
+            })
+            val names = TextView(ctx).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextColor(colors.ink)
+                setLineSpacing(0f, 1.2f)
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            }
+            if (g.people.isNotEmpty()) {
+                val sb = android.text.SpannableStringBuilder()
+                g.people.forEachIndexed { i, p ->
+                    val start = sb.length
+                    sb.append(p.name)
+                    if (p.id > 0) {
+                        val id = p.id
+                        val ink = colors.ink
+                        sb.setSpan(object : android.text.style.ClickableSpan() {
+                            override fun onClick(widget: View) = act("person", row = row.key, what = id.toString())
+                            override fun updateDrawState(ds: android.text.TextPaint) {
+                                ds.color = ink
+                                ds.isUnderlineText = false
+                            }
+                        }, start, sb.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                    if (i < g.people.size - 1) sb.append(", ")
+                }
+                names.text = sb
+                names.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+                names.highlightColor = Color.TRANSPARENT
+            } else {
+                names.text = g.value ?: ""
+            }
+            group.addView(names, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            box.addView(group, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (gi > 0) topMargin = dp(20) })
+        }
+    }
+
     /** Small capitals (Arabic has no case). */
     private fun caps(m: HomeModel, s: String): String = if (m.rtl) s else s.uppercase()
 
@@ -2189,6 +2505,7 @@ class NativeHome(
         private const val T_GRID_TITLE = 13
         private const val T_GRID_POSTER = 14
         private const val T_GRID_TILE = 15
+        private const val T_DETAIL = 16
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

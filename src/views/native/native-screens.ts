@@ -289,6 +289,9 @@ export function nativeLabels(t: T, customize: string) {
     seeAll: t("See all"),
     customize,
     together: t("Watch together"),
+    more: t("Show more"),
+    less: t("Show less"),
+    moreActions: t("More actions"),
     year: t("Year"),
     runtime: t("Runtime"),
     watched: t("Watched"),
@@ -451,7 +454,11 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits";
+  /** "credits": who made it (names open the person) and facts, as lines of text. */
+  credits?: Array<{ label: string; people?: Array<{ id: number; name: string }>; value?: string | null }>;
+  /** Pictures shown full screen by the native screen itself on a tap (a title's stills). */
+  gallery?: boolean;
   /** A small line at the end of the title (Critics' Pick: "Loved by reviewers today"). */
   note?: string | null;
   /** Critics' Pick: everything its card shows (see CriticInfo in HomeModel.kt). */
@@ -542,6 +549,9 @@ export function editLabels(t: T) {
 
 /** A row's JSON for the native screen. */
 export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNativeCards>) {
+  if (r.kind === "credits") {
+    return { key: r.key, title: r.title, kind: "credits", all: false, more: false, items: [], credits: r.credits ?? [] };
+  }
   if (r.cards) {
     return {
       key: r.key,
@@ -555,6 +565,8 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
       grid: !!r.grid,
       min: r.min ?? 0,
       ratio: r.ratio ?? 0,
+      gallery: !!r.gallery,
+      credits: r.credits ?? [],
       lead: r.lead ? { title: r.lead.title, sub: r.lead.sub ?? null, img: (r.lead.img ?? []).filter(isUrlOrData) } : null,
       items: r.cards.map((c) => ({
         title: c.title,
@@ -573,7 +585,7 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
     key: r.key,
     title: r.title,
     kind: r.rank ? "rank" : "poster",
-    all: !!r.seeAll,
+    all: !!r.seeAll || !!r.onAll,
     more: !r.rank && !!r.more,
     sub: r.sub ?? null,
     grid: !!r.grid,
@@ -603,6 +615,12 @@ export type NativePageInput = {
   note?: string | null;
   /** A centred message with an optional button (no results…). */
   message?: { title?: string | null; text?: string | null; action?: string | null; onAction?: () => void } | null;
+  /** A title's hero and synopsis (see HomeDetail in HomeModel.kt); its buttons and pills. */
+  detail?: Record<string, unknown> | null;
+  onDetail?: (what: string) => void;
+  onPill?: (id: string) => void;
+  /** Steps aside for now without giving the page back (a dialog the page opens over it). */
+  hidden?: boolean;
   cw?: { title: string; items: LibraryItem[] } | null;
   rows: NativeRowInput[];
   customize?: { label: string; onTap: () => void } | null;
@@ -644,6 +662,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const msgText = input.message?.text ?? null;
   const msgAction = input.message?.action ?? null;
   const hasMessage = !!input.message;
+  const detailModel = input.detail;
   const customizeLabel = customize?.label;
   const editing = !!editor?.on;
   const editCustom = editor?.custom;
@@ -662,7 +681,8 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     for (const r of rows) {
       const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
       const editable = editing && editCustom && editKeys?.includes(r.key);
-      if (!editable && ((r.cards ? r.cards.length : shown.length) === 0 || r.key === "cw")) continue;
+      const empty = r.kind === "credits" ? (r.credits ?? []).length === 0 : (r.cards ? r.cards.length : shown.length) === 0;
+      if (!editable && (empty || r.key === "cw")) continue;
       map.set(r.key, { ...r, metas: shown });
       const json = nativeRowJson(r, cards) as Record<string, unknown>;
       if (editable && editCustom) {
@@ -688,14 +708,15 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       search: searchKey != null ? { key: searchKey, hint: searchHint ?? "", text: searchText ?? "", busy: searchBusy } : null,
       note: note ?? null,
       message: hasMessage ? { title: msgTitle, text: msgText, action: msgAction } : null,
+      detail: detailModel ?? null,
     };
-  }, [inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+  }, [detailModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
   useNativeScreen(page, {
     inUse,
-    active: input.active,
+    active: input.active && !input.hidden,
     model,
     onAction: (a: NativeAction) => {
       const p = published.current;
@@ -767,6 +788,12 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "message":
           cur.message?.onAction?.();
+          return;
+        case "d":
+          if (a.what) cur.onDetail?.(a.what);
+          return;
+        case "pill":
+          if (a.what) cur.onPill?.(a.what);
           return;
         case "link":
           if (a.text && /^https?:\/\//.test(a.text)) openUrl(a.text);

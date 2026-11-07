@@ -23,6 +23,7 @@ import {
   tmdbWatchProviders,
   type TmdbDetail,
   type WatchProvider,
+  tmdbCollection,
 } from "@/lib/providers/tmdb";
 import { cinemetaDetails } from "@/lib/providers/cinemeta-details";
 import { useAuth } from "@/lib/auth";
@@ -51,8 +52,10 @@ import {
   moveSection,
   toggleSectionHidden,
   resetDetailCustomization,
+  orderedSectionKeys,
   type DetailCustomization,
 } from "@/lib/detail-customization";
+import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
 import { EpisodeDownloadButton } from "./detail/episode-download-button";
 import { isTitleUpcoming } from "./detail/helpers";
 import { HeroAwardsCorner } from "./detail/hero-awards";
@@ -676,6 +679,186 @@ export function DetailView({
     : isSeries && lastPlay
       ? t("Resume S{s}:E{e}", { s: lastPlay.season, e: lastPlay.episode })
       : t("Play");
+
+
+  // Android, a film: drawn natively (see @/views/native/native-screens) like the page: the hero
+  // (backdrop, tagline, logo, year / ratings / runtime / genres, Play and "…", which opens the
+  // page's own menu: watchlist, favourite, trailer, download, Trakt…), the synopsis, then the
+  // sections in the page's order (crew, cast, collection, more like this, you might also like,
+  // media, information). Series, anime and live channels keep the page for now (their episode
+  // lists, downloads and seasons).
+  const { topKind, openPerson, openCollection } = useView();
+  const nativeOn = useNativeScreensEnabled();
+  const nativeBlocked = meta.type !== "movie" || isSeries || isAnime || detectingAnime || !!liveContext || layoutEdit;
+  const overflowRef = useRef<HTMLDivElement>(null);
+  const [collectionParts, setCollectionParts] = useState<Meta[]>([]);
+  const collectionId = detail?.collection?.id;
+  useEffect(() => {
+    setCollectionParts([]);
+    if (!nativeOn || nativeBlocked || !collectionId || !settings.tmdbKey) return;
+    let off = false;
+    tmdbCollection(settings.tmdbKey, collectionId)
+      .then((c) => !off && setCollectionParts(c?.parts ?? []))
+      .catch(() => {});
+    return () => {
+      off = true;
+    };
+  }, [nativeOn, nativeBlocked, collectionId, settings.tmdbKey]);
+  const nativeDetail = useMemo(() => {
+    const pills: Array<{ id: string; label: string; kind: string }> = [];
+    if (year) pills.push({ id: "year", label: String(year), kind: "pill" });
+    if (rating) {
+      pills.push(
+        imdbRatingValue != null
+          ? { id: "imdb", label: String(rating), kind: "imdb" }
+          : { id: "tmdb", label: `TMDB ${rating}`, kind: "score" },
+      );
+    }
+    if (settings.showRtBadge && scores?.rtCritics != null) pills.push({ id: "rt", label: `RT ${scores.rtCritics}%`, kind: "score" });
+    if (settings.showRtBadge && mdblist?.rtAudience != null) pills.push({ id: "rta", label: `🍿 ${Math.round(mdblist.rtAudience)}%`, kind: "score" });
+    if (mdblist?.letterboxd != null) pills.push({ id: "lb", label: `Letterboxd ${mdblist.letterboxd}`, kind: "score" });
+    const metacritic = mdblist?.metacritic ?? scores?.metascore ?? null;
+    if (metacritic != null) pills.push({ id: "mc", label: `Metacritic ${metacritic}`, kind: "score" });
+    if (runtime) pills.push({ id: "runtime", label: String(runtime), kind: "pill" });
+    for (const g of genres.slice(0, 3)) pills.push({ id: `genre:${g}`, label: g, kind: "pill" });
+    return {
+      backdrop: [backdrop, meta.background, detail?.backdrop].filter((u, i, a): u is string => !!u && a.indexOf(u) === i),
+      logo: logo ?? null,
+      title,
+      tagline: !loading && !detectingAnime && tagline ? tagline : null,
+      pills,
+      play: upcoming ? null : smartPlayLabel,
+      more: true,
+      synopsis: overview || null,
+    };
+  }, [year, rating, imdbRatingValue, settings.showRtBadge, scores, mdblist, runtime, genres, backdrop, meta.background, detail?.backdrop, logo, title, loading, detectingAnime, tagline, upcoming, smartPlayLabel, overview]);
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    if (!detail) return [];
+    const sections = new Map<string, NativeRowInput>();
+    const crew: Array<{ label: string; people: Array<{ id: number; name: string }> }> = [];
+    const add = (label: string, people: Array<{ id: number; name: string }>) => {
+      if (people.length > 0) crew.push({ label, people });
+    };
+    add(detail.directors.length === 1 ? t("Director") : t("Directors"), detail.directors);
+    add(detail.creators.length === 1 ? t("Creator") : t("Creators"), detail.creators);
+    add(detail.writers.length === 1 ? t("Writer") : t("Writers"), detail.writers.slice(0, 6));
+    add(t("Producers"), detail.producers.slice(0, 6));
+    add(t("Cinematography"), detail.cinematography);
+    add(t("Music"), detail.composer);
+    add(detail.editor.length === 1 ? t("Editor") : t("Editors"), detail.editor);
+    if (crew.length > 0) sections.set("crew", { key: "crew", title: "", metas: [], kind: "credits", credits: crew });
+    if (detail.cast.length > 0) {
+      sections.set("cast", {
+        key: "cast",
+        title: t("Cast · {n}", { n: detail.cast.length }),
+        metas: [],
+        kind: "poster",
+        cards: detail.cast.map((c) => ({
+          title: c.name,
+          sub: c.character || null,
+          img: c.profilePath ? [c.profilePath.startsWith("http") ? c.profilePath : `https://image.tmdb.org/t/p/w185${c.profilePath}`] : [],
+        })),
+        onOpen: (i) => {
+          const c = detail.cast[i];
+          if (c && c.id > 0) openPerson(c.id);
+        },
+      });
+    }
+    if (detail.collection && collectionParts.length > 0) {
+      const coll = detail.collection;
+      sections.set("collection", { key: "collection", title: coll.name, metas: collectionParts, onAll: () => openCollection(coll.id) });
+    }
+    if (recommendations.length > 0) sections.set("moreLikeThis", { key: "moreLikeThis", title: t("More Like This"), metas: recommendations });
+    if (similar.length > 0) sections.set("similar", { key: "similar", title: t("You Might Also Like"), metas: similar });
+    const stills = [...(detail.gallery?.backdrops ?? [])];
+    if (stills.length > 0) {
+      sections.set("mediaGallery", {
+        key: "mediaGallery",
+        title: t("Media"),
+        metas: [],
+        kind: "tile",
+        ratio: 9 / 16,
+        gallery: true,
+        cards: stills.map((u) => ({ title: "", img: [u] })),
+      });
+    }
+    const info: Array<{ label: string; value: string }> = [];
+    const money = (n?: number) => (n && n > 0 ? `$${Math.round(n).toLocaleString("en-US")}` : null);
+    if (detail.status) info.push({ label: t("Status"), value: detail.status });
+    if (detail.productionCompanies.length > 0) info.push({ label: t("Studio"), value: detail.productionCompanies.slice(0, 4).join(", ") });
+    if (detail.productionCountries.length > 0) info.push({ label: t("Country"), value: detail.productionCountries.join(", ") });
+    if (detail.spokenLanguages.length > 0) info.push({ label: t("Original language"), value: detail.spokenLanguages.slice(0, 3).join(", ") });
+    if (detail.originalTitle && detail.originalTitle !== detail.title) info.push({ label: t("Original title"), value: detail.originalTitle });
+    if (detail.genres.length > 0) info.push({ label: t("Genres"), value: detail.genres.join(", ") });
+    const budget = money(detail.budget);
+    if (budget) info.push({ label: t("Budget"), value: budget });
+    const revenue = money(detail.revenue);
+    if (revenue) info.push({ label: t("Revenue"), value: revenue });
+    if (info.length > 0) sections.set("info", { key: "info", title: t("Information"), metas: [], kind: "credits", credits: info });
+    const order = orderedSectionKeys([...sections.keys()], layout).filter((k) => !layout.hidden.includes(k));
+    return order.map((k) => sections.get(k)).filter((r): r is NativeRowInput => !!r);
+  }, [detail, collectionParts, recommendations, similar, layout, t, openPerson, openCollection]);
+  const native = useNativeBrowsePage("detail", {
+    active: topKind === "meta",
+    blocked: nativeBlocked,
+    hidden: trailerOpen,
+    t,
+    back: true,
+    detail: nativeDetail,
+    rows: nativeRows,
+    onDetail: (what) => {
+      if (what === "play") void smartPlay();
+      else if (what === "more") overflowRef.current?.querySelector<HTMLButtonElement>("button")?.click();
+    },
+    onPill: (id) => {
+      if (id === "year") {
+        const n = Number(String(year).slice(0, 4));
+        if (Number.isFinite(n)) openFilter({ kind: "year", mediaType: "movie", value: n });
+      } else if (id === "runtime") {
+        const minutes = parseInt(String(runtime), 10);
+        if (Number.isFinite(minutes)) openFilter({ kind: "runtime", mediaType: "movie", value: minutes });
+      } else if (id.startsWith("genre:")) {
+        const g = id.slice(6);
+        const gid = MOVIE_GENRES[g];
+        if (gid) openFilter({ kind: "genre", mediaType: "movie", name: g, id: gid });
+      }
+    },
+  });
+  if (native) {
+    // Only what the native screen opens over itself: the page's own "…" menu (its button out of
+    // sight; the native "…" presses it) and the trailer.
+    return (
+      <main ref={scrollRef} aria-hidden={!trailerOpen} className="absolute inset-0 z-30 overflow-hidden bg-canvas">
+        <div ref={overflowRef} className="phone-above-tabbar fixed bottom-24 end-4 opacity-0">
+          <HeroActionOverflow
+            meta={meta}
+            isFav={isFav}
+            onToggleFavorite={() =>
+              toggleFavorite({ id: meta.id, type: meta.type, name: title || meta.name, poster: meta.poster ?? detail?.poster })
+            }
+            hasTrailer={!!trailerCandidate}
+            onTrailer={() => setTrailerOpen(true)}
+            canDownload
+            showWatched={settings.showWatchedButton}
+            watchedMark={isWatchedNow}
+            onWatched={() => {
+              setWatchedMark(true);
+              void markMovieWatched(meta, detail?.imdbId, meta.id.startsWith("tmdb:") ? meta.id.split(":")[2] : null);
+            }}
+            showSync
+            inWatchlist={inWatchlist}
+            onToggleWatchlist={() =>
+              toggleWatchlist({ id: meta.id, type: meta.type, name: title || meta.name, poster: meta.poster ?? detail?.poster, imdbId: detail?.imdbId })
+            }
+            simkl={{ harborId: meta.id, type: "movie" }}
+          />
+        </div>
+        {trailerOpen && trailerCandidate && (
+          <TrailerOverlay id={trailerCandidate} title={title} logo={logo} onClose={() => setTrailerOpen(false)} />
+        )}
+      </main>
+    );
+  }
 
   return (
     <main
