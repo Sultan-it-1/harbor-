@@ -11,6 +11,7 @@ import { watchlistHas } from "@/lib/watchlist";
 import { HistoryTab } from "./library/history-tab";
 import { LocalTab } from "./library/local-tab";
 import {
+  hydrateLibraryMeta,
   NativeLibrarySinkContext,
   TabBtn,
   type NativeLibraryFilter,
@@ -19,7 +20,7 @@ import {
   type Tab,
 } from "./library/shared";
 import { useSettings } from "@/lib/settings";
-import type { Meta } from "@/lib/cinemeta";
+import { narrowMediaType, type Meta } from "@/lib/cinemeta";
 import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
 import { SimklTab } from "./library/simkl-tab";
 import { TraktTab } from "./library/trakt-tab";
@@ -168,21 +169,59 @@ function useNativeLibrary({
     [enabled],
   );
 
+  // Titles saved without a poster (or a name): looked up like the page's cards do (TMDB, then the
+  // addons), a few at a time, once each.
+  const [hydrated, setHydrated] = useState<Record<string, Meta>>({});
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    if (!enabled) return;
+    void gridsVer;
+    const need: Meta[] = [];
+    for (const { grid } of grids.current.values()) {
+      for (const g of grid.groups) {
+        for (const i of g.items) {
+          const m = i.meta;
+          if ((!m.poster || !m.name) && !asked.current.has(m.id)) need.push(m);
+        }
+      }
+    }
+    if (need.length === 0) return;
+    let alive = true;
+    let next = 0;
+    const work = async () => {
+      while (alive && next < need.length) {
+        const m = need[next++];
+        if (asked.current.has(m.id)) continue;
+        asked.current.add(m.id);
+        const full = await hydrateLibraryMeta(m.id, narrowMediaType(m.type), settings.tmdbKey ?? null).catch(() => null);
+        if (full && (full.poster || full.name)) setHydrated((h) => ({ ...h, [m.id]: full }));
+      }
+    };
+    for (let k = 0; k < 4; k++) void work();
+    return () => {
+      alive = false;
+    };
+  }, [enabled, gridsVer, settings.tmdbKey]);
+
   const rows = useMemo<NativeRowInput[]>(() => {
     void gridsVer;
     const out: NativeRowInput[] = [];
+    const filled = (m: Meta): Meta => {
+      const h = hydrated[m.id];
+      return h ? { ...m, poster: m.poster || h.poster, name: m.name || h.name, background: m.background || h.background } : m;
+    };
     for (const [id, { grid }] of grids.current) {
       grid.groups.forEach((g, gi) => {
         if (g.items.length === 0) return;
         out.push({
           key: `${id}|${gi}`,
           title: `${grid.section ? `${grid.section} · ` : ""}${t(g.label)} · ${g.items.length}`,
-          metas: g.items.map((i) => i.meta),
+          metas: g.items.map((i) => filled(i.meta)),
         });
       });
     }
     return out;
-  }, [gridsVer, t]);
+  }, [gridsVer, t, hydrated]);
 
   const header = useMemo(
     () => ({

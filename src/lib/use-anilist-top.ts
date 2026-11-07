@@ -5,7 +5,8 @@ import type { Meta } from "@/lib/cinemeta";
 const cache: Record<string, Meta[]> = {};
 const inflight: Record<string, Promise<Meta[]> | undefined> = {};
 
-function useBrowse(key: "top" | "trending"): Meta[] {
+/** [retry]: a new value asks again when the last answer was empty (the network failed). */
+function useBrowse(key: "top" | "trending", retry: number): Meta[] {
   const [metas, setMetas] = useState<Meta[]>(() => cache[key] ?? []);
 
   useEffect(() => {
@@ -17,7 +18,10 @@ function useBrowse(key: "top" | "trending"): Meta[] {
     if (!inflight[key]) {
       const fetcher = key === "top" ? fetchAnilistTopAnime(100) : fetchAnilistTrendingAnime(40);
       inflight[key] = fetcher.then((list) => {
-        cache[key] = list;
+        // An empty answer is a failure (each page's error is swallowed): not kept, so a later
+        // visit asks again instead of showing nothing for the rest of the session.
+        if (list.length > 0) cache[key] = list;
+        inflight[key] = undefined;
         return list;
       });
     }
@@ -31,15 +35,15 @@ function useBrowse(key: "top" | "trending"): Meta[] {
     return () => {
       cancelled = true;
     };
-  }, [key]);
+  }, [key, retry]);
 
   return metas;
 }
 
-export function useAnilistTop(): Meta[] {
-  return useBrowse("top");
+export function useAnilistTop(retry = 0): Meta[] {
+  return useBrowse("top", retry);
 }
 
-export function useAnilistTrending(): Meta[] {
-  return useBrowse("trending");
+export function useAnilistTrending(retry = 0): Meta[] {
+  return useBrowse("trending", retry);
 }

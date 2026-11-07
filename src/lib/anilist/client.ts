@@ -1,3 +1,4 @@
+import { androidFetch, isAndroidApp } from "@/lib/android";
 import { ANILIST_GRAPHQL_URL } from "./config";
 
 class AnilistApiError extends Error {
@@ -11,15 +12,25 @@ class AnilistApiError extends Error {
 
 type GraphqlResponse<T> = { data?: T; errors?: Array<{ message: string }> };
 
-function doFetch(query: string, variables: Record<string, unknown>): Promise<Response> {
-  return fetch(ANILIST_GRAPHQL_URL, {
+async function doFetch(query: string, variables: Record<string, unknown>): Promise<Response> {
+  const init: RequestInit = {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
     body: JSON.stringify({ query, variables }),
-  });
+  };
+  if (!isAndroidApp()) return fetch(ANILIST_GRAPHQL_URL, init);
+  // The Android app: when the WebView gets no answer or a refusal, the shell asks instead (its
+  // own network stack, no CORS). Only read queries come through here.
+  try {
+    const r = await fetch(ANILIST_GRAPHQL_URL, init);
+    if (r.ok || r.status === 429 || r.status === 400 || r.status === 404) return r;
+  } catch {
+    /* the shell tries */
+  }
+  return androidFetch(ANILIST_GRAPHQL_URL, init);
 }
 
 export async function anilistRequest<T>(

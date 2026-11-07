@@ -1,4 +1,5 @@
 import type { Meta } from "@/lib/cinemeta";
+import { androidFetch, isAndroidApp } from "@/lib/android";
 import { registerEvictable } from "@/lib/maintenance";
 import { adultContentHidden, isAdultText } from "@/lib/addons-store/adult-filter";
 
@@ -285,6 +286,22 @@ const MIN_INTERVAL_MS = 400;
 
 let queueChain: Promise<void> = Promise.resolve();
 
+/**
+ * The page's own request; on the Android app, when that gets no answer or a refusal, the shell
+ * asks instead (its own network stack and DNS, no CORS): a phone whose WebView can't reach Jikan
+ * still gets the anime rows.
+ */
+async function jikanFetch(url: string, signal: AbortSignal): Promise<Response> {
+  if (!isAndroidApp()) return fetch(url, { signal });
+  try {
+    const r = await fetch(url, { signal });
+    if (r.ok || r.status === 429 || r.status === 404) return r;
+  } catch (e) {
+    if (signal.aborted) throw e;
+  }
+  return androidFetch(url, { signal, timeoutMs: 12000 });
+}
+
 function throttledJikanFetch(url: string, signal: AbortSignal): Promise<Response> {
   let resolveOuter!: (r: Response) => void;
   let rejectOuter!: (e: unknown) => void;
@@ -295,7 +312,7 @@ function throttledJikanFetch(url: string, signal: AbortSignal): Promise<Response
 
   queueChain = queueChain.then(async () => {
     try {
-      const r = await fetch(url, { signal });
+      const r = await jikanFetch(url, signal);
       resolveOuter(r);
     } catch (e) {
       rejectOuter(e);

@@ -64,25 +64,25 @@ export function AnimeView({ active = true }: { active?: boolean }) {
     rowsRef.current = rowsByKey;
   }, [rowsByKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  /** Loads [specs]' first pages, a few at a time (the first load, and the rows that failed). */
+  const loadSpecs = useCallback((specs: typeof SPECS, isCancelled: () => boolean) => {
+    void (async () => {
       const BATCH = 6;
       const GAP_MS = 350;
-      for (let i = 0; i < SPECS.length; i += BATCH) {
-        if (cancelled) return;
-        const batch = SPECS.slice(i, i + BATCH);
+      for (let i = 0; i < specs.length; i += BATCH) {
+        if (isCancelled()) return;
+        const batch = specs.slice(i, i + BATCH);
         await Promise.all(
           batch.map(async (s) => {
             try {
               const metas = await s.fetcher(1);
-              if (cancelled) return;
+              if (isCancelled()) return;
               setRowsByKey((prev) => ({
                 ...prev,
                 [s.key]: { metas, page: 1, hasMore: metas.length >= ROW_MIN_VISIBLE, ready: true },
               }));
             } catch {
-              if (cancelled) return;
+              if (isCancelled()) return;
               setRowsByKey((prev) => ({
                 ...prev,
                 [s.key]: { metas: [], page: 1, hasMore: false, ready: true },
@@ -90,15 +90,53 @@ export function AnimeView({ active = true }: { active?: boolean }) {
             }
           }),
         );
-        if (i + BATCH < SPECS.length) {
+        if (i + BATCH < specs.length) {
           await new Promise((r) => setTimeout(r, GAP_MS));
         }
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadSpecs(SPECS, () => cancelled);
     return () => {
       cancelled = true;
     };
+  }, [loadSpecs]);
+
+  // Rows that came back empty (Jikan didn't answer, or refused): asked again while the page is
+  // open, up to 3 times 20 s apart, and again each time it's opened. AniList's rows too.
+  const [retryTick, setRetryTick] = useState(0);
+  const retries = useRef(0);
+  // A retry's answers are kept until the page goes away (rows arriving re-run the effect below).
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
   }, []);
+  useEffect(() => {
+    if (active) retries.current = 0;
+  }, [active]);
+  useEffect(() => {
+    if (!active) return;
+    const failed = () =>
+      SPECS.filter((s) => {
+        const r = rowsRef.current[s.key];
+        return r?.ready && r.metas.length === 0;
+      });
+    if (failed().length === 0 || retries.current >= 3) return;
+    const id = window.setTimeout(() => {
+      const again = failed();
+      if (again.length === 0) return;
+      retries.current++;
+      setRetryTick((n) => n + 1);
+      loadSpecs(again, () => !mounted.current);
+    }, retries.current === 0 && SPECS.every((s) => rowsRef.current[s.key]?.ready) ? 1500 : 20000);
+    return () => window.clearTimeout(id);
+  }, [active, rowsByKey, loadSpecs]);
 
   const loadMore = useCallback((key: string) => {
     if (loadingRef.current.has(key)) return;
@@ -490,7 +528,7 @@ export function AnimeView({ active = true }: { active?: boolean }) {
   if (native) {
     return (
       <main ref={scrollCb} aria-hidden="true" className="flex-1 overflow-hidden">
-        {nativeEnabled && <AnilistNativeFeed hidden={anilistHidden} onRows={setAnilistNative} />}
+        {nativeEnabled && <AnilistNativeFeed hidden={anilistHidden} onRows={setAnilistNative} retry={retryTick} />}
         {genrePicker}
       </main>
     );
@@ -631,26 +669,30 @@ type AnilistNativeRows = { trending: Meta[]; top: Meta[] };
 function AnilistNativeFeed({
   hidden,
   onRows,
+  retry,
 }: {
   hidden: string[];
   onRows: React.Dispatch<React.SetStateAction<AnilistNativeRows>>;
+  retry: number;
 }) {
   return (
     <>
-      {!hidden.includes("trending") && <AnilistTrendingFeed onRows={onRows} />}
-      {!hidden.includes("top100") && <AnilistTopFeed onRows={onRows} />}
+      {!hidden.includes("trending") && <AnilistTrendingFeed onRows={onRows} retry={retry} />}
+      {!hidden.includes("top100") && <AnilistTopFeed onRows={onRows} retry={retry} />}
     </>
   );
 }
 
-function AnilistTrendingFeed({ onRows }: { onRows: React.Dispatch<React.SetStateAction<AnilistNativeRows>> }) {
-  const metas = useAnilistTrending();
+type FeedProps = { onRows: React.Dispatch<React.SetStateAction<AnilistNativeRows>>; retry: number };
+
+function AnilistTrendingFeed({ onRows, retry }: FeedProps) {
+  const metas = useAnilistTrending(retry);
   useEffect(() => onRows((r) => (r.trending === metas ? r : { ...r, trending: metas })), [metas, onRows]);
   return null;
 }
 
-function AnilistTopFeed({ onRows }: { onRows: React.Dispatch<React.SetStateAction<AnilistNativeRows>> }) {
-  const metas = useAnilistTop();
+function AnilistTopFeed({ onRows, retry }: FeedProps) {
+  const metas = useAnilistTop(retry);
   useEffect(() => onRows((r) => (r.top === metas ? r : { ...r, top: metas })), [metas, onRows]);
   return null;
 }
