@@ -51,7 +51,7 @@ import { useMediaFavorites, type MediaEntry } from "@/lib/media-favorites";
 import { useLocalWatchlist } from "@/lib/local-watchlist";
 import { useScrollMemory, useView } from "@/lib/view";
 import { CustomizableRows, homeRowMetas, makeWatchedTest } from "./home/customizable-rows";
-import { useNativeHome, type NativeHomeRow } from "./home/native-home";
+import { useNativeHome, type NativeHomeEditor, type NativeHomeRow } from "./home/native-home";
 import { useNativeScreensEnabled } from "@/views/native/native-screens";
 import { useCollectionsRow, useServicesRow } from "@/views/native/native-sections";
 import { CustomizeBar } from "./home/customize-bar";
@@ -625,27 +625,50 @@ export function Home({ active = true }: { active?: boolean }) {
   const isWatched = useMemo(() => makeWatchedTest(traktWatched, localWatched), [traktWatched, localWatched]);
   const nativeRows = useMemo<NativeHomeRow[]>(() => {
     const out: NativeHomeRow[] = [];
-    for (const row of visibleRows) {
-      if (homeRowsCustom.hidden.includes(row.key)) continue;
+    // The editor: every row, hidden ones too (the native screen draws their controls).
+    for (const row of editMode ? editRows : visibleRows) {
+      if (!editMode && homeRowsCustom.hidden.includes(row.key)) continue;
       const metas = homeRowMetas(row, { hideWatched: settings.hideWatchedInCatalogs, homeLanguages: settings.homeLanguages, isWatched });
       const ranked = (homeRowsCustom.numerals ?? []).includes(row.key) && metas.length >= 10;
       out.push({ row, metas, ranked });
     }
     return out;
-  }, [visibleRows, homeRowsCustom, settings.hideWatchedInCatalogs, settings.homeLanguages, isWatched]);
-  const nativeTop10 = settings.homeMode !== "classic" && top10.length >= 10 && !homeRowsCustom.hidden.includes("top10") ? top10 : NO_METAS;
+  }, [editMode, editRows, visibleRows, homeRowsCustom, settings.hideWatchedInCatalogs, settings.homeLanguages, isWatched]);
+  const nativeTop10 = settings.homeMode !== "classic" && top10.length >= 10 ? top10 : NO_METAS;
   const homeView = useView();
-  const nativeOn = useNativeScreensEnabled() && !editMode;
+  const nativeOn = useNativeScreensEnabled();
   const servicesRow = useServicesRow(settings.homeMode !== "classic" ? enabledServices : NO_SERVICES, nativeOn, t, homeView);
-  const showCollections = settings.homeMode !== "classic" && !!settings.tmdbKey && !homeRowsCustom.hidden.includes("collections");
-  const collectionsRow = useCollectionsRow("collections", t("Collections"), nativeOn && showCollections, settings.tmdbKey, t, homeView);
+  const showCollections = settings.homeMode !== "classic" && !!settings.tmdbKey;
+  const collectionsRow = useCollectionsRow(
+    "collections",
+    t("Collections"),
+    nativeOn && showCollections && (editMode || !homeRowsCustom.hidden.includes("collections")),
+    settings.tmdbKey,
+    t,
+    homeView,
+  );
+  const nativeEditor = useMemo<NativeHomeEditor>(
+    () => ({
+      custom: homeRowsCustom,
+      orderKeys,
+      move: handleMove,
+      toggleHidden: handleToggleHidden,
+      rename: handleRename,
+      toggleNumerals: handleToggleNumerals,
+      toggleHero: handleToggleHero,
+      deleteSource: handleDeleteCustomSource,
+      reset: () => mutateHomeRows(resetHomeRows()),
+      addSource: () => setAddSourceModalOpen(true),
+    }),
+    [homeRowsCustom, orderKeys, handleMove, handleToggleHidden, handleRename, handleToggleNumerals, handleToggleHero, handleDeleteCustomSource, mutateHomeRows],
+  );
   const nativeHome = useNativeHome({
     active,
     editMode,
     setEditMode,
     t,
     heroSlides,
-    showHero: settings.homeMode !== "classic" && !homeRowsCustom.hidden.includes("hero"),
+    showHero: settings.homeMode !== "classic",
     cwItems,
     signedIn: !!authKey,
     top10: nativeTop10,
@@ -655,9 +678,19 @@ export function Home({ active = true }: { active?: boolean }) {
     resetTick: homeResetTick,
     servicesRow,
     collectionsRow: showCollections ? collectionsRow : null,
+    editor: nativeEditor,
   });
   if (nativeHome) {
-    return <main ref={scrollCb} aria-hidden="true" className="flex-1 overflow-hidden" />;
+    return (
+      <>
+        <main ref={scrollCb} aria-hidden="true" className="flex-1 overflow-hidden" />
+        <AddSourceModal
+          isOpen={isAddSourceModalOpen}
+          onClose={() => setAddSourceModalOpen(false)}
+          onSave={handleSaveCustomSources}
+        />
+      </>
+    );
   }
 
   const phoneLayout = isPhoneLayout();

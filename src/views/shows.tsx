@@ -220,7 +220,7 @@ export function Shows({ active = true }: { active?: boolean }) {
         seeAll: trending?.fetcher ? { title: t(trending.title), fetcher: trending.fetcher, initial: trending.metas } : undefined,
       });
     }
-    for (const r of applyPageRows(restRows, pageRows.custom, false)) {
+    for (const r of applyPageRows(restRows, pageRows.custom, pageRows.editMode)) {
       out.push({
         key: r.key,
         title: t(r.title),
@@ -230,18 +230,23 @@ export function Shows({ active = true }: { active?: boolean }) {
       });
     }
     return out;
-  }, [top10, rows, restRows, pageRows.custom, t, loadMore]);
+  }, [top10, rows, restRows, pageRows.custom, pageRows.editMode, t, loadMore]);
   const nativeHero = useMemo(() => ({ metas: hero }), [hero]);
   const nativeHeader = useMemo(() => {
     const copy = bucketCopy();
     return { kicker: t(copy.kicker), title: t(copy.title), subtitle: t(copy.subtitle) };
   }, [t]);
   const nativeCw = useMemo(() => ({ title: t("Pick up where you left off"), items: continueWatching }), [t, continueWatching]);
-  const { setEditMode } = pageRows;
+  const { setEditMode, editMode, custom, persist } = pageRows;
   const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);
+  const restKeys = useMemo(() => restRows.map((r) => r.key), [restRows]);
+  const nativeEditor = useMemo(
+    () => ({ on: editMode, setOn: setEditMode, custom, allKeys: restKeys, persist }),
+    [editMode, setEditMode, custom, restKeys, persist],
+  );
   const native = useNativeBrowsePage("shows", {
     active,
-    blocked: pageRows.editMode,
+    editor: nativeEditor,
     t,
     header: nativeHeader,
     hero: nativeHero,

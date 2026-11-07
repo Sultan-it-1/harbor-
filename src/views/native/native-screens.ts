@@ -20,6 +20,14 @@ import { useTogether } from "@/lib/together/provider";
 import { useView, type PlayEpisode } from "@/lib/view";
 import { subscribeWatchlist, toggleWatchlist, watchlistHas } from "@/lib/watchlist";
 import { isTitleWatched, useWatchedMarksVersion } from "@/lib/watched-marks";
+import {
+  movePageRow,
+  orderedRowKeys,
+  renamePageRow,
+  resetPageRows,
+  togglePageRowHidden,
+  type PageRowCustomization,
+} from "@/lib/page-rows";
 
 export type T = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -32,6 +40,8 @@ export type NativeAction = {
   row?: string;
   i?: number;
   what?: string;
+  /** "edit" rename: the new name ("" = its own name again). */
+  text?: string;
 };
 
 /** The shell can draw the browse screens (an Android build with NativeScreens). */
@@ -433,10 +443,53 @@ export type NativeRowInput = {
   onOpen?: (i: number) => void;
   /** What "See all" does when it isn't a list of titles (Collections opens its own page). */
   onAll?: () => void;
+  /** The wide card's Play button. */
+  onPlay?: (i: number) => void;
 };
 
 /** A tile / logo / feature card. */
-export type NativeCardInput = { title: string; img?: string[]; sub?: string | null; tint?: string | null };
+export type NativeCardInput = {
+  title: string;
+  img?: string[];
+  sub?: string | null;
+  tint?: string | null;
+  /** Feature card: a label on top, the IMDb rating, a Play button. */
+  kicker?: string | null;
+  rating?: string | null;
+  play?: boolean;
+  /** Tile: the picture is an emblem shown whole (awards). */
+  emblem?: boolean;
+};
+
+/** The page's row editor (Discover, Movies, Shows): the page-rows customisation it edits. */
+export type NativePageEditor = {
+  on: boolean;
+  setOn: (on: boolean) => void;
+  custom: PageRowCustomization;
+  /** Every editable row's key, in the page's own order (what movePageRow wants). */
+  allKeys: string[];
+  persist: (next: PageRowCustomization) => void;
+};
+
+/** The editor's labels (the page's own row controls use the same text). */
+export function editLabels(t: T) {
+  return {
+    done: t("Done editing"),
+    reset: t("Reset"),
+    addSource: t("Add Source"),
+    up: t("Move up"),
+    down: t("Move down"),
+    hide: t("Hide row"),
+    show: t("Show row"),
+    rename: t("Rename row"),
+    save: t("Save"),
+    cancel: t("Cancel"),
+    resetName: t("Reset to original name"),
+    numerals: t("Show as a Top 10 with big numerals"),
+    heroSource: t("Feature this catalog in the hero carousel"),
+    delete: t("Delete custom source"),
+  };
+}
 
 /** A row's JSON for the native screen. */
 export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNativeCards>) {
@@ -447,7 +500,16 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
       kind: r.kind ?? "tile",
       all: !!r.seeAll || !!r.onAll,
       more: false,
-      items: r.cards.map((c) => ({ title: c.title, img: (c.img ?? []).filter(isUrlOrData), sub: c.sub ?? null, tint: c.tint ?? null })),
+      items: r.cards.map((c) => ({
+        title: c.title,
+        img: (c.img ?? []).filter(isUrlOrData),
+        sub: c.sub ?? null,
+        tint: c.tint ?? null,
+        kicker: c.kicker ?? null,
+        rating: c.rating ?? null,
+        play: !!c.play,
+        emblem: !!c.emblem,
+      })),
     };
   }
   const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
@@ -484,6 +546,8 @@ export type NativePageInput = {
   onHold?: (rowKey: string, meta: Meta) => boolean;
   /** Changes when the page wants its top back in view. */
   resetTick?: number;
+  /** The page's row editor, drawn in the native screen too (rows then include hidden ones). */
+  editor?: NativePageEditor | null;
 };
 
 /**
@@ -503,8 +567,11 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     rows: new Map(),
   });
 
-  const { t, hero, header, cw, rows, customize, chips, empty, resetTick } = input;
+  const { t, hero, header, cw, rows, customize, chips, empty, resetTick, editor } = input;
   const customizeLabel = customize?.label;
+  const editing = !!editor?.on;
+  const editCustom = editor?.custom;
+  const editKeys = editor?.allKeys;
   const model = useMemo(() => {
     if (!inUse) return null;
     const heroMetas = hero?.metas ?? [];
@@ -514,24 +581,35 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     if (cw && cwItems.length > 0) {
       out.push({ key: "cw", title: cw.title, kind: "cw", items: cwItems.map((i) => cwCard(i, t)) });
     }
+    // The editor: every editable row with its controls, hidden ones too (without their cards).
+    const order = editing && editCustom && editKeys ? orderedRowKeys(editKeys, editCustom) : [];
     for (const r of rows) {
       const shown = r.rank ? r.metas.slice(0, 10) : r.metas;
-      if ((r.cards ? r.cards.length : shown.length) === 0 || r.key === "cw") continue;
+      const editable = editing && editCustom && editKeys?.includes(r.key);
+      if (!editable && ((r.cards ? r.cards.length : shown.length) === 0 || r.key === "cw")) continue;
       map.set(r.key, { ...r, metas: shown });
-      out.push(nativeRowJson(r, cards));
+      const json = nativeRowJson(r, cards) as Record<string, unknown>;
+      if (editable && editCustom) {
+        const hidden = editCustom.hidden.includes(r.key);
+        const idx = order.indexOf(r.key);
+        json.ed = { hidden, up: idx > 0, down: idx >= 0 && idx < order.length - 1, renamed: r.key in editCustom.renamed };
+        if (hidden) json.items = [];
+      }
+      out.push(json);
     }
     published.current = { hero: heroMetas, cw: cwItems, rows: map };
     return {
       top: resetTick ?? 0,
-      labels: nativeLabels(t, customizeLabel ?? t("Customize page")),
+      labels: { ...nativeLabels(t, customizeLabel ?? t("Customize page")), ...editLabels(t) },
       header: header ?? null,
       hero: heroMetas.map((m) => cards.hero(m, hero?.rank ?? null)),
       rows: out,
       chips: chips ?? [],
       empty: empty ?? null,
       customize: !!customizeLabel,
+      edit: editing,
     };
-  }, [inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards]);
+  }, [inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -556,8 +634,24 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return meta.hold(m);
         }
         case "play": {
+          const onPlay = a.row !== "cw" ? p.rows.get(a.row ?? "")?.onPlay : undefined;
+          if (onPlay) return onPlay(i);
           const item = a.row === "cw" ? p.cw[i] : undefined;
           if (item) openPicker(cwMeta(item), cwEpisode(item), { autoPlay: settings.instantPlay, resume: true });
+          return;
+        }
+        case "done":
+          cur.editor?.setOn(false);
+          return;
+        case "reset":
+          cur.editor?.persist(resetPageRows());
+          return;
+        case "edit": {
+          const ed = cur.editor;
+          if (!ed || !a.row) return;
+          if (a.what === "up" || a.what === "down") ed.persist(movePageRow(ed.custom, ed.allKeys, a.row, a.what === "up" ? -1 : 1));
+          else if (a.what === "hide") ed.persist(togglePageRowHidden(ed.custom, a.row));
+          else if (a.what === "rename") ed.persist(renamePageRow(ed.custom, a.row, a.text ?? ""));
           return;
         }
         case "all": {
@@ -571,7 +665,8 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           p.rows.get(a.row ?? "")?.more?.();
           return;
         case "customize":
-          cur.customize?.onTap();
+          if (cur.editor) cur.editor.setOn(true);
+          else cur.customize?.onTap();
           return;
         case "chip":
           if (a.row && a.what) cur.onChip?.(a.row, a.what);

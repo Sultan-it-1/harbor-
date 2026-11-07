@@ -36,7 +36,7 @@ import {
 
 import { useNativeBrowsePage, useNativeScreensEnabled, type NativeRowInput } from "@/views/native/native-screens";
 import {
-  awardTilesRow,
+  useAwardTilesRow,
   criticsRow,
   queueRow,
   useCollectionsRow,
@@ -325,17 +325,20 @@ export function Discover({ active = true }: { active?: boolean }) {
 
   // Android: drawn natively (see @/views/native/native-screens); the page then stays empty.
   const view = useView();
-  const nativeOn = useNativeScreensEnabled() && !pageRows.editMode;
+  const nativeOn = useNativeScreensEnabled();
+  // Editing: every row, hidden ones too (drawn with their controls, without their cards).
+  const nativeRails = pageRows.editMode ? editRails : visibleRails;
   const titleOf = (key: string) => {
-    const it = visibleRails.find((r) => r.key === key);
+    const it = nativeRails.find((r) => r.key === key);
     return it ? t(it.title) : "";
   };
   const genresRow = useGenreTilesRow("x:genres", titleOf("x:genres"), nativeOn, settings.tmdbKey, t, view);
   const languagesRow = useLanguageTilesRow("x:languages", titleOf("x:languages"), nativeOn, settings.tmdbKey, t, view);
   const collectionsRow = useCollectionsRow("x:collections", titleOf("x:collections"), nativeOn, settings.tmdbKey, t, view);
+  const awardsRow = useAwardTilesRow("x:awards", titleOf("x:awards"), nativeOn, t, view);
   const nativeRows = useMemo<NativeRowInput[]>(() => {
     const out: NativeRowInput[] = [];
-    for (const item of visibleRails) {
+    for (const item of nativeRails) {
       const title = t(item.title);
       if (item.key.startsWith("x:")) {
         const r =
@@ -346,13 +349,15 @@ export function Discover({ active = true }: { active?: boolean }) {
               : item.key === "x:collections"
                 ? collectionsRow
                 : item.key === "x:awards"
-                  ? awardTilesRow(item.key, title, t, view)
+                  ? { ...awardsRow, title }
                   : item.key === "x:queue"
                     ? queueRow(item.key, title, queue, t, view)
                     : item.key === "x:critics"
-                      ? criticsRow(item.key, title, criticsPick)
+                      ? criticsRow(item.key, title, criticsPick, t, view)
                       : null;
         if (r) out.push(r);
+        // Nothing to show right now (no queue yet…): the editor still lists it.
+        else if (pageRows.editMode) out.push({ key: item.key, title, metas: [], cards: [] });
         continue;
       }
       const def = dailyRows.find((r) => r.id === item.key);
@@ -367,13 +372,19 @@ export function Discover({ active = true }: { active?: boolean }) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleRails, dailyRows, deduped, t, loadMore, genresRow.cards, languagesRow.cards, collectionsRow.cards, queue, criticsPick, view]);
+  }, [nativeRails, pageRows.editMode, dailyRows, deduped, t, loadMore, genresRow.cards, languagesRow.cards, collectionsRow.cards, awardsRow.cards, queue, criticsPick, view]);
   const nativeHero = useMemo(() => ({ metas: featured, rank: t("Featured") }), [featured, t]);
-  const { setEditMode } = pageRows;
+  const { setEditMode, editMode, custom, persist } = pageRows;
   const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);
+  // Moves step over the rows the editor shows (a rail left empty after de-duplication isn't).
+  const editKeys = useMemo(() => editRails.map((r) => r.key), [editRails]);
+  const nativeEditor = useMemo(
+    () => ({ on: editMode, setOn: setEditMode, custom, allKeys: editKeys, persist }),
+    [editMode, setEditMode, custom, editKeys, persist],
+  );
   const native = useNativeBrowsePage("discover", {
     active,
-    blocked: pageRows.editMode,
+    editor: nativeEditor,
     t,
     hero: nativeHero,
     rows: nativeRows,

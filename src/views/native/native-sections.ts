@@ -1,10 +1,13 @@
 // The non-title rows of the native screens: genre / language / award / collection tiles, the
 // streaming services, the discovery queue and Critics' Pick, built from the same data the page's
 // own components use.
-import { useEffect, useState } from "react";
+import { createElement, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { AWARDS } from "@/components/award-tiles";
 import { GENRE_PALETTE, GENRE_TILES } from "@/components/genre-tiles";
 import { laurelColorFor } from "@/components/icons/award-logo";
+import { Laurel } from "@/components/icons/laurel";
 import { LANGS } from "@/components/language-tiles";
 import type { Meta } from "@/lib/cinemeta";
 import { COLLECTIONS_CATALOG } from "@/lib/collections-catalog";
@@ -39,8 +42,17 @@ function enqueue(job: () => Promise<void>) {
   pump();
 }
 
-/** [load] for each key (once per session), as a record that fills in as answers arrive. */
-function useFetchedOnce<V>(prefix: string, keys: string[], enabled: boolean, load: (key: string) => Promise<V>): Record<string, V | undefined> {
+/**
+ * [load] for each key (once per session), as a record that fills in as answers arrive. [local]:
+ * nothing to download (drawn on the phone), so it doesn't wait behind the network's queue.
+ */
+function useFetchedOnce<V>(
+  prefix: string,
+  keys: string[],
+  enabled: boolean,
+  load: (key: string) => Promise<V>,
+  local = false,
+): Record<string, V | undefined> {
   const [, setTick] = useState(0);
   const sig = keys.join("|");
   useEffect(() => {
@@ -50,7 +62,7 @@ function useFetchedOnce<V>(prefix: string, keys: string[], enabled: boolean, loa
       const id = `${prefix}:${k}`;
       if (fetched.has(id) || inflight.has(id)) continue;
       inflight.add(id);
-      enqueue(async () => {
+      (local ? (job: () => Promise<void>) => void job() : enqueue)(async () => {
         let v: unknown = null;
         try {
           v = await load(k);
@@ -128,18 +140,173 @@ export function useLanguageTilesRow(key: string, title: string, enabled: boolean
   };
 }
 
-export function awardTilesRow(key: string, title: string, t: T, view: View): NativeRowInput {
+export function useAwardTilesRow(key: string, title: string, enabled: boolean, t: T, view: View): NativeRowInput {
+  const emblems = useFetchedOnce(
+    "award",
+    AWARDS.map((a) => a.type),
+    enabled,
+    (type) => awardEmblem(type),
+    true,
+  );
   return {
     key,
     title,
     metas: [],
     kind: "tile",
-    cards: AWARDS.map((a) => ({ title: t(a.name), sub: t(a.sub), tint: darken(laurelColorFor(a.type), 0.72) })),
+    cards: AWARDS.map((a) => ({
+      title: t(a.name),
+      sub: t(a.sub),
+      tint: darken(laurelColorFor(a.type), 0.62),
+      img: emblems[a.type] ? [emblems[a.type] as string] : [],
+      emblem: true,
+    })),
     onOpen: (i) => {
       const a = AWARDS[i];
       if (a) view.openAward(a.type);
     },
   };
+}
+
+// The award's emblem as the page draws it (its laurel round its statuette), as one picture: the
+// native tile can't draw the page's SVG laurel or its masked / filtered logos itself.
+
+const AWARD_LOGOS: Record<string, { src: string; scale: number; mask?: string; filter?: string; box?: [number, number] }> = {
+  oscar: { src: "/awards/oscar.png", scale: 1.15 },
+  golden_globe: { src: "/awards/golden-globe.png", scale: 1.15 },
+  bafta: { src: "/awards/bafta.png", scale: 1, mask: "#CA9200", box: [0.85, 1] },
+  emmy: { src: "/awards/emmy.png", scale: 1.1 },
+  sag: { src: "/awards/sag.png", scale: 1.15 },
+  critics_choice: { src: "/awards/critics-choice.png", scale: 1.1, filter: "saturate(0.4) sepia(0.85) hue-rotate(-12deg) brightness(1.05)" },
+  cannes: { src: "/awards/cannestrophy.png", scale: 1.2 },
+  venice: { src: "/awards/venice.webp", scale: 1.2 },
+  berlin: { src: "/awards/berlin.png", scale: 1.2 },
+};
+
+type LaurelShape = { d: string; evenodd: boolean; dx: number; dy: number };
+let laurelShapes: LaurelShape[] | null = null;
+
+/** The laurel's paths, read once from the component the page draws. */
+function laurel(): LaurelShape[] {
+  if (laurelShapes) return laurelShapes;
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  flushSync(() => root.render(createElement(Laurel, { size: 100 })));
+  laurelShapes = Array.from(host.querySelectorAll("path")).map((p) => {
+    const m = /translate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*\)/.exec(p.getAttribute("transform") ?? "");
+    return {
+      d: p.getAttribute("d") ?? "",
+      evenodd: p.getAttribute("fill-rule") === "evenodd",
+      dx: m ? Number(m[1]) : 0,
+      dy: m ? Number(m[2]) : 0,
+    };
+  });
+  root.unmount();
+  return laurelShapes;
+}
+
+function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function awardEmblem(type: string): Promise<string | null> {
+  const spec = AWARD_LOGOS[type] ?? AWARD_LOGOS.oscar;
+  const logo = await loadImage(spec.src);
+  try {
+    const color = laurelColorFor(type);
+    // The laurel's own proportions (its viewBox is 2000 x 1682).
+    const W = 300;
+    const H = Math.round((W * 1682) / 2000);
+    const layer = (): [HTMLCanvasElement, CanvasRenderingContext2D] | null => {
+      const c = document.createElement("canvas");
+      c.width = W;
+      c.height = H;
+      const g = c.getContext("2d");
+      return g ? [c, g] : null;
+    };
+    const out = layer();
+    const wreath = layer();
+    if (!out || !wreath) return null;
+    const [canvas, g] = out;
+    // The statuette sits where the page centres it: above the laurel's open bottom.
+    const cx = W / 2;
+    const cy = H * 0.417;
+
+    // A soft glow of the laurel's colour behind it.
+    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, W * 0.4);
+    glow.addColorStop(0, hexA(color, 0.24));
+    glow.addColorStop(1, hexA(color, 0));
+    g.fillStyle = glow;
+    g.fillRect(0, 0, W, H);
+
+    // The laurel, with a drop shadow under it as a whole.
+    const [wc, wg] = wreath;
+    wg.scale(W / 2000, H / 1682);
+    wg.fillStyle = color;
+    for (const s of laurel()) {
+      wg.save();
+      wg.translate(s.dx, s.dy);
+      wg.fill(new Path2D(s.d), s.evenodd ? "evenodd" : "nonzero");
+      wg.restore();
+    }
+    g.save();
+    g.shadowColor = "rgba(0,0,0,0.45)";
+    g.shadowBlur = 15;
+    g.shadowOffsetY = 4;
+    g.globalAlpha = 0.95;
+    g.drawImage(wc, 0, 0);
+    g.restore();
+
+    if (logo && logo.naturalWidth > 0 && logo.naturalHeight > 0) {
+      const size = W / 3;
+      let lw: number;
+      let lh: number;
+      if (spec.box) {
+        // Fitted inside a box (the BAFTA mask).
+        const bw = size * spec.box[0];
+        const bh = size * spec.box[1];
+        const k = Math.min(bw / logo.naturalWidth, bh / logo.naturalHeight);
+        lw = logo.naturalWidth * k;
+        lh = logo.naturalHeight * k;
+      } else {
+        lh = size * spec.scale;
+        lw = (lh * logo.naturalWidth) / logo.naturalHeight;
+      }
+      const x = cx - lw / 2;
+      const y = cy - lh / 2;
+      if (spec.mask) {
+        const m = layer();
+        if (m) {
+          const [mc, mg] = m;
+          mg.drawImage(logo, x, y, lw, lh);
+          mg.globalCompositeOperation = "source-in";
+          mg.fillStyle = spec.mask;
+          mg.fillRect(0, 0, W, H);
+          g.drawImage(mc, 0, 0);
+        }
+      } else {
+        g.save();
+        if (spec.filter) g.filter = spec.filter;
+        g.drawImage(logo, x, y, lw, lh);
+        g.restore();
+      }
+    }
+    const webp = canvas.toDataURL("image/webp", 0.85);
+    return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
+/** [hex] with alpha [a], as rgba(). */
+function hexA(hex: string, a: number): string {
+  const c = cssColorToHex(hex) ?? "#d4af37";
+  const n = parseInt(c.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
 // ---- collections (Home, Discover) ----
@@ -265,16 +432,27 @@ export function queueRow(key: string, title: string, items: FeedItem[], t: T, vi
   };
 }
 
-export function criticsRow(key: string, title: string, meta: Meta | null | undefined): NativeRowInput | null {
+export function criticsRow(key: string, title: string, meta: Meta | null | undefined, t: T, view: View): NativeRowInput | null {
   if (!meta) return null;
   const bg = meta.background ?? meta.poster;
   const big = bg?.replace(/\/t\/p\/w\d+\//, "/t/p/original/");
+  const year = meta.releaseInfo ?? null;
   return {
     key,
     title,
     metas: [meta],
     kind: "feature",
-    cards: [{ title: meta.name, sub: meta.description ?? null, img: [big, bg].filter((u): u is string => !!u) }],
+    cards: [
+      {
+        title: meta.name,
+        sub: meta.description ?? null,
+        img: [big, bg].filter((u): u is string => !!u),
+        kicker: [t("Loved by reviewers today"), year].filter(Boolean).join(" · "),
+        rating: meta.imdbRating ?? null,
+        play: true,
+      },
+    ],
+    onPlay: () => view.openPicker(meta),
   };
 }
 

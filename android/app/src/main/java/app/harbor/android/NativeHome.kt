@@ -167,11 +167,12 @@ class NativeHome(
     /** A D-pad / controller key while the focus is elsewhere (the page underneath): bring it here. */
     fun takeFocus(): Boolean = isShowing && (list.requestFocus() || root.requestFocus())
 
-    private fun act(a: String, row: String? = null, i: Int? = null, what: String? = null) {
+    private fun act(a: String, row: String? = null, i: Int? = null, what: String? = null, text: String? = null) {
         val o = JSONObject().put("p", page).put("a", a)
         if (row != null) o.put("row", row)
         if (i != null) o.put("i", i)
         if (what != null) o.put("what", what)
+        if (text != null) o.put("text", text)
         onAction(o)
     }
 
@@ -184,7 +185,7 @@ class NativeHome(
 
     /** About 3.3 posters across a phone (like the web layout), never bigger than 150dp. */
     private fun posterWidth(): Int = min(((width() - gutter) / 3.3f).toInt(), dp(150))
-    private fun rankWidth(): Int = (posterWidth() * 1.2f).toInt()
+    private fun rankWidth(): Int = (posterWidth() * 1.4f).toInt()
     private fun cwWidth(): Int = min(((width() - gutter) / 1.7f).toInt(), dp(300))
     private fun heroHeight(): Int = max(min((height() * 0.76f).toInt(), dp(640)), dp(320))
     /** Genre / language / award / collection tiles: about 2.3 across, 5:4. */
@@ -208,7 +209,7 @@ class NativeHome(
             val out = ArrayList<Section>()
             if (m.header != null) out.add(Section(T_HEADER, -6))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
-            if (m.showCustomize) out.add(Section(T_TOOLS, -2))
+            if (m.showCustomize || m.edit) out.add(Section(T_TOOLS, -2))
             else if (m.hero.isNotEmpty()) out.add(Section(T_GAP, -5))
             m.chips.forEachIndexed { i, _ -> out.add(Section(T_CHIPS, -100L - i, chipsIndex = i)) }
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
@@ -264,30 +265,43 @@ class NativeHome(
     })
 
     /** "Customize home" under the hero (the editor itself is the page's). */
-    private inner class ToolsHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
-        private val box = itemView as FrameLayout
-        private val pill = LinearLayout(ctx)
-        private val text = label("", 13f)
+    /** "Customize" under the hero; while the editor is open: Done, Reset (and Add source on Home). */
+    private inner class ToolsHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val bar = itemView as LinearLayout
 
         init {
-            box.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
-            box.setPaddingRelative(gutter, dp(10), gutter, dp(14))
-            pill.orientation = LinearLayout.HORIZONTAL
-            pill.gravity = Gravity.CENTER_VERTICAL
-            pill.setPaddingRelative(dp(12), 0, dp(14), 0)
-            pill.isClickable = true
-            pill.isFocusable = true
-            pill.setOnClickListener { act("customize") }
-            pill.addView(ImageView(ctx).apply { tag = "ic" }, LinearLayout.LayoutParams(dp(15), dp(15)).apply { marginEnd = dp(8) })
-            pill.addView(text)
-            box.addView(pill, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36), Gravity.END))
+            bar.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            bar.orientation = LinearLayout.HORIZONTAL
+            bar.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            bar.setPaddingRelative(gutter, dp(10), gutter, dp(14))
         }
 
         fun bind(m: HomeModel) {
-            text.text = m.label("customize", "Customize home")
-            text.setTextColor(colors.muted)
-            (pill.findViewWithTag<ImageView>("ic"))?.setImageDrawable(icon(R.drawable.ic_pencil, colors.muted))
-            pill.background = focusable(rounded(withAlpha(colors.surface, 0.9f), dp(10).toFloat(), dp(1), withAlpha(colors.ink, 0.08f)))
+            bar.removeAllViews()
+            if (!m.edit) {
+                bar.addView(pill(m.label("customize", "Customize home"), R.drawable.ic_pencil, primary = false) { act("customize") })
+                return
+            }
+            if (m.addSource) bar.addView(pill(m.label("addSource", "Add Source"), R.drawable.ic_plus, primary = false) { act("addsource") })
+            bar.addView(pill(m.label("reset", "Reset"), R.drawable.ic_rotate_ccw, primary = false) { act("reset") })
+            bar.addView(pill(m.label("done", "Done editing"), R.drawable.ic_check, primary = true) { act("done") })
+        }
+
+        private fun pill(text: String, ic: Int, primary: Boolean, onTap: () -> Unit): View = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPaddingRelative(dp(12), 0, dp(14), 0)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onTap() }
+            val fg = if (primary) colors.canvas else colors.muted
+            addView(ImageView(ctx).apply { setImageDrawable(icon(ic, fg)) }, LinearLayout.LayoutParams(dp(15), dp(15)).apply { marginEnd = dp(8) })
+            addView(label(text, 13f, bold = primary, lines = 1).apply { setTextColor(fg) })
+            background = focusable(
+                if (primary) rounded(colors.ink, dp(10).toFloat())
+                else rounded(withAlpha(colors.surface, 0.9f), dp(10).toFloat(), dp(1), withAlpha(colors.ink, 0.08f)),
+            )
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)).apply { marginStart = dp(8) }
         }
     }
 
@@ -607,6 +621,8 @@ class NativeHome(
         private val layout = LinearLayoutManager(ctx, RecyclerView.HORIZONTAL, false).apply { initialPrefetchItemCount = 5 }
         private val cards = CardsAdapter()
         private var boundKey: String? = null
+        /** The editor's controls for the row (up, down, hide, Top 10 look, hero, rename, delete). */
+        private val controls = LinearLayout(ctx)
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -619,6 +635,14 @@ class NativeHome(
             header.addView(seeAll)
             header.setOnClickListener { boundKey?.let { k -> act("all", row = k) } }
             col.addView(header, LinearLayout.LayoutParams(MATCH, dp(40)).apply { bottomMargin = dp(6) })
+            controls.orientation = LinearLayout.HORIZONTAL
+            controls.gravity = Gravity.CENTER_VERTICAL
+            controls.visibility = View.GONE
+            col.addView(controls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply {
+                marginStart = gutter
+                marginEnd = gutter
+                bottomMargin = dp(10)
+            })
 
             strip.layoutManager = layout
             strip.adapter = cards
@@ -650,10 +674,80 @@ class NativeHome(
             title.setTextColor(colors.ink)
             seeAll.text = m.label("seeAll", "See all") + " ›"
             seeAll.setTextColor(colors.subtle)
-            seeAll.visibility = if (row.seeAll) View.VISIBLE else View.GONE
-            header.isClickable = row.seeAll
-            header.isFocusable = row.seeAll
+            val ed = if (m.edit) row.edit else null
+            val hidden = ed?.hidden == true
+            seeAll.visibility = if (row.seeAll && ed == null) View.VISIBLE else View.GONE
+            header.isClickable = row.seeAll && ed == null
+            header.isFocusable = row.seeAll && ed == null
+            // A hidden row in the editor: its name dimmed and its controls, no cards.
+            title.alpha = if (hidden) 0.45f else 1f
+            strip.visibility = if (hidden || row.items.isEmpty()) View.GONE else View.VISIBLE
+            bindControls(m, row, ed)
             strip.post { maybeAskMore() }
+        }
+
+        private fun bindControls(m: HomeModel, row: HomeRow, ed: RowEdit?) {
+            controls.removeAllViews()
+            if (ed == null) {
+                controls.visibility = View.GONE
+                return
+            }
+            controls.visibility = View.VISIBLE
+            controls.background = rounded(withAlpha(colors.surface, 0.9f), dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            controls.setPaddingRelative(dp(4), 0, dp(4), 0)
+            fun button(ic: Int, desc: String, enabled: Boolean = true, on: Boolean = false, what: String, extra: (() -> Unit)? = null) {
+                val b = FrameLayout(ctx).apply {
+                    isClickable = enabled
+                    isFocusable = enabled
+                    contentDescription = desc
+                    alpha = if (enabled) 1f else 0.3f
+                    background = if (on) rounded(withAlpha(colors.accent, 0.22f), dp(10).toFloat()) else null
+                    addView(ImageView(ctx).apply { setImageDrawable(icon(ic, if (on) colors.accent else colors.muted)) }, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER))
+                    setOnClickListener { if (extra != null) extra() else act("edit", row = row.key, what = what) }
+                }
+                controls.addView(b, LinearLayout.LayoutParams(dp(40), dp(40)))
+            }
+            if (!ed.pinned) {
+                button(R.drawable.ic_arrow_up, m.label("up", "Move up"), enabled = ed.up, what = "up")
+                button(R.drawable.ic_arrow_down, m.label("down", "Move down"), enabled = ed.down, what = "down")
+            }
+            button(
+                if (ed.hidden) R.drawable.ic_eye_off else R.drawable.ic_eye,
+                if (ed.hidden) m.label("show", "Show row") else m.label("hide", "Hide row"),
+                on = ed.hidden,
+                what = "hide",
+            )
+            if (!ed.pinned) {
+                if (ed.numerals >= 0) button(R.drawable.ic_list_ordered, m.label("numerals", "Top 10 look"), on = ed.numerals == 1, what = "num")
+                if (ed.hero >= 0) button(R.drawable.ic_sparkles, m.label("heroSource", "Feature in the hero"), on = ed.hero == 1, what = "hero")
+                button(R.drawable.ic_pencil, m.label("rename", "Rename row"), on = ed.renamed, what = "rename") { rename(m, row, ed) }
+                if (ed.delete) button(R.drawable.ic_trash_2, m.label("delete", "Delete"), what = "del")
+            }
+        }
+
+        /** The row's new name; empty (or "Reset") = its own name again. */
+        private fun rename(m: HomeModel, row: HomeRow, ed: RowEdit) {
+            val input = android.widget.EditText(ctx).apply {
+                setText(row.title)
+                setSelection(text.length)
+                setSingleLine(true)
+            }
+            val frame = FrameLayout(ctx).apply {
+                setPadding(dp(20), dp(8), dp(20), 0)
+                addView(input)
+            }
+            val b = android.app.AlertDialog.Builder(ctx)
+                .setTitle(m.label("rename", "Rename row"))
+                .setView(frame)
+                .setPositiveButton(m.label("save", "Save")) { _, _ ->
+                    act("edit", row = row.key, what = "rename", text = input.text.toString().trim())
+                }
+                .setNegativeButton(m.label("cancel", "Cancel"), null)
+            if (ed.renamed) b.setNeutralButton(m.label("resetName", "Reset name")) { _, _ -> act("edit", row = row.key, what = "rename", text = "") }
+            try {
+                b.show()
+            } catch (_: Exception) {
+            }
         }
 
         fun saveScroll() {
@@ -722,6 +816,12 @@ class NativeHome(
         private val bigSub = label("", if (kind == C_FEATURE) 13.5f else 11.5f, lines = if (kind == C_FEATURE) 3 else 1)
         private var row: HomeRow? = null
         private val titleBelow get() = kind == C_POSTER || kind == C_RANK || kind == C_CW
+        /** Top 10: the poster's own rounded frame, beside the big number (other cards: the box). */
+        private val frame: FrameLayout = if (kind == C_RANK) FrameLayout(ctx) else box
+        /** The wide card: a label on top, the rating, a Play button. */
+        private val kicker = label("", 11.5f, bold = true, lines = 1)
+        private val stats = LinearLayout(ctx)
+        private val featurePlay = LinearLayout(ctx)
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -733,13 +833,25 @@ class NativeHome(
                 tap("hold")
                 true
             }
-            col.setOnFocusChangeListener { _, has -> box.foreground = if (has) ring() else null }
+            col.setOnFocusChangeListener { _, has -> frame.foreground = if (has) ring() else null }
 
-            box.clipToOutline = true
-            box.outlineProvider = roundOutline(dp(12).toFloat())
+            frame.clipToOutline = true
+            frame.outlineProvider = roundOutline(dp(12).toFloat())
             image.scaleType = ImageView.ScaleType.CENTER_CROP
-            box.addView(image, FrameLayout.LayoutParams(MATCH, MATCH))
             col.addView(box)
+            if (kind == C_RANK) {
+                // Like the page's Top 10: a big outlined number, the poster beside it covering
+                // the number's end.
+                rankNumber.includeFontPadding = false
+                rankNumber.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                rankNumber.paint.style = android.graphics.Paint.Style.STROKE
+                rankNumber.paint.strokeWidth = dp(2).toFloat()
+                rankNumber.maxLines = 1
+                rankNumber.ellipsize = null
+                box.addView(rankNumber, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START))
+                box.addView(frame, FrameLayout.LayoutParams(0, 0, Gravity.BOTTOM or Gravity.END))
+            }
+            frame.addView(image, FrameLayout.LayoutParams(MATCH, MATCH))
 
             when (kind) {
                 C_CW -> {
@@ -757,22 +869,37 @@ class NativeHome(
                     play.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
                     box.addView(play, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER))
                 }
-                C_RANK -> {
-                    rankNumber.includeFontPadding = false
-                    rankNumber.setShadowLayer(dp(8).toFloat(), 0f, dp(2).toFloat(), 0xCC000000.toInt())
-                    box.addView(rankNumber, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START).apply {
-                        marginStart = dp(8)
-                        bottomMargin = dp(2)
-                    })
-                }
+                C_RANK -> Unit
                 C_TILE, C_FEATURE -> {
                     box.addView(shade, FrameLayout.LayoutParams(MATCH, MATCH))
                     overlay.orientation = LinearLayout.VERTICAL
-                    overlay.setPaddingRelative(dp(14), 0, dp(14), dp(12))
+                    val pad = if (kind == C_FEATURE) dp(18) else dp(14)
+                    overlay.setPaddingRelative(pad, 0, pad, if (kind == C_FEATURE) dp(16) else dp(12))
                     bigTitle.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
                     bigTitle.setShadowLayer(dp(10).toFloat(), 0f, dp(2).toFloat(), 0x99000000.toInt())
                     overlay.addView(bigTitle)
-                    overlay.addView(bigSub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })
+                    if (kind == C_FEATURE) {
+                        stats.orientation = LinearLayout.HORIZONTAL
+                        stats.gravity = Gravity.CENTER_VERTICAL
+                        overlay.addView(stats, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+                    }
+                    overlay.addView(bigSub, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+                    if (kind == C_FEATURE) {
+                        featurePlay.orientation = LinearLayout.HORIZONTAL
+                        featurePlay.gravity = Gravity.CENTER
+                        featurePlay.isClickable = true
+                        featurePlay.isFocusable = true
+                        featurePlay.setPaddingRelative(dp(18), 0, dp(20), 0)
+                        featurePlay.setOnClickListener { tap("play") }
+                        featurePlay.addView(ImageView(ctx).apply { tag = "ic" }, LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(8) })
+                        featurePlay.addView(label("", 14f, bold = true, lines = 1).apply { tag = "tx" })
+                        overlay.addView(featurePlay, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(14) })
+                        kicker.setPaddingRelative(dp(10), dp(4), dp(10), dp(4))
+                        box.addView(kicker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+                            marginStart = dp(16)
+                            topMargin = dp(16)
+                        })
+                    }
                     box.addView(overlay, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
                 }
                 C_LOGO -> {
@@ -798,7 +925,7 @@ class NativeHome(
                 // Bottom-start like the page's posters; top-end on Top 10 cards (their number is
                 // bottom-start).
                 val corner = if (kind == C_RANK) Gravity.TOP or Gravity.END else Gravity.BOTTOM or Gravity.START
-                box.addView(check, FrameLayout.LayoutParams(dp(22), dp(22), corner).apply {
+                frame.addView(check, FrameLayout.LayoutParams(dp(22), dp(22), corner).apply {
                     marginStart = dp(6)
                     marginEnd = dp(6)
                     topMargin = dp(6)
@@ -826,11 +953,14 @@ class NativeHome(
                 C_FEATURE -> featureWidth()
                 else -> posterWidth()
             }
+            // Top 10: the poster takes about two thirds of the card, the number the rest.
+            val posterW = if (kind == C_RANK) (w * 0.68f).toInt() else w
             val h = when (kind) {
                 C_CW -> w * 9 / 16
                 C_TILE -> w * 4 / 5
                 C_LOGO -> dp(80)
-                C_FEATURE -> min(w * 9 / 16, dp(420))
+                C_FEATURE -> max(min(w * 10 / 16, dp(440)), dp(300))
+                C_RANK -> posterW * 3 / 2
                 else -> w * 3 / 2
             }
             val lp = box.layoutParams as LinearLayout.LayoutParams
@@ -839,21 +969,55 @@ class NativeHome(
                 lp.height = h
                 box.layoutParams = lp
             }
-            val tlp = title.layoutParams
-            if (tlp.width != w) {
-                tlp.width = w
+            if (kind == C_RANK) {
+                val flp = frame.layoutParams
+                if (flp.width != posterW || flp.height != h) {
+                    flp.width = posterW
+                    flp.height = h
+                    frame.layoutParams = flp
+                }
+                // The number as tall as most of the poster, outlined.
+                rankNumber.setTextSize(TypedValue.COMPLEX_UNIT_PX, h * 0.78f)
+                rankNumber.translationY = h * 0.08f
+            }
+            val tlp = title.layoutParams as LinearLayout.LayoutParams
+            val titleStart = if (kind == C_RANK) w - posterW else 0
+            if (tlp.width != posterW || tlp.marginStart != titleStart) {
+                tlp.width = posterW
+                tlp.marginStart = titleStart
                 title.layoutParams = tlp
             }
             col.contentDescription = c.title
-            box.background = rounded(
-                when (kind) {
-                    C_LOGO -> withAlpha(colors.surface, 0.9f)
-                    else -> c.tint ?: plate(c.title)
-                },
-                dp(12).toFloat(),
-            )
-            box.foreground = if (col.isFocused) ring() else null
-            images.load(image, c.images, w, h, alpha = kind == C_LOGO) { ok ->
+            val tint = c.tint
+            frame.background = if (kind == C_TILE && c.emblem && tint != null) {
+                // An award: its colour lit from the top corner, deep at the bottom (like the page's).
+                GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(tint, toward(tint, Color.BLACK, 0.6f))).apply {
+                    cornerRadius = dp(12).toFloat()
+                }
+            } else {
+                rounded(
+                    when (kind) {
+                        C_LOGO -> withAlpha(colors.surface, 0.9f)
+                        else -> tint ?: plate(c.title)
+                    },
+                    dp(12).toFloat(),
+                )
+            }
+            frame.foreground = if (col.isFocused) ring() else null
+            // Award tiles: the emblem whole in the top part; other tiles: the picture fills them.
+            if (kind == C_TILE) {
+                val ilp = image.layoutParams as FrameLayout.LayoutParams
+                val wantH = if (c.emblem) (h * 0.66f).toInt() else MATCH
+                if (ilp.height != wantH) {
+                    ilp.height = wantH
+                    ilp.gravity = Gravity.TOP
+                    image.layoutParams = ilp
+                }
+                image.scaleType = if (c.emblem) ImageView.ScaleType.FIT_CENTER else ImageView.ScaleType.CENTER_CROP
+                val pad = if (c.emblem) dp(14) else 0
+                image.setPadding(pad, pad, pad, 0)
+            }
+            images.load(image, c.images, posterW, h, alpha = kind == C_LOGO || c.emblem) { ok ->
                 // A logo that didn't come: its name instead.
                 if (kind == C_LOGO) bigTitle.visibility = if (ok) View.GONE else View.VISIBLE
             }
@@ -889,22 +1053,42 @@ class NativeHome(
                 }
                 C_RANK -> {
                     rankNumber.text = if (c.rank > 0) c.rank.toString() else ""
-                    rankNumber.setTextColor(Color.WHITE)
+                    rankNumber.setTextColor(withAlpha(colors.ink, 0.85f))
                 }
                 C_TILE, C_FEATURE -> {
                     // Tiles: the picture washed with the tile's colour all over (more at the bottom,
-                    // under the name). The feature card: only its bottom, the picture stays clear.
+                    // under the name); an emblem stays clear. The feature card: like the hero, the
+                    // picture clear at the top and dark under its text.
                     val base = c.tint ?: colors.canvas
                     shade.background = GradientDrawable(
                         GradientDrawable.Orientation.BOTTOM_TOP,
-                        if (kind == C_TILE) intArrayOf(withAlpha(base, 0.95f), withAlpha(base, 0.6f), withAlpha(base, 0.45f))
-                        else intArrayOf(withAlpha(base, 0.95f), withAlpha(base, 0.35f), Color.TRANSPARENT),
+                        when {
+                            kind == C_FEATURE -> intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.85f), withAlpha(colors.canvas, 0.25f), Color.TRANSPARENT)
+                            c.emblem -> intArrayOf(withAlpha(toward(base, Color.BLACK, 0.6f), 0.7f), Color.TRANSPARENT)
+                            else -> intArrayOf(withAlpha(base, 0.95f), withAlpha(base, 0.6f), withAlpha(base, 0.45f))
+                        },
                     )
                     bigTitle.text = c.title
                     bigTitle.setTextColor(Color.WHITE)
                     bigSub.text = c.sub ?: ""
                     bigSub.visibility = if (c.sub.isNullOrBlank()) View.GONE else View.VISIBLE
                     bigSub.setTextColor(withAlpha(Color.WHITE, 0.75f))
+                    if (kind == C_FEATURE) {
+                        kicker.text = c.kicker ?: ""
+                        kicker.visibility = if (c.kicker.isNullOrBlank()) View.GONE else View.VISIBLE
+                        kicker.setTextColor(colors.ink)
+                        kicker.background = rounded(withAlpha(colors.canvas, 0.85f), dp(6).toFloat())
+                        stats.removeAllViews()
+                        c.rating?.let { stats.addView(imdbBadge(it, 13f, trailing = 0)) }
+                        stats.visibility = if (stats.childCount > 0) View.VISIBLE else View.GONE
+                        featurePlay.visibility = if (c.play) View.VISIBLE else View.GONE
+                        featurePlay.background = focusable(rounded(colors.ink, dp(21).toFloat()))
+                        featurePlay.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
+                        featurePlay.findViewWithTag<TextView>("tx")?.apply {
+                            text = model?.label("play", "Play")
+                            setTextColor(colors.canvas)
+                        }
+                    }
                 }
                 C_LOGO -> {
                     bigTitle.text = c.title
@@ -1000,6 +1184,16 @@ class NativeHome(
     }
 
     private fun withAlpha(color: Int, a: Float): Int = (color and 0x00FFFFFF) or ((a.coerceIn(0f, 1f) * 255).toInt() shl 24)
+
+    /** [color] moved [f] of the way to [other]. */
+    private fun toward(color: Int, other: Int, f: Float): Int {
+        fun ch(shift: Int): Int {
+            val x = (color shr shift) and 0xFF
+            val y = (other shr shift) and 0xFF
+            return ((x + (y - x) * f).toInt().coerceIn(0, 255)) shl shift
+        }
+        return (0xFF shl 24) or ch(16) or ch(8) or ch(0)
+    }
 
     private fun dp(v: Int): Int = (v * ctx.resources.displayMetrics.density).toInt()
 

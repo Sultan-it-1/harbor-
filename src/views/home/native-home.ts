@@ -4,6 +4,7 @@
 import { useMemo, useRef } from "react";
 import type { Meta } from "@/lib/cinemeta";
 import type { Slide } from "@/components/hero-carousel";
+import type { HomeRowCustomization } from "@/lib/home-customization";
 import { useSettings } from "@/lib/settings";
 import type { LibraryItem } from "@/lib/stremio";
 import { useView } from "@/lib/view";
@@ -11,6 +12,7 @@ import {
   cwCard,
   cwEpisode,
   cwMeta,
+  editLabels,
   nativeLabels,
   nativeRowJson,
   type NativeRowInput,
@@ -27,6 +29,21 @@ import type { HomeRow } from "./home-types";
 /** A row as the page would show it, already filtered (see CustomizableRows). */
 export type NativeHomeRow = { row: HomeRow; metas: Meta[]; ranked: boolean };
 
+/** Home's row editor (the same changes the page's own editor makes). */
+export type NativeHomeEditor = {
+  custom: HomeRowCustomization;
+  /** The editable rows' keys in their order (what decides "Move up" / "Move down"). */
+  orderKeys: string[];
+  move: (key: string, delta: -1 | 1) => void;
+  toggleHidden: (key: string) => void;
+  rename: (key: string, label: string) => void;
+  toggleNumerals: (key: string) => void;
+  toggleHero: (key: string) => void;
+  deleteSource: (key: string) => void;
+  reset: () => void;
+  addSource: () => void;
+};
+
 export type NativeHomeInput = {
   /** Home is the screen on top. */
   active: boolean;
@@ -34,17 +51,21 @@ export type NativeHomeInput = {
   setEditMode: (on: boolean) => void;
   t: T;
   heroSlides: Slide[];
+  /** Home has a hero (not the classic Home); hidden or not is the editor's. */
   showHero: boolean;
   cwItems: LibraryItem[];
   signedIn: boolean;
+  /** The Top 10, when there is one (hidden or not). */
   top10: Meta[];
   top10Title: string;
+  /** In the editor: every row, hidden ones too. */
   rows: NativeHomeRow[];
   onLoadMore: (rowKey: string) => void;
   resetTick: number;
-  /** Your Streaming (TMDB services) and Collections, when Home shows them. */
+  /** Your Streaming (TMDB services) and Collections (hidden or not), when Home has them. */
   servicesRow?: NativeRowInput | null;
   collectionsRow?: NativeRowInput | null;
+  editor: NativeHomeEditor;
 };
 
 /** The shell can draw the browse screens (kept under this name for the Settings switch). */
@@ -58,7 +79,7 @@ export function useNativeHome(input: NativeHomeInput): boolean {
   const { settings } = useSettings();
   const { openPicker, openGrid } = useView();
   const enabled = useNativeScreensEnabled();
-  const inUse = enabled && !input.editMode;
+  const inUse = enabled;
   const cards = useNativeCards();
   const meta = useNativeMetaActions();
 
@@ -67,44 +88,81 @@ export function useNativeHome(input: NativeHomeInput): boolean {
     cw: [],
     rows: new Map(),
   });
+  const editing = input.editMode;
+  const custom = input.editor.custom;
+  const orderKeys = input.editor.orderKeys;
   const model = useMemo(() => {
     if (!inUse) return null;
     const { t } = input;
-    const hero = input.showHero ? input.heroSlides.map((s) => s.meta) : [];
+    const isHidden = (key: string) => custom.hidden.includes(key);
+    const heroOn = input.showHero && !isHidden("hero");
+    const hero = heroOn ? input.heroSlides.map((s) => s.meta) : [];
     const rows: unknown[] = [];
     const rowMap = new Map<string, { metas: Meta[]; row?: HomeRow; input?: NativeRowInput }>();
-    const extra = (r: NativeRowInput | null | undefined) => {
-      if (!r || !r.cards || r.cards.length === 0) return;
-      rowMap.set(r.key, { metas: r.metas, input: r });
-      rows.push(nativeRowJson(r, cards));
+    /** A row the editor can only show or hide (the hero, the Top 10, Collections). */
+    const pinned = (json: Record<string, unknown>, key: string) => {
+      const hidden = isHidden(key);
+      if (hidden) json.items = [];
+      json.ed = { pinned: true, hidden };
+      return json;
     };
+    const extra = (r: NativeRowInput | null | undefined, editable: boolean) => {
+      if (!r || !r.cards || r.cards.length === 0) return;
+      if (editable && isHidden(r.key) && !editing) return;
+      rowMap.set(r.key, { metas: r.metas, input: r });
+      const json = nativeRowJson(r, cards) as Record<string, unknown>;
+      rows.push(editable && editing ? pinned(json, r.key) : json);
+    };
+    // The editor: the hero's own switch first (the hero itself is above it).
+    if (editing && input.showHero) {
+      rows.push(pinned({ key: "hero", title: t("Featured hero"), kind: "poster", items: [] }, "hero"));
+    }
     // The page's order: Continue Watching, Your Streaming, Top 10, Collections, then the rows.
     if (input.cwItems.length > 0) {
       rows.push({ key: "cw", title: t("Continue Watching"), kind: "cw", items: input.cwItems.map((i) => cwCard(i, t)) });
     }
-    extra(input.servicesRow);
-    if (input.top10.length >= 10) {
+    extra(input.servicesRow, false);
+    if (input.top10.length >= 10 && (editing || !isHidden("top10"))) {
       rowMap.set("top10", { metas: input.top10 });
-      rows.push({ key: "top10", title: input.top10Title, kind: "rank", items: input.top10.map(cards.rank) });
+      const json: Record<string, unknown> = { key: "top10", title: input.top10Title, kind: "rank", items: input.top10.map(cards.rank) };
+      rows.push(editing ? pinned(json, "top10") : json);
     }
-    extra(input.collectionsRow);
+    extra(input.collectionsRow, true);
     for (const { row, metas, ranked } of input.rows) {
-      if (row.sourceRow || metas.length === 0) continue;
-      const shown = ranked ? metas.slice(0, 10) : metas;
+      const hidden = isHidden(row.key);
+      if (!editing && (hidden || row.sourceRow || metas.length === 0)) continue;
+      // Your own sources (folders) are drawn by the page only: here, just their controls.
+      const shown = row.sourceRow || hidden ? [] : ranked ? metas.slice(0, 10) : metas;
       rowMap.set(row.key, { metas: shown, row });
-      rows.push({
+      const json: Record<string, unknown> = {
         key: row.key,
         title: t(row.name),
         kind: ranked ? "rank" : "poster",
         all: !!row.fetcher,
         more: !ranked && row.hasMore,
         items: ranked ? shown.map(cards.rank) : shown.map(cards.poster),
-      });
+      };
+      if (editing) {
+        const idx = orderKeys.indexOf(row.key);
+        const canHero = !row.sourceRow && row.metas.some((m) => m.background || m.poster);
+        json.ed = {
+          hidden,
+          up: idx > 0,
+          down: idx >= 0 && idx < orderKeys.length - 1,
+          numerals: row.sourceRow || row.metas.length < 10 ? "na" : (custom.numerals ?? []).includes(row.key) ? "on" : "off",
+          hero: canHero ? (custom.heroSource === row.key ? "on" : "off") : "na",
+          del: !!row.sourceRow,
+          renamed: row.key in custom.renamed,
+        };
+      }
+      rows.push(json);
     }
     published.current = { hero, cw: input.cwItems, rows: rowMap };
     return {
       top: input.resetTick,
-      labels: nativeLabels(t, t("Customize home")),
+      labels: { ...nativeLabels(t, t("Customize home")), ...editLabels(t) },
+      edit: editing,
+      addSource: editing,
       hero: input.heroSlides
         .slice(0, hero.length)
         .map((s) => cards.hero(s.meta, t("#{position} in {label} Today", { position: s.rank.position, label: t(s.rank.label) }))),
@@ -121,7 +179,10 @@ export function useNativeHome(input: NativeHomeInput): boolean {
       customize: true,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inUse, input.t, input.heroSlides, input.showHero, input.cwItems, input.signedIn, input.top10, input.top10Title, input.rows, input.resetTick, cards, input.servicesRow?.cards, input.collectionsRow?.cards]);
+  }, [inUse, input.t, input.heroSlides, input.showHero, input.cwItems, input.signedIn, input.top10, input.top10Title, input.rows, input.resetTick, cards, input.servicesRow?.cards, input.collectionsRow?.cards, editing, custom, orderKeys]);
+
+  const latest = useRef(input);
+  latest.current = input;
 
   useNativeScreen("home", {
     inUse,
@@ -156,8 +217,38 @@ export function useNativeHome(input: NativeHomeInput): boolean {
           if (a.row) input.onLoadMore(a.row);
           return;
         case "customize":
-          input.setEditMode(true);
+          latest.current.setEditMode(true);
           return;
+        case "done":
+          latest.current.setEditMode(false);
+          return;
+        case "reset":
+          latest.current.editor.reset();
+          return;
+        case "addsource":
+          latest.current.editor.addSource();
+          return;
+        case "edit": {
+          const ed = latest.current.editor;
+          const key = a.row;
+          if (!key) return;
+          switch (a.what) {
+            case "up":
+            case "down":
+              return ed.move(key, a.what === "up" ? -1 : 1);
+            case "hide":
+              return ed.toggleHidden(key);
+            case "rename":
+              return ed.rename(key, a.text ?? "");
+            case "num":
+              return ed.toggleNumerals(key);
+            case "hero":
+              return ed.toggleHero(key);
+            case "del":
+              return ed.deleteSource(key);
+          }
+          return;
+        }
       }
     },
   });

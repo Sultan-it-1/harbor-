@@ -31,6 +31,10 @@ class HomeModel(
     val chips: List<HomeChips> = emptyList(),
     /** Shown when there are no rows (an empty Library tab): optional title, then the text. */
     val empty: Pair<String?, String>? = null,
+    /** The page's row editor is open: each row with an [HomeRow.edit] gets its controls. */
+    val edit: Boolean = false,
+    /** Home's editor offers "Add source" (custom sources). */
+    val addSource: Boolean = false,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -75,9 +79,25 @@ class HomeModel(
                             rank = c.optInt("rank", 0),
                             watched = c.optBoolean("watched", false),
                             tint = HomeColors.parseHex(c.str("tint")),
+                            kicker = c.str("kicker"),
+                            play = c.optBoolean("play", false),
+                            emblem = c.optBoolean("emblem", false),
                         )
                     }
-                    if (items.isEmpty()) return@mapNotNull null
+                    val ed = r.optJSONObject("ed")?.let { e ->
+                        RowEdit(
+                            hidden = e.optBoolean("hidden", false),
+                            up = e.optBoolean("up", false),
+                            down = e.optBoolean("down", false),
+                            numerals = tri(e.str("numerals")),
+                            hero = tri(e.str("hero")),
+                            delete = e.optBoolean("del", false),
+                            pinned = e.optBoolean("pinned", false),
+                            renamed = e.optBoolean("renamed", false),
+                        )
+                    }
+                    // In the editor a row shows even with nothing in it (hidden, or not loaded).
+                    if (items.isEmpty() && ed == null) return@mapNotNull null
                     HomeRow(
                         key = key,
                         title = r.str("title") ?: "",
@@ -92,6 +112,7 @@ class HomeModel(
                         seeAll = r.optBoolean("all", false),
                         more = r.optBoolean("more", false),
                         items = items,
+                        edit = ed,
                     )
                 },
                 cwEmpty = cw?.let { (it.str("title") ?: "") to (it.str("text") ?: "") },
@@ -111,10 +132,19 @@ class HomeModel(
                     if (items.isEmpty()) null else HomeChips(key, items)
                 },
                 empty = empty?.str("text")?.let { empty.str("title") to it },
+                edit = o.optBoolean("edit", false),
+                addSource = o.optBoolean("addSource", false),
             )
         }
 
         private fun JSONObject.str(k: String): String? = if (isNull(k)) null else optString(k).takeIf { it.isNotEmpty() }
+
+        /** "on" / "off" / anything else (not offered) as 1 / 0 / -1. */
+        private fun tri(v: String?): Int = when (v) {
+            "on" -> 1
+            "off" -> 0
+            else -> -1
+        }
 
         private fun JSONArray?.objects(): List<JSONObject> {
             if (this == null) return emptyList()
@@ -156,6 +186,8 @@ class HomeRow(
     /** The page can load more of this row when you near its end. */
     val more: Boolean,
     val items: List<HomeCard>,
+    /** The editor's controls for this row (null = none, or the editor is closed). */
+    val edit: RowEdit? = null,
 ) {
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
@@ -178,6 +210,25 @@ class HomeCard(
     val watched: Boolean = false,
     /** Tiles: the card's colour (behind / under its picture). */
     val tint: Int? = null,
+    /** The wide card: a label on its top (Critics' Pick). */
+    val kicker: String? = null,
+    /** The wide card: a Play button (sends {a:"play"}). */
+    val play: Boolean = false,
+    /** Tiles: the picture is an emblem shown whole in the top part (awards), not a backdrop. */
+    val emblem: Boolean = false,
+)
+
+/** A row's controls in the page's editor. [numerals] / [hero]: 1 on, 0 off, -1 not offered. */
+class RowEdit(
+    val hidden: Boolean,
+    val up: Boolean,
+    val down: Boolean,
+    val numerals: Int,
+    val hero: Int,
+    val delete: Boolean,
+    /** A fixed section (the hero, Top 10…): it can only be hidden or shown. */
+    val pinned: Boolean,
+    val renamed: Boolean,
 )
 
 /** The theme's colours (the page sends what its CSS uses), as ARGB ints. */

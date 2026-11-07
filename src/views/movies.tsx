@@ -195,7 +195,7 @@ export function Movies({ active = true }: { active?: boolean }) {
         seeAll: trending?.fetcher ? { title: t(trending.title), fetcher: trending.fetcher, initial: trending.metas } : undefined,
       });
     }
-    for (const r of applyPageRows(restRows, pageRows.custom, false)) {
+    for (const r of applyPageRows(restRows, pageRows.custom, pageRows.editMode)) {
       out.push({
         key: r.key,
         title: t(r.title),
@@ -205,17 +205,22 @@ export function Movies({ active = true }: { active?: boolean }) {
       });
     }
     return out;
-  }, [top10, rows, restRows, pageRows.custom, t, loadMore]);
+  }, [top10, rows, restRows, pageRows.custom, pageRows.editMode, t, loadMore]);
   const nativeHero = useMemo(() => ({ metas: hero, rank: t("Featured tonight") }), [hero, t]);
-  const { setEditMode } = pageRows;
+  const { setEditMode, editMode, custom, persist } = pageRows;
   const nativeCustomize = useMemo(() => ({ label: t("Customize page"), onTap: () => setEditMode(true) }), [t, setEditMode]);
+  const restKeys = useMemo(() => restRows.map((r) => r.key), [restRows]);
+  const nativeEditor = useMemo(
+    () => ({ on: editMode, setOn: setEditMode, custom, allKeys: restKeys, persist }),
+    [editMode, setEditMode, custom, restKeys, persist],
+  );
   const native = useNativeBrowsePage("movies", {
     active,
-    blocked: pageRows.editMode,
     t,
     hero: nativeHero,
     rows: nativeRows,
     customize: nativeCustomize,
+    editor: nativeEditor,
   });
   if (native) return <main ref={scrollCb} aria-hidden="true" className="relative h-full overflow-hidden bg-canvas" />;
 
