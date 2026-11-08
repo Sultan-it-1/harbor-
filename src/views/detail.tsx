@@ -81,7 +81,7 @@ import { UpcomingCta, upcomingDateLabel } from "./detail/upcoming-cta";
 import { Synopsis } from "./detail/synopsis";
 import { CastCard } from "./detail/cast-card";
 import { PreviewIcon } from "./detail/preview-icon";
-import { HeroActionOverflow, useHeroActionOverflow } from "./detail/hero-action-overflow";
+import { HeroActionOverflow, useHeroActionItems, useHeroActionOverflow } from "./detail/hero-action-overflow";
 import { HeroRatings } from "./detail/hero-ratings";
 import { TrailerOverlay } from "./detail/trailer-overlay";
 import { DetailHeroTrailer } from "./detail/detail-hero-trailer";
@@ -712,7 +712,6 @@ export function DetailView({
   const showAnimeEpisodes = !!detail && isAnime && (animeEpisodes.length > 1 || franchise.length > 1);
   const [awardsOpen, setAwardsOpen] = useState(false);
   useEffect(() => setAwardsOpen(false), [meta.id]);
-  const overflowRef = useRef<HTMLDivElement>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   useEffect(() => setCommentsOpen(false), [meta.id]);
   const [collectionParts, setCollectionParts] = useState<Meta[]>([]);
@@ -928,11 +927,47 @@ export function DetailView({
     () => [...(watchOnRow ? [watchOnRow] : []), ...(showEpisodes || showAnimeEpisodes || showCinemetaEpisodes ? episodesRows : []), ...nativeRows],
     [watchOnRow, showEpisodes, showAnimeEpisodes, showCinemetaEpisodes, episodesRows, nativeRows],
   );
+  // The "…" menu, drawn by the native screen as a menu sliding up from the bottom (the same rows
+  // as the page's menu).
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => setMoreOpen(false), [meta.id]);
+  const moreItems = useHeroActionItems({
+    meta,
+    isFav,
+    onToggleFavorite: () =>
+      toggleFavorite({ id: meta.id, type: meta.type, name: title || meta.name, poster: meta.poster ?? detail?.poster }),
+    hasTrailer: !!trailerCandidate,
+    onTrailer: () => setTrailerOpen(true),
+    canDownload: meta.type === "movie",
+    showWatched: settings.showWatchedButton && meta.type === "movie",
+    watchedMark: isWatchedNow,
+    onWatched: () => {
+      setWatchedMark(true);
+      void markMovieWatched(meta, detail?.imdbId, meta.id.startsWith("tmdb:") ? meta.id.split(":")[2] : null);
+    },
+    showSync: true,
+    inWatchlist,
+    onToggleWatchlist: () =>
+      toggleWatchlist({ id: meta.id, type: meta.type, name: title || meta.name, poster: meta.poster ?? detail?.poster, imdbId: detail?.imdbId }),
+    simkl: { harborId: meta.id, type: meta.type === "movie" ? "movie" : "series" },
+    onClose: () => setMoreOpen(false),
+  });
   const native = useNativeBrowsePage("detail", {
     scrollKey: meta.id,
     active: topKind === "meta",
     blocked: nativeBlocked,
     hidden: trailerOpen || commentsOpen || awardsOpen,
+    sheet: moreOpen ? { key: `more:${meta.id}`, items: moreItems } : null,
+    onSheet: (id) => {
+      if (!id) {
+        setMoreOpen(false);
+        return;
+      }
+      const item = moreItems.find((m) => m.id === id);
+      if (!item || item.divider) return;
+      item.onSelect?.();
+      if (!item.group) setMoreOpen(false);
+    },
     t,
     back: true,
     detail: nativeDetail,
@@ -940,7 +975,7 @@ export function DetailView({
     onDetail: (what) => {
       if (what === "play") void smartPlay();
       else if (what === "extra") promoteMetaToRoot();
-      else if (what === "more") overflowRef.current?.querySelector<HTMLButtonElement>("button")?.click();
+      else if (what === "more") setMoreOpen(true);
     },
     onPill: (id) => {
       if (id === "year") {
@@ -958,34 +993,10 @@ export function DetailView({
     },
   });
   if (native) {
-    // Only what the native screen opens over itself: the page's own "…" menu (its button out of
-    // sight; the native "…" presses it) and the trailer.
+    // Only what the native screen opens over itself: the trailer and the sheets (its "…" menu is
+    // the screen's own).
     return (
       <main ref={scrollRef} aria-hidden={!trailerOpen} className="absolute inset-0 z-30 overflow-hidden bg-canvas">
-        <div ref={overflowRef} className="phone-above-tabbar fixed bottom-24 end-4 opacity-0">
-          <HeroActionOverflow
-            meta={meta}
-            isFav={isFav}
-            onToggleFavorite={() =>
-              toggleFavorite({ id: meta.id, type: meta.type, name: title || meta.name, poster: meta.poster ?? detail?.poster })
-            }
-            hasTrailer={!!trailerCandidate}
-            onTrailer={() => setTrailerOpen(true)}
-            canDownload={meta.type === "movie"}
-            showWatched={settings.showWatchedButton && meta.type === "movie"}
-            watchedMark={isWatchedNow}
-            onWatched={() => {
-              setWatchedMark(true);
-              void markMovieWatched(meta, detail?.imdbId, meta.id.startsWith("tmdb:") ? meta.id.split(":")[2] : null);
-            }}
-            showSync
-            inWatchlist={inWatchlist}
-            onToggleWatchlist={() =>
-              toggleWatchlist({ id: meta.id, type: meta.type, name: title || meta.name, poster: meta.poster ?? detail?.poster, imdbId: detail?.imdbId })
-            }
-            simkl={{ harborId: meta.id, type: meta.type === "movie" ? "movie" : "series" }}
-          />
-        </div>
         {showEpisodes && detail && (
           <NativeRowSinkContext.Provider value={episodesSink}>
             <SeriesEpisodes

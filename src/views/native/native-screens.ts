@@ -738,6 +738,10 @@ export type NativePageInput = {
   /** The release calendar's bar and month (see HomeCalendar in HomeModel.kt); its taps. */
   calendar?: Record<string, unknown> | null;
   onCalendar?: (what: string, i: number, text: string) => void;
+  /** A menu sliding up from the bottom (a title's "…"): its rows; a tap sends the row's id,
+   *  closing it sends "" (see HomeSheet in HomeModel.kt). */
+  sheet?: { key: string; items: Array<{ id: string; label: string; icon?: string; active?: boolean; danger?: boolean; indent?: boolean; group?: boolean; open?: boolean; divider?: boolean }> } | null;
+  onSheet?: (id: string) => void;
   /** The downloads page's list (see HomeDownloads in HomeModel.kt); its taps. */
   downloads?: Record<string, unknown> | null;
   onDownloads?: (what: string, text: string) => void;
@@ -795,6 +799,22 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const queueModel = input.queue;
   const calendarModel = input.calendar;
   const downloadsModel = input.downloads;
+  const sheetJson = input.sheet
+    ? JSON.stringify({
+        key: input.sheet.key,
+        items: input.sheet.items.map((i) => ({
+          id: i.id,
+          label: i.label,
+          icon: i.icon ?? null,
+          active: !!i.active,
+          danger: !!i.danger,
+          indent: !!i.indent,
+          group: !!i.group,
+          open: !!i.open,
+          divider: !!i.divider,
+        })),
+      })
+    : null;
   const customizeLabel = customize?.label;
   const editing = !!editor?.on;
   const editCustom = editor?.custom;
@@ -854,8 +874,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       queue: queueModel ?? null,
       calendar: calendarModel ?? null,
       downloads: downloadsModel ?? null,
+      sheet: sheetJson ? JSON.parse(sheetJson) : null,
     };
- }, [scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [sheetJson, scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -944,6 +965,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "q":
           if (a.what) cur.onQueue?.(a.what, i);
+          return;
+        case "sheet":
+          cur.onSheet?.(a.what ?? "");
           return;
         case "cal":
           if (a.what) cur.onCalendar?.(a.what, i, a.text ?? "");

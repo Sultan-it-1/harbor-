@@ -217,6 +217,7 @@ class NativeHome(
                 backButton.background = focusable(rounded(withAlpha(colors.canvas, 0.85f), dp(20).toFloat(), dp(1), withAlpha(colors.ink, 0.1f)))
             }
             bindSearch(m)
+            bindSheet(m.sheet)
             sections.submit(m)
             if (lastTop != Int.MIN_VALUE && m.top != lastTop) list.scrollToPosition(0)
             lastTop = m.top
@@ -327,9 +328,12 @@ class NativeHome(
             root.alpha = 0f
             root.visibility = View.VISIBLE
             root.animate().alpha(1f).setDuration(120).start()
+            bindSheet(model?.sheet)
         } else {
             if (searchField.hasFocus()) hideKeyboard(searchField)
             root.visibility = View.GONE
+            // The screen stepping aside closes its menu (and the page hears it closed).
+            sheetDialog?.dismiss()
         }
     }
 
@@ -1968,6 +1972,165 @@ class NativeHome(
                 line.addView(iconButton(res, b.label) { act("dl", what = b.id, text = d.id) })
             }
             return line
+        }
+    }
+
+    // ---- the "…" menu -----------------------------------------------------------------------------
+
+    private var sheetDialog: android.app.Dialog? = null
+    private var sheetKey = ""
+    private var sheetList: LinearLayout? = null
+    /** Closed because the page said so (not by the person): don't tell the page back. */
+    private var sheetQuiet = false
+
+    /**
+     * The page's menu sliding up from the bottom over a dimmed screen (as a phone's own menus
+     * do): it scrolls when it's long, a tap outside or Back closes it, the page keeps its place.
+     */
+    private fun bindSheet(s: HomeSheet?) {
+        if (s == null) {
+            sheetDialog?.let {
+                sheetQuiet = true
+                it.dismiss()
+            }
+            sheetDialog = null
+            sheetKey = ""
+            return
+        }
+        // Opened once the screen is up (see applyVisibility).
+        if (!isShowing) return
+        if (sheetDialog == null || s.key != sheetKey) {
+            sheetDialog?.let {
+                sheetQuiet = true
+                it.dismiss()
+            }
+            sheetKey = s.key
+            openSheet()
+        }
+        fillSheet(s)
+    }
+
+    private fun openSheet() {
+        val d = android.app.Dialog(ctx, android.R.style.Theme_Translucent_NoTitleBar)
+        val shade = FrameLayout(ctx).apply {
+            setBackgroundColor(0x99000000.toInt())
+            isClickable = true
+            setOnClickListener { d.cancel() }
+        }
+        val panel = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            isClickable = true
+            background = GradientDrawable().also {
+                it.setColor(colors.surface)
+                val r = dp(22).toFloat()
+                it.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            }
+            setPadding(0, dp(10), 0, dp(18))
+        }
+        panel.addView(View(ctx).apply { background = rounded(withAlpha(colors.ink, 0.25f), dp(2).toFloat()) },
+            LinearLayout.LayoutParams(dp(36), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(8)
+            })
+        val scroll = android.widget.ScrollView(ctx).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val list = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(list)
+        panel.addView(scroll, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+        shade.addView(panel, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        // At most about three quarters of the screen; longer menus scroll.
+        panel.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
+            val max = (height() * 0.75f).toInt()
+            if (bottom - top > max) {
+                (scroll.layoutParams as LinearLayout.LayoutParams).let {
+                    if (it.height != max - dp(40)) {
+                        it.height = max - dp(40)
+                        scroll.post { scroll.requestLayout() }
+                    }
+                }
+            }
+        }
+        d.setContentView(shade)
+        d.window?.apply {
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        }
+        d.setOnDismissListener {
+            if (sheetDialog === d) {
+                sheetDialog = null
+                sheetKey = ""
+            }
+            if (sheetQuiet) sheetQuiet = false else act("sheet", what = "")
+        }
+        sheetDialog = d
+        sheetList = list
+        try {
+            d.show()
+            panel.translationY = dp(320).toFloat()
+            shade.alpha = 0f
+            shade.animate().alpha(1f).setDuration(160).start()
+            panel.animate().translationY(0f).setDuration(220).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        } catch (_: Exception) {
+            sheetDialog = null
+        }
+    }
+
+    private fun fillSheet(s: HomeSheet) {
+        val list = sheetList ?: return
+        val rtl = model?.rtl == true
+        list.layoutDirection = if (rtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        list.removeAllViews()
+        for (it in s.items) {
+            if (it.divider) {
+                list.addView(View(ctx).apply { setBackgroundColor(withAlpha(colors.ink, 0.08f)) },
+                    LinearLayout.LayoutParams(MATCH, dp(1)).apply { setMargins(dp(16), dp(6), dp(16), dp(6)) })
+                continue
+            }
+            val fg = when {
+                it.danger -> 0xFFE5484D.toInt()
+                it.active -> colors.accent
+                it.indent -> colors.muted
+                else -> colors.ink
+            }
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(if (it.indent) 46 else 54)
+                setPaddingRelative(if (it.indent) dp(58) else dp(24), 0, dp(20), 0)
+                isClickable = true
+                isFocusable = true
+                background = focusable(rounded(Color.TRANSPARENT, dp(12).toFloat()))
+                contentDescription = it.label
+                val id = it.id
+                setOnClickListener { act("sheet", what = id) }
+            }
+            val res = when (it.icon) {
+                "bookmark" -> R.drawable.ic_bookmark
+                "check" -> R.drawable.ic_check
+                "star" -> R.drawable.ic_star
+                "play" -> R.drawable.ic_play
+                "x" -> R.drawable.ic_x
+                "retry" -> R.drawable.ic_rotate_cw
+                "download" -> R.drawable.ic_download
+                else -> if (it.danger) R.drawable.ic_trash_2 else 0
+            }
+            if (res != 0) {
+                row.addView(ImageView(ctx).apply { setImageDrawable(icon(res, if (it.active || it.danger) fg else colors.muted)) },
+                    LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginEnd = dp(18) })
+            }
+            row.addView(label(it.label, if (it.indent) 14f else 16f, lines = 1).apply { setTextColor(fg) },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (it.group) {
+                row.addView(ImageView(ctx).apply {
+                    setImageDrawable(icon(R.drawable.ic_chevron_down, colors.muted))
+                    rotation = if (it.open) 180f else 0f
+                }, LinearLayout.LayoutParams(dp(18), dp(18)))
+            } else if (it.active && it.indent) {
+                row.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_check, colors.ink)) }, LinearLayout.LayoutParams(dp(16), dp(16)))
+            }
+            list.addView(row, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(8), 0, dp(8), 0) })
         }
     }
 

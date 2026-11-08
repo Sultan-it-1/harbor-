@@ -5,7 +5,7 @@ import type { Meta } from "@/lib/cinemeta";
 import { activeDownloadFor, cancelDownload, useDownloads } from "@/lib/download/downloads-store";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
-import { SimklMenuItems, TraktMenuItems } from "./overflow-sync-items";
+import { SimklMenuItems, TraktMenuItems, useSimklMenu, useTraktMenu, type MenuEntry } from "./overflow-sync-items";
 import { PreviewIcon } from "./preview-icon";
 
 const CIRCLES_SAVED_ESTIMATE = 132;
@@ -247,6 +247,90 @@ export function HeroActionOverflow({
         )}
     </>
   );
+}
+
+/**
+ * The "…" menu's rows as data, for Android's native menu (the same rows, in the same order, as
+ * HeroActionOverflow shows). Each row's onSelect does what its button does.
+ */
+export function useHeroActionItems({
+  meta,
+  isFav,
+  onToggleFavorite,
+  hasTrailer,
+  onTrailer,
+  canDownload,
+  showWatched = false,
+  onWatched,
+  watchedMark = false,
+  showSync = false,
+  inWatchlist = false,
+  onToggleWatchlist,
+  simkl = null,
+  onClose,
+}: {
+  meta: Meta;
+  isFav: boolean;
+  onToggleFavorite: () => void;
+  hasTrailer: boolean;
+  onTrailer: () => void;
+  canDownload: boolean;
+  showWatched?: boolean;
+  onWatched?: () => void;
+  watchedMark?: boolean;
+  showSync?: boolean;
+  inWatchlist?: boolean;
+  onToggleWatchlist?: () => void;
+  simkl?: { harborId: string; type: "movie" | "series" } | null;
+  onClose: () => void;
+}): MenuEntry[] {
+  const t = useT();
+  const { openPicker } = useView();
+  useDownloads();
+  const simklRows = useSimklMenu(simkl?.harborId ?? "", simkl?.type ?? "movie", onClose);
+  const traktRows = useTraktMenu(meta.id, meta.type === "series" ? "series" : "movie", onClose);
+  const dl = canDownload ? activeDownloadFor(meta.id, null, null) : null;
+  const downloading = dl?.status === "downloading";
+  const done = dl?.status === "done";
+  const failed = dl?.status === "error";
+  const pct = Math.round((dl?.ratio ?? 0) * 100);
+  const out: MenuEntry[] = [];
+  if (showSync) {
+    out.push({
+      id: "watchlist",
+      label: inWatchlist ? t("In Watchlist") : t("Add to Watchlist"),
+      icon: inWatchlist ? "check" : "bookmark",
+      active: inWatchlist,
+      onSelect: () => onToggleWatchlist?.(),
+    });
+    if (simkl) out.push(...simklRows);
+    out.push(...traktRows);
+    out.push({ id: "-sync", label: "", divider: true });
+  }
+  out.push({ id: "favorite", label: isFav ? t("Favorited") : t("Favorite"), icon: "star", active: isFav, onSelect: onToggleFavorite });
+  if (showWatched) {
+    out.push({ id: "watched", label: watchedMark ? t("Marked watched") : t("Mark watched"), icon: "check", active: watchedMark, onSelect: () => onWatched?.() });
+  }
+  if (hasTrailer) out.push({ id: "trailer", label: t("Watch trailer"), icon: "play", onSelect: onTrailer });
+  if (canDownload) {
+    out.push({
+      id: "download",
+      label: downloading
+        ? t("Downloading {pct}%  ·  cancel", { pct })
+        : done
+          ? t("Saved offline")
+          : failed
+            ? t("Retry download")
+            : t("Download for offline"),
+      icon: downloading ? "x" : done ? "check" : failed ? "retry" : "download",
+      active: done,
+      onSelect: () => {
+        if (downloading && dl) cancelDownload(dl.id);
+        else openPicker(meta, undefined, { intent: "download" });
+      },
+    });
+  }
+  return out;
 }
 
 function Item({

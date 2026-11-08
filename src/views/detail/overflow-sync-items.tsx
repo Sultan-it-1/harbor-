@@ -79,6 +79,128 @@ function StatusRow({
   );
 }
 
+/** A row of the "…" menu as data (Android's native menu draws these). */
+export type MenuEntry = {
+  id: string;
+  label: string;
+  icon?: string;
+  active?: boolean;
+  danger?: boolean;
+  /** Under a group (Simkl's statuses). */
+  indent?: boolean;
+  /** Opens / closes the rows under it (the menu stays up). */
+  group?: boolean;
+  open?: boolean;
+  divider?: boolean;
+  onSelect?: () => void;
+};
+
+/** Simkl's rows (Add to Simkl, or its status with the others under it), as data. */
+export function useSimklMenu(harborId: string, type: "movie" | "series", onAction: () => void): MenuEntry[] {
+  const t = useT();
+  const { isConnected } = useSimkl();
+  const [target, setTarget] = useState<SimklTarget | null>(null);
+  const [status, setStatus] = useState<WatchlistStatus | null>(null);
+  const [ready, setReady] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    let cancelled = false;
+    void (async () => {
+      let tg: SimklTarget | null = null;
+      const r = stremioIdToSimklTarget(harborId);
+      if (r.ok) {
+        tg = r.target;
+      } else if (harborId.startsWith("kitsu:")) {
+        const n = Number(harborId.split(":")[1]);
+        const mal = Number.isFinite(n) ? await kitsuToMal(n).catch(() => null) : null;
+        if (mal != null) tg = { kind: "show", ids: { mal } };
+      }
+      if (cancelled || !tg) return;
+      if (type === "series" && tg.kind === "movie") tg = { kind: "show", ids: tg.ids };
+      if (type === "movie" && tg.kind === "show") tg = { kind: "movie", ids: tg.ids };
+      setTarget(tg);
+      const malKey = tg.kind !== "episode" && tg.ids.mal != null ? `mal:${tg.ids.mal}` : null;
+      try {
+        const m = await loadSimklStatusMap();
+        if (cancelled) return;
+        setStatus(statusForId(m, harborId) ?? (malKey ? statusForId(m, malKey) : null));
+        setReady(true);
+      } catch {
+        if (!cancelled) setReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [harborId, isConnected, type]);
+
+  if (!isConnected || !target || !ready) return [];
+  if (status == null) {
+    return [
+      {
+        id: "simkl:add",
+        label: t("Add to Simkl"),
+        icon: "bookmark",
+        onSelect: () => {
+          void setSimklStatus(target, "plantowatch").catch(() => {});
+          onAction();
+        },
+      },
+    ];
+  }
+  const order = target.kind === "movie" ? MOVIE_STATUS_ORDER : SHOW_STATUS_ORDER;
+  const out: MenuEntry[] = [
+    { id: "simkl:group", label: `Simkl  ·  ${t(SIMKL_STATUS_LABELS[status])}`, icon: "bookmark", group: true, open, onSelect: () => setOpen((v) => !v) },
+  ];
+  if (open) {
+    for (const st of order) {
+      out.push({
+        id: `simkl:${st}`,
+        label: t(SIMKL_STATUS_LABELS[st]),
+        indent: true,
+        active: st === status,
+        onSelect: () => {
+          void setSimklStatus(target, st).catch(() => {});
+          onAction();
+        },
+      });
+    }
+    out.push({
+      id: "simkl:remove",
+      label: t("Remove from list"),
+      indent: true,
+      danger: true,
+      onSelect: () => {
+        void clearSimklStatus(target).catch(() => {});
+        onAction();
+      },
+    });
+  }
+  return out;
+}
+
+/** Trakt's row (Mark watched on Trakt, films only), as data. */
+export function useTraktMenu(harborId: string, type: "movie" | "series", onAction: () => void): MenuEntry[] {
+  const t = useT();
+  const { isConnected, resolveTarget } = useTrakt();
+  if (!isConnected || type !== "movie") return [];
+  const target = resolveTarget(harborId);
+  if (!target || target.kind !== "movie") return [];
+  return [
+    {
+      id: "trakt:watched",
+      label: t("Mark watched on Trakt"),
+      icon: "check",
+      onSelect: () => {
+        void pushWatched(target).catch(() => {});
+        onAction();
+      },
+    },
+  ];
+}
+
 export function SimklMenuItems({
   harborId,
   type,

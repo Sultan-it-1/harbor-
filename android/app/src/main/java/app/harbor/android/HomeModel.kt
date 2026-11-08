@@ -51,6 +51,8 @@ class HomeModel(
     val calendar: HomeCalendar? = null,
     /** The downloads page: where files are kept, its notices, the season searches and the downloads. */
     val downloads: HomeDownloads? = null,
+    /** A menu sliding up from the bottom (a title's "…"), while it's open. */
+    val sheet: HomeSheet? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -332,6 +334,24 @@ class HomeModel(
                                         buttons = x.optJSONArray("buttons").objects().map { b -> DlButton(id = b.str("id") ?: "", label = b.str("label") ?: "") },
                                     )
                                 },
+                            )
+                        },
+                    )
+                },
+                sheet = o.optJSONObject("sheet")?.let { sh ->
+                    HomeSheet(
+                        key = sh.str("key") ?: "",
+                        items = sh.optJSONArray("items").objects().map { i ->
+                            SheetItem(
+                                id = i.str("id") ?: "",
+                                label = i.str("label") ?: "",
+                                icon = i.str("icon"),
+                                active = i.optBoolean("active", false),
+                                danger = i.optBoolean("danger", false),
+                                indent = i.optBoolean("indent", false),
+                                group = i.optBoolean("group", false),
+                                open = i.optBoolean("open", false),
+                                divider = i.optBoolean("divider", false),
                             )
                         },
                     )
@@ -706,6 +726,26 @@ class DlItem(
 )
 
 class DlButton(val id: String, val label: String)
+
+/**
+ * A menu sliding up from the bottom: its rows (an icon, the label; [SheetItem.active] in the
+ * accent colour, [SheetItem.danger] red, [SheetItem.indent] under a [SheetItem.group] that
+ * opens and closes them, a [SheetItem.divider] line). A tap sends {a:"sheet", what:id}; closing it
+ * (outside, Back) sends {a:"sheet", what:""}. Another [key] is another menu.
+ */
+class HomeSheet(val key: String, val items: List<SheetItem>)
+
+class SheetItem(
+    val id: String,
+    val label: String,
+    val icon: String?,
+    val active: Boolean,
+    val danger: Boolean,
+    val indent: Boolean,
+    val group: Boolean,
+    val open: Boolean,
+    val divider: Boolean,
+)
 
 /** A line of credits: a label and the people (a tap opens one), or a label and a [value]. */
 class CreditGroup(val label: String, val people: List<CriticPerson>, val value: String?)
