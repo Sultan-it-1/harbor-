@@ -12,7 +12,9 @@ import { isPhoneLayout, isWeb } from "@/lib/platform";
 import { openUrl } from "@/lib/window";
 import { useT } from "@/lib/i18n";
 import { AddonDescription } from "./addon-description";
-import { AddonDocumentation } from "./addon-documentation";
+import { AddonDocumentation, useAddonDocumentation } from "./addon-documentation";
+import { useView } from "@/lib/view";
+import { logoJson, tagPills, useNativeAddonDetail } from "./use-native-addons";
 import { categoryLabel } from "./addons-types";
 import { idOf, nameOf, resourceLabels } from "./addons-utils";
 import { DetailRail } from "./detail-rail";
@@ -25,6 +27,7 @@ import { uiLocale } from "@/lib/i18n/locale";
 const PHONE = isPhoneLayout();
 
 export function AddonDetail({
+  nativeToast = null,
   resolved,
   related,
   recommended,
@@ -45,8 +48,10 @@ export function AddonDetail({
   onUninstall: () => Promise<void>;
   onInstallUrl: (rawUrl: string) => Promise<string | null>;
   showToast: (kind: "ok" | "error", text: string) => void;
+  nativeToast?: { id: number; text: string } | null;
 }) {
   const t = useT();
+  const { topKind } = useView();
   const m = resolved.manifest;
   const c = resolved.curated;
   const isConfigurable =
@@ -173,6 +178,96 @@ export function AddonDetail({
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [resolved.transportUrl]);
+
+  // Android: the page drawn by the native screen (use-native-addons.ts), with the same buttons.
+  const [descOpen, setDescOpen] = useState(false);
+  useEffect(() => setDescOpen(false), [resolved.transportUrl]);
+  const documentation = useAddonDocumentation(community?.slug);
+  const logoUrl = resolveAddonLogo(m?.logo, resolved.transportUrl);
+  const configure = () => openInstallerViewport(configureUrl, nameOf(resolved), logoUrl);
+  // The native screen put the address on the clipboard itself.
+  const copiedNatively = (kind: "https" | "stremio") => {
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 1600);
+    showToast("ok", kind === "stremio" ? t("Stremio link copied") : t("Manifest URL copied"));
+  };
+  const nativeButtons: Array<Record<string, unknown>> = [];
+  if (busy === "remove") nativeButtons.push({ id: "busy", label: t("Removing"), style: "installed", busy: true });
+  else if (busy === "install") nativeButtons.push({ id: "busy", label: t("Installing"), style: "busy", busy: true });
+  else if (installed && confirmRemove.armed) nativeButtons.push({ id: "remove", label: t("Tap again to remove"), style: "danger", icon: "trash" });
+  else if (installed) nativeButtons.push({ id: "remove", label: t("Installed"), style: "installed", icon: "check" });
+  else if (isConfigurable) nativeButtons.push({ id: "configure", label: t("Configure & install"), style: "ink", icon: "settings" });
+  else nativeButtons.push({ id: "install", label: t("Install"), style: "ink" });
+  if (!installed && isConfigurable && !busy && !web) nativeButtons.push({ id: "install", label: t("Install default"), style: "soft" });
+  if (installed && isConfigurable && !busy) nativeButtons.push({ id: "configure", label: t("Reconfigure"), style: "soft", icon: "settings" });
+  nativeButtons.push({ id: "copy", label: copied === "https" ? t("Copied") : t("Copy URL"), style: "soft", icon: copied === "https" ? "check" : "copy", copy: resolved.transportUrl });
+  nativeButtons.push({ id: "stremio", label: copied === "stremio" ? t("Copied") : t("stremio:// link"), style: "soft", icon: copied === "stremio" ? "check" : "external", copy: stremioShareUrl });
+  if (community) {
+    nativeButtons.push({ id: "rate", label: t("Rate"), style: "rate", icon: "star" });
+    nativeButtons.push({ id: "site", label: t("On Stremio-Addons"), style: "soft", icon: "external" });
+  }
+  const nativeOn = useNativeAddonDetail({
+    active: topKind === "addon-detail",
+    resolved,
+    installedIds,
+    related,
+    recommended,
+    detail: {
+      bg: m?.background ?? null,
+      glow: !m?.background ? logoUrl : null,
+      logo: logoJson(idOf(resolved), nameOf(resolved), logoUrl),
+      stars: community ? community.stars.toLocaleString(uiLocale()) : null,
+      eyebrow: `${c?.tags.includes("official") ? t("Official") : t("Community")} · ${categoryLabel(c?.category ?? categorizeAddon(resolved)) ?? t("Addon")}${m?.id ? ` · ${m.id}` : ""}`,
+      name: nameOf(resolved),
+      rising: risingEntry
+        ? {
+            text: risingEntry.recentStars === 1
+              ? t("Rising · +{n} star in 24h", { n: risingEntry.recentStars })
+              : t("Rising · +{n} stars in 24h", { n: risingEntry.recentStars }),
+            tone: "rise",
+            icon: "trend",
+          }
+        : null,
+      desc: m?.description ?? null,
+      descOpen,
+      more: t("View more"),
+      less: t("Show less"),
+      buttons: nativeButtons,
+      tags: tagPills(resolved, t),
+    },
+    warnings: c?.warnings ?? [],
+    documentation,
+    info: {
+      title: t("Project information"),
+      note: t("Pulled from manifest"),
+      stats: stats.map(([label, value]) => ({ label, value })),
+      urlLabel: t("Manifest URL"),
+      url: manifestVisible ? resolved.transportUrl : maskedManifestUrl,
+      reveal: manifestVisible ? t("Hide") : t("Reveal"),
+      copy: manifestVisible ? (copied === "https" ? t("Copied") : t("Copy")) : null,
+      hint: manifestVisible ? null : t("Hidden by default. Manifest paths often carry API keys (debrid tokens, OMDB keys, etc.) you don't want over a shoulder."),
+      foot: t("Stremio addon, packaged into Harbor's catalog."),
+      credit: `${t("Version and capabilities come straight from the addon's manifest. Ratings and categories come from the")} stremio-addons.net ${t("community API. Star, browse, and contribute on their site.")}`,
+    },
+    onTap: (what) => {
+      if (what === "desc") return setDescOpen((v) => !v);
+      if (what === "reveal") return setManifestVisible((v) => !v);
+      if (what === "copyurl") return copiedNatively("https");
+      if (what === "site") return openUrl("https://stremio-addons.net");
+      const b = what.startsWith("btn:") ? what.slice(4) : "";
+      if (b === "install") void handleInstall();
+      else if (b === "remove") void handleUninstall();
+      else if (b === "configure") configure();
+      else if (b === "copy") copiedNatively("https");
+      else if (b === "stremio") copiedNatively("stremio");
+      else if (b === "rate") openRate();
+      else if (b === "site" && community) openUrl(addonSiteUrl(community.slug));
+    },
+    onOpen,
+    onInstallAddon,
+    toast: nativeToast,
+  });
+  if (nativeOn) return <main className="h-full bg-canvas" />;
 
   return (
     <main

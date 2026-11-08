@@ -7,14 +7,14 @@ import { getAddon } from "@/lib/providers/stremio-addons";
 import { openUrl } from "@/lib/window";
 import { useT } from "@/lib/i18n";
 
-export function AddonDocumentation({ slug }: { slug: string }) {
-  const t = useT();
+/** The addon's documentation (markdown) from stremio-addons.net, or null. */
+export function useAddonDocumentation(slug: string | null | undefined): string | null {
   const [text, setText] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [needsToggle, setNeedsToggle] = useState(false);
-  const bodyRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
+    if (!slug) {
+      setText(null);
+      return;
+    }
     let cancelled = false;
     void getAddon(slug)
       .then((detail) => {
@@ -29,6 +29,15 @@ export function AddonDocumentation({ slug }: { slug: string }) {
       cancelled = true;
     };
   }, [slug]);
+  return text;
+}
+
+export function AddonDocumentation({ slug }: { slug: string }) {
+  const t = useT();
+  const text = useAddonDocumentation(slug);
+  const [expanded, setExpanded] = useState(false);
+  const [needsToggle, setNeedsToggle] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (expanded || !text) return;

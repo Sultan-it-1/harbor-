@@ -35,31 +35,15 @@ export function CommunityBrowseList({
   return <ApiSortedList mode={mode} category={category ?? null} search={search ?? null} allowAdult={!!allowAdult} installedIds={installedIds} onOpen={onOpen} onChange={onChange} />;
 }
 
-function ApiSortedList({
-  mode,
-  category,
-  search,
-  allowAdult,
-  installedIds,
-  onOpen,
-  onChange,
-}: {
-  mode: "top" | "new";
-  category: string | null;
-  search: string | null;
-  allowAdult: boolean;
-  installedIds: Set<string>;
-  onOpen: (manifestId: string) => void;
-  onChange?: () => void;
-}) {
-  const t = useT();
+/** Top rated / Just added from stremio-addons.net, a page of 50 at a time ([loadMore]). */
+export function useApiSortedAddons(o: { mode: "top" | "new"; category: string | null; search: string | null; allowAdult: boolean; enabled?: boolean }) {
+  const { mode, category, search, allowAdult } = o;
+  const enabled = o.enabled !== false;
   const [items, setItems] = useState<SAAddon[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [exhausted, setExhausted] = useState(false);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const seenRef = useRef<Set<string>>(new Set());
-  const rising = useRising();
 
   useEffect(() => {
     seenRef.current = new Set();
@@ -69,7 +53,7 @@ function ApiSortedList({
   }, [mode, category, search, allowAdult]);
 
   const loadMore = useCallback(async () => {
-    if (loading || exhausted) return;
+    if (loading || exhausted || !enabled) return;
     setLoading(true);
     try {
       const res = await listAddons({
@@ -94,11 +78,35 @@ function ApiSortedList({
     } finally {
       setLoading(false);
     }
-  }, [mode, page, loading, exhausted, category, search, allowAdult]);
+  }, [mode, page, loading, exhausted, category, search, allowAdult, enabled]);
 
   useEffect(() => {
     if (items.length === 0 && !loading && !exhausted) void loadMore();
   }, [items.length, loading, exhausted, loadMore]);
+  return { items, loading, exhausted, loadMore };
+}
+
+function ApiSortedList({
+  mode,
+  category,
+  search,
+  allowAdult,
+  installedIds,
+  onOpen,
+  onChange,
+}: {
+  mode: "top" | "new";
+  category: string | null;
+  search: string | null;
+  allowAdult: boolean;
+  installedIds: Set<string>;
+  onOpen: (manifestId: string) => void;
+  onChange?: () => void;
+}) {
+  const t = useT();
+  const { items, loading, exhausted, loadMore } = useApiSortedAddons({ mode, category, search, allowAdult });
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const rising = useRising();
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -149,22 +157,9 @@ function ApiSortedList({
   );
 }
 
-function RisingList({
-  category,
-  search,
-  allowAdult,
-  installedIds,
-  onOpen,
-  onChange,
-}: {
-  category: string | null;
-  search: string | null;
-  allowAdult: boolean;
-  installedIds: Set<string>;
-  onOpen: (manifestId: string) => void;
-  onChange?: () => void;
-}) {
-  const t = useT();
+/** Top rising: the site's own list when it has one, else the risers Harbor measured itself. */
+export function useRisingAddons(o: { category: string | null; search: string | null; allowAdult: boolean }): Array<{ addon: SAAddon; delta: number; window: number }> {
+  const { category, search, allowAdult } = o;
   const official = useRising();
   const allMovers = useTopMovers(80);
   const q = search?.trim().toLowerCase() ?? "";
@@ -182,24 +177,7 @@ function RisingList({
     }
     return true;
   });
-  if (officialFiltered.length > 0) {
-    return (
-      <div className="flex flex-col gap-2">
-        {officialFiltered.map((a) => (
-          <CommunityRow
-            key={a.uuid}
-            addon={a}
-            installed={isInstalled(a, installedIds)}
-            showRising
-            risingDelta={a.recentStars}
-            risingWindow={1}
-            onOpen={onOpen}
-            onChange={onChange}
-          />
-        ))}
-      </div>
-    );
-  }
+  if (officialFiltered.length > 0) return officialFiltered.map((a) => ({ addon: a, delta: a.recentStars, window: 1 }));
   const movers = allMovers.filter((m) => {
     if (category && !m.community.categories.some((c) => c.slug === category)) return false;
     if (q) {
@@ -210,7 +188,47 @@ function RisingList({
     }
     return true;
   });
-  if (movers.length === 0) {
+  return movers.map((m) => {
+    const synthetic = {
+      uuid: m.community.uuid,
+      slug: m.community.slug,
+      url: m.community.url,
+      manifestUrl: m.community.manifestUrl,
+      manifest: {
+        id: m.community.manifestId ?? "",
+        name: m.community.name ?? m.community.slug,
+        description: m.community.description ?? "",
+        logo: m.community.logo,
+        background: m.community.background,
+      },
+      stars: m.community.stars,
+      categories: m.community.categories,
+      configureUrl: null,
+      createdAt: m.community.createdAt,
+      updatedAt: m.community.updatedAt,
+    } as unknown as SAAddon;
+    return { addon: synthetic, delta: m.delta, window: m.windowDays };
+  });
+}
+
+function RisingList({
+  category,
+  search,
+  allowAdult,
+  installedIds,
+  onOpen,
+  onChange,
+}: {
+  category: string | null;
+  search: string | null;
+  allowAdult: boolean;
+  installedIds: Set<string>;
+  onOpen: (manifestId: string) => void;
+  onChange?: () => void;
+}) {
+  const t = useT();
+  const rows = useRisingAddons({ category, search, allowAdult });
+  if (rows.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-edge bg-canvas/30 px-6 py-12 text-center">
         <span className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/15 ring-1 ring-rose-500/30">
@@ -225,38 +243,18 @@ function RisingList({
   }
   return (
     <div className="flex flex-col gap-2">
-      {movers.map((m) => {
-        const synthetic = {
-          uuid: m.community.uuid,
-          slug: m.community.slug,
-          url: m.community.url,
-          manifestUrl: m.community.manifestUrl,
-          manifest: {
-            id: m.community.manifestId ?? "",
-            name: m.community.name ?? m.community.slug,
-            description: m.community.description ?? "",
-            logo: m.community.logo,
-            background: m.community.background,
-          },
-          stars: m.community.stars,
-          categories: m.community.categories,
-          configureUrl: null,
-          createdAt: m.community.createdAt,
-          updatedAt: m.community.updatedAt,
-        } as unknown as SAAddon;
-        return (
-          <CommunityRow
-            key={m.community.uuid}
-            addon={synthetic}
-            installed={isInstalled(synthetic, installedIds)}
-            showRising
-            risingDelta={m.delta}
-            risingWindow={m.windowDays}
-            onOpen={onOpen}
-            onChange={onChange}
-          />
-        );
-      })}
+      {rows.map((r) => (
+        <CommunityRow
+          key={r.addon.uuid}
+          addon={r.addon}
+          installed={isInstalled(r.addon, installedIds)}
+          showRising
+          risingDelta={r.delta}
+          risingWindow={r.window}
+          onOpen={onOpen}
+          onChange={onChange}
+        />
+      ))}
     </div>
   );
 }
@@ -395,12 +393,12 @@ function SkeletonRows() {
   );
 }
 
-function isInstalled(a: SAAddon, set: Set<string>): boolean {
+export function isInstalled(a: SAAddon, set: Set<string>): boolean {
   const id = a.manifest?.id;
   return !!id && set.has(id);
 }
 
-function isNewlyAdded(createdAt: string | undefined): boolean {
+export function isNewlyAdded(createdAt: string | undefined): boolean {
   if (!createdAt) return false;
   const t = Date.parse(createdAt);
   return Number.isFinite(t) && Date.now() - t < NEW_WINDOW_MS;

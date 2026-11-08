@@ -24,8 +24,8 @@ class PkStatus(val text: String, val tone: String, val icon: String?, val upper:
 class PkTag(val text: String, val style: String)
 
 /** A button. [style]: ink, accent, outline, green, off, link, white, glass, secondary, amber.
- *  [icon]: play, download, check, external, radio, x, arrow. */
-class PkButton(val id: String, val label: String, val style: String, val icon: String?, val busy: Boolean = false)
+ *  [icon]: play, download, check, external, radio, x, arrow. [copy]: text put on the clipboard by the tap. */
+class PkButton(val id: String, val label: String, val style: String, val icon: String?, val busy: Boolean = false, val copy: String? = null)
 
 /** A choice that toggles (Cached only, a language, an addon). [icon]: zap, lang. */
 class PkPill(val id: String, val label: String, val on: Boolean, val icon: String? = null, val count: String? = null)
@@ -303,7 +303,7 @@ object PkParse {
 
     private fun button(o: JSONObject?): PkButton? {
         if (o == null) return null
-        return PkButton(o.str("id") ?: "", o.str("label") ?: "", o.str("style") ?: "ink", o.str("icon"), o.optBoolean("busy", false))
+        return PkButton(o.str("id") ?: "", o.str("label") ?: "", o.str("style") ?: "ink", o.str("icon"), o.optBoolean("busy", false), o.str("copy"))
     }
 
     private fun pills(a: JSONArray?) = a.objects().mapNotNull { p ->

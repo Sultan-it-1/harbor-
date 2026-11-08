@@ -33,6 +33,8 @@ import { DiscoverPane } from "./addons/discover-pane";
 import { InstalledPane } from "./addons/installed-pane";
 import { SearchBar } from "./addons/search-bar";
 import { Toaster } from "./addons/toaster";
+import { useNativeAddons, useNativeToast } from "./addons/use-native-addons";
+import { useInstallerOpen } from "@/components/installer-viewport";
 
 export { requestAddonsTab } from "./addons/addons-types";
 
@@ -68,7 +70,7 @@ export function AddonsView() {
   const { settings, update } = useSettings();
   const { authKey } = useAuth();
   const { byId, installedIds, loading, refetch } = useAddonsCatalog(settings.showAdultAddons);
-  const { addonDetailId, openAddonDetail, goBack } = useView();
+  const { addonDetailId, openAddonDetail, goBack, topKind } = useView();
   const [tab, setTab] = useState<Tab>(() => consumeAddonsTab() ?? "discover");
 
   useEffect(() => {
@@ -273,6 +275,51 @@ export function AddonsView() {
     }
   };
 
+  // Android: the page drawn by the native screen (use-native-addons.ts); its pop-ups still open
+  // over it (the native screen steps aside for them).
+  const installerOpen = useInstallerOpen();
+  const nativeOn = useNativeAddons({
+    active: topKind === "addons",
+    blocked: !!addonDetailId,
+    hidden: ageGateOpen || !!installModal || reorderOpen || installerOpen,
+    tab,
+    setTab,
+    query,
+    setQuery,
+    categoryFilter,
+    setCategoryFilter,
+    browseMode,
+    setBrowseMode,
+    browseModes: BROWSE_MODES,
+    filtersOpen,
+    setFiltersOpen,
+    categories: saCategories,
+    showAdult: settings.showAdultAddons,
+    onAdult: () => {
+      if (settings.showAdultAddons) update({ showAdultAddons: false });
+      else setAgeGateOpen(true);
+    },
+    hero,
+    rails: railsData,
+    installed,
+    installedIds,
+    loading,
+    catalogEmpty: allAddons.length === 0,
+    authKey,
+    onOpen: openAddonDetail,
+    onInstall,
+    onUninstall,
+    onManage: (r) => {
+      const id = r.manifest?.id ?? r.curated?.id;
+      if (!id) return;
+      setInstallModal({ kind: "manage", existing: { id, name: r.manifest?.name ?? id, logo: r.manifest?.logo ?? null, transportUrl: r.transportUrl } });
+    },
+    onReorder: () => setReorderOpen(true),
+    onUrl: (url) => setInstallModal({ kind: "install", url }),
+    refetch,
+    toast,
+  });
+
   if (addonDetailId) {
     const local = byId.get(addonDetailId);
     return (
@@ -289,6 +336,47 @@ export function AddonsView() {
         onCancel={goBack}
         toast={toast}
       />
+    );
+  }
+
+  if (nativeOn) {
+    return (
+      <main ref={pageRef} className="relative flex h-full flex-col bg-canvas">
+        <AgeGateModal open={ageGateOpen} onClose={() => setAgeGateOpen(false)} onPass={() => update({ showAdultAddons: true })} />
+        {installModal && (
+          <AddonInstallModal
+            mode={installModal}
+            onClose={() => setInstallModal(null)}
+            onInstall={async (rawUrl, opts) => {
+              try {
+                const result = await installFromUrl(rawUrl, opts);
+                refetch();
+                showToast("ok", result.replaced ? t("Updated") : result.syncedToStremio ? t("Installed") : t("Installed locally"), {
+                  id: result.addon.manifest.id,
+                  name: result.addon.manifest.name,
+                  logo: result.addon.manifest.logo ?? null,
+                });
+                return { replaced: result.replaced, addon: result.addon };
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : t("Install failed.");
+                showToast("error", msg);
+                return null;
+              }
+            }}
+          />
+        )}
+        {reorderOpen && (
+          <OrganizeAddonsPage
+            authKey={authKey}
+            onClose={() => setReorderOpen(false)}
+            onSaved={(scope) => {
+              setReorderOpen(false);
+              window.dispatchEvent(new CustomEvent("harbor:addons-changed", { detail: { reordered: true } }));
+              showToast("ok", scope === "cloud" ? t("Addon order synced to your Stremio account") : t("Addon order saved on this device"));
+            }}
+          />
+        )}
+      </main>
     );
   }
 
@@ -642,6 +730,7 @@ function RemoteOrLocalDetail({
   }, [local, failed, onCancel]);
 
   const resolved = local ?? remote;
+  const nativeToast = useNativeToast(toast);
   const recs = useMemo(() => {
     if (!resolved) return { related: [] as ResolvedAddon[], recommended: [] as ResolvedAddon[] };
     const related = relatedAddons(resolved, allAddons, 8);
@@ -662,6 +751,7 @@ function RemoteOrLocalDetail({
   return (
     <>
       <AddonDetail
+        nativeToast={nativeToast}
         resolved={resolved}
         related={recs.related}
         recommended={recs.recommended}

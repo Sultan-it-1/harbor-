@@ -9,30 +9,24 @@ import { openUrl } from "@/lib/window";
 import { t } from "@/lib/i18n/translate";
 import { uiLocale } from "@/lib/i18n/locale";
 
-const SITE_NAME = "stremio-addons.net";
-const SITE_URL = "https://stremio-addons.net";
+export const SITE_NAME = "stremio-addons.net";
+export const SITE_URL = "https://stremio-addons.net";
+export { stremioAddonsLogo };
 
-type SortMode = "stars" | "createdAt";
+export type SortMode = "stars" | "createdAt";
 
-const TABS: Array<{ id: SortMode; label: string; sub: string }> = [
+export const TABS: Array<{ id: SortMode; label: string; sub: string }> = [
   { id: "stars", label: "Top rated", sub: "Highest community stars" },
   { id: "createdAt", label: "Just added", sub: "Newest manifests" },
 ];
 
-export function CommunityAddonsRail({
-  installedIds,
-  onChange,
-  onOpen,
-}: {
-  installedIds: Set<string>;
-  onChange?: () => void;
-  onOpen?: (manifestId: string) => void;
-}) {
-  const [sortMode, setSortMode] = useState<SortMode>("stars");
+/** The rail's addons from stremio-addons.net, by stars or newest (null while loading). */
+export function useCommunityRailItems(sortMode: SortMode, enabled = true): { items: SAAddon[] | null; error: string | null } {
   const [items, setItems] = useState<SAAddon[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     setItems(null);
     setError(null);
@@ -53,7 +47,37 @@ export function CommunityAddonsRail({
     return () => {
       cancelled = true;
     };
-  }, [sortMode]);
+  }, [sortMode, enabled]);
+  return { items, error };
+}
+
+/** Installs a community addon: one that needs setting up opens its configure page instead. */
+export async function installCommunityAddon(addon: SAAddon): Promise<void> {
+  const m = addon.manifest;
+  if (!m?.id) return;
+  let hints = (m as { behaviorHints?: { configurable?: boolean; configurationRequired?: boolean } }).behaviorHints;
+  if (!hints) {
+    const full = await fetchManifestAt(addon.manifestUrl).catch(() => null);
+    hints = full?.behaviorHints;
+  }
+  if (hints?.configurable === true || hints?.configurationRequired === true) {
+    openInstallerViewport(manifestToConfigureUrl(addon.manifestUrl), m.name ?? addon.slug, m.logo ?? null);
+    return;
+  }
+  await installAddon(m.id, addon.manifestUrl);
+}
+
+export function CommunityAddonsRail({
+  installedIds,
+  onChange,
+  onOpen,
+}: {
+  installedIds: Set<string>;
+  onChange?: () => void;
+  onOpen?: (manifestId: string) => void;
+}) {
+  const [sortMode, setSortMode] = useState<SortMode>("stars");
+  const { items, error } = useCommunityRailItems(sortMode);
 
   return (
     <section className="flex flex-col gap-4">
@@ -204,17 +228,7 @@ function CommunityCard({
     if (!m?.id || busy) return;
     setBusy(true);
     try {
-      let hints = (m as { behaviorHints?: { configurable?: boolean; configurationRequired?: boolean } })
-        .behaviorHints;
-      if (!hints) {
-        const full = await fetchManifestAt(addon.manifestUrl).catch(() => null);
-        hints = full?.behaviorHints;
-      }
-      if (hints?.configurable === true || hints?.configurationRequired === true) {
-        openInstallerViewport(manifestToConfigureUrl(addon.manifestUrl), name, logo ?? null);
-        return;
-      }
-      await installAddon(m.id, addon.manifestUrl);
+      await installCommunityAddon(addon);
       onChange?.();
     } catch (err) {
       console.warn("[community-rail] install failed", err);

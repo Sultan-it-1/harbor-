@@ -164,6 +164,36 @@ class HomeModelTest {
     }
 
     @Test
+    fun addonBlocksToastAndPrompt() {
+        val m = HomeModel.parse(
+            """{"page":"addons","rows":[
+              {"key":"ad-hero","kind":"ad","items":[],"ad":{"type":"hero","eyebrow":"FEATURED","title":"Torrentio","button":{"id":"btn","label":"Get"},"link":"View details","from":"#66f59e0b","to":null}},
+              {"key":"ad-c","kind":"ad","items":[],"ad":{"type":"card","variant":"community","logo":{"img":["https://l/1.png"],"initial":"C","from":"#ec78c9","to":"#a83a8a"},"name":"C","pills":[{"text":"100","tone":"star","icon":"star"},{"tone":"rise"}],"chevron":true,"more":true}},
+              {"key":"ad-t","kind":"ad","items":[],"ad":{"type":"tiles","strip":true,"items":[{"logo":{},"name":"A","button":{"id":"btn","label":"Install","copy":"x"}}]}},
+              {"key":"ad-info","kind":"ad","items":[],"ad":{"type":"info","stats":[{"label":"Version","value":"1"}],"url":"https://a/…/manifest.json"}},
+              {"key":"ad-x","kind":"ad","items":[],"ad":{"type":"unknown"}}],
+              "toast":{"id":3,"text":"Installed"},"prompt":{"key":"url","title":"Paste","hint":"stremio://"}}""",
+        )
+        assertEquals(listOf("ad-hero", "ad-c", "ad-t", "ad-info"), m.rows.map { it.key })
+        val hero = m.rows[0].ad as AdHero
+        assertEquals(0x66F59E0B, hero.from)
+        assertNull(hero.to)
+        val card = m.rows[1].ad as AdCard
+        // A pill without its text is left out.
+        assertEquals(1, card.pills.size)
+        assertTrue(card.more && card.chevron)
+        assertEquals(0xFFEC78C9.toInt(), card.logo.from)
+        val tiles = m.rows[2].ad as AdTiles
+        assertTrue(tiles.strip)
+        assertEquals("?", tiles.items[0].logo.initial)
+        assertEquals("x", tiles.items[0].button.copy)
+        assertEquals(listOf("Version" to "1"), (m.rows[3].ad as AdInfo).stats)
+        assertEquals(3, m.toast?.id)
+        assertEquals("url", m.prompt?.key)
+        assertEquals("OK", m.prompt?.ok)
+    }
+
+    @Test
     fun hexColours() {
         assertEquals(0xFFE8A45E.toInt(), HomeColors.parseHex("#e8a45e"))
         assertEquals(0x80FFFFFF.toInt(), HomeColors.parseHex("#80ffffff"))

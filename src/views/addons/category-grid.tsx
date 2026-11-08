@@ -6,7 +6,7 @@ import sportsIcon from "@/assets/category/sports.svg";
 import livetvIcon from "@/assets/category/livetv.svg";
 import { useT } from "@/lib/i18n";
 
-const CATEGORY_TILES: Array<{
+export const CATEGORY_TILES: Array<{
   cat: string;
   title: string;
   blurb: string;

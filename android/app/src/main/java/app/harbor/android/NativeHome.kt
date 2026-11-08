@@ -223,6 +223,8 @@ class NativeHome(
             bindSearch(m)
             bindSheet(m.sheet)
             bindStage(m.stage)
+            bindToast(m.toast)
+            bindPrompt(m.prompt)
             sections.submit(m)
             if (lastTop != Int.MIN_VALUE && m.top != lastTop) list.scrollToPosition(0)
             lastTop = m.top
@@ -339,6 +341,7 @@ class NativeHome(
             root.visibility = View.GONE
             // The screen stepping aside closes its menu (and the page hears it closed).
             sheetDialog?.dismiss()
+            promptDialog?.dismiss()
         }
     }
 
@@ -437,6 +440,24 @@ class NativeHome(
                         is PkLoader -> out.add(Section(T_PK_LOADER, base, r))
                         null -> {}
                     }
+                    continue
+                }
+                if (r.kind == HomeRow.Kind.AD) {
+                    // The Addons page's blocks: one each.
+                    val type = when (r.ad) {
+                        is AdCard -> T_AD_CARD
+                        is AdTiles -> T_AD_TILES
+                        is AdHero -> T_AD_HERO
+                        is AdCommunity -> T_AD_COMM
+                        is AdHead -> T_AD_HEAD
+                        is AdCategories -> T_AD_CATS
+                        is AdInstalled -> T_AD_INST
+                        is AdDetail -> T_AD_DETAIL
+                        is AdInfo -> T_AD_INFO
+                        is AdDoc -> T_AD_DOC
+                        null -> -1
+                    }
+                    if (type > 0) out.add(Section(type, stableId(r.key) shl 20, r))
                     continue
                 }
                 if (r.kind == HomeRow.Kind.SOURCES) {
@@ -568,6 +589,16 @@ class NativeHome(
             T_PK_DIAG -> PkDiagHolder()
             T_PK_PANEL -> PkPanelHolder()
             T_PK_LOADER -> PkLoaderHolder()
+            T_AD_CARD -> AdCardHolder()
+            T_AD_TILES -> AdTilesHolder()
+            T_AD_HERO -> AdHeroHolder()
+            T_AD_COMM -> AdCommunityHolder()
+            T_AD_HEAD -> AdHeadHolder()
+            T_AD_CATS -> AdCatsHolder()
+            T_AD_INST -> AdInstalledHolder()
+            T_AD_DETAIL -> AdDetailHolder()
+            T_AD_INFO -> AdInfoHolder()
+            T_AD_DOC -> AdDocHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -614,6 +645,16 @@ class NativeHome(
                 is PkDiagHolder -> items[position].row?.let { r -> (r.pk as? PkDiag)?.let { holder.bind(r, it) } }
                 is PkPanelHolder -> items[position].row?.let { r -> (r.pk as? PkPanel)?.let { holder.bind(r, it) } }
                 is PkLoaderHolder -> items[position].row?.let { r -> (r.pk as? PkLoader)?.let { holder.bind(it) } }
+                is AdCardHolder -> items[position].row?.let { r -> (r.ad as? AdCard)?.let { holder.bind(r, it) } }
+                is AdTilesHolder -> items[position].row?.let { r -> (r.ad as? AdTiles)?.let { holder.bind(r, it) } }
+                is AdHeroHolder -> items[position].row?.let { r -> (r.ad as? AdHero)?.let { holder.bind(r, it) } }
+                is AdCommunityHolder -> items[position].row?.let { r -> (r.ad as? AdCommunity)?.let { holder.bind(r, it) } }
+                is AdHeadHolder -> items[position].row?.let { r -> (r.ad as? AdHead)?.let { holder.bind(r, it) } }
+                is AdCatsHolder -> items[position].row?.let { r -> (r.ad as? AdCategories)?.let { holder.bind(r, it) } }
+                is AdInstalledHolder -> items[position].row?.let { r -> (r.ad as? AdInstalled)?.let { holder.bind(r, it) } }
+                is AdDetailHolder -> items[position].row?.let { r -> (r.ad as? AdDetail)?.let { holder.bind(r, it) } }
+                is AdInfoHolder -> items[position].row?.let { r -> (r.ad as? AdInfo)?.let { holder.bind(r, it) } }
+                is AdDocHolder -> items[position].row?.let { r -> (r.ad as? AdDoc)?.let { holder.bind(r, it) } }
                 is PkStreamHolder -> items[position].row?.let { r ->
                     val list = (r.pk as? PkStreams)?.items ?: return@let
                     list.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, list.size, it) }
@@ -1450,6 +1491,13 @@ class NativeHome(
         "crown" -> R.drawable.ic_crown
         "copy" -> R.drawable.ic_copy
         "info" -> R.drawable.ic_info
+        "settings" -> R.drawable.ic_settings_2
+        "plus" -> R.drawable.ic_plus
+        "trash" -> R.drawable.ic_trash_2
+        "star" -> R.drawable.ic_star
+        "eye" -> R.drawable.ic_eye
+        "eye-off" -> R.drawable.ic_eye_off
+        "link" -> R.drawable.ic_link_2
         else -> 0
     }
 
@@ -1588,6 +1636,13 @@ class NativeHome(
             "glass" -> Pair(rounded(withAlpha(Color.WHITE, 0.05f), radius, dp(1), withAlpha(Color.WHITE, 0.15f)), withAlpha(Color.WHITE, 0.75f))
             "secondary" -> Pair(rounded(colors.surface, radius, dp(1), withAlpha(colors.ink, 0.08f)), colors.ink)
             "amber" -> Pair(rounded(withAlpha(pkAmber300, 0.1f), radius, dp(1), withAlpha(pkAmber300, 0.4f)), pkAmber100)
+            "installed" -> Pair(rounded(withAlpha(colors.surface, 0.7f), radius, dp(1), withAlpha(colors.ink, 0.08f)), colors.ink)
+            "danger" -> Pair(rounded(withAlpha(pkDanger, 0.15f), radius, dp(1), withAlpha(pkDanger, 0.3f)), pkDanger)
+            "soft" -> Pair(rounded(Color.TRANSPARENT, radius, dp(1), withAlpha(colors.ink, 0.1f)), colors.muted)
+            "rate" -> Pair(rounded(withAlpha(colors.accent, 0.12f), radius, dp(1), withAlpha(colors.accent, 0.4f)), colors.accent)
+            "accentpill" -> Pair(rounded(withAlpha(colors.accent, 0.15f), radius), colors.accent)
+            "raised" -> Pair(rounded(toward(colors.surface, colors.ink, 0.05f), radius, dp(1), withAlpha(colors.ink, 0.08f)), colors.muted)
+            "busy" -> Pair(rounded(withAlpha(colors.ink, 0.8f), radius), colors.canvas)
             "link" -> Pair(null, colors.subtle)
             else -> Pair(rounded(colors.ink, radius), colors.canvas)
         }
@@ -1599,20 +1654,26 @@ class NativeHome(
                 indeterminateTintList = android.content.res.ColorStateList.valueOf(fg)
             }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) })
         } else if (res != 0 && b.icon != "arrow") {
-            box.addView(ImageView(ctx).apply { setImageDrawable(icon(res, fg)) }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) })
+            // An installed addon's check is in the accent colour, its text not.
+            val tint = if (b.style == "installed" && b.icon == "check") colors.accent else fg
+            val sz = if (height < dp(40)) dp(14) else dp(18)
+            box.addView(ImageView(ctx).apply { setImageDrawable(icon(res, tint)) }, LinearLayout.LayoutParams(sz, sz).apply { marginEnd = if (height < dp(40)) dp(6) else dp(10) })
         }
-        box.addView(label(b.label, if (b.style == "link") 13f else 14.5f, bold = b.style != "link", lines = 1).apply { setTextColor(fg) })
+        box.addView(label(b.label, if (b.style == "link") 13f else if (height < dp(34)) 12f else if (height < dp(46)) 13.5f else 14.5f, bold = b.style != "link", lines = 1).apply { setTextColor(fg) })
         if (b.icon == "arrow") {
             box.addView(ImageView(ctx).apply {
                 setImageDrawable(icon(res, fg))
                 scaleX = if (model?.rtl == true) -1f else 1f
             }, LinearLayout.LayoutParams(dp(14), dp(14)).apply { marginStart = dp(6) })
         }
-        val enabled = b.style != "off" && b.style != "green" && !b.busy
+        val enabled = b.style != "off" && b.style != "green" && b.style != "busy" && b.style != "accentpill" && !b.busy
         box.isClickable = enabled
         box.isFocusable = enabled
         box.alpha = if (b.busy) 0.6f else 1f
-        if (enabled) box.setOnClickListener { onTap() }
+        if (enabled) box.setOnClickListener {
+            b.copy?.let { copyLink(it, toast = false) }
+            onTap()
+        }
         box.contentDescription = b.label
         return box
     }
@@ -1634,11 +1695,11 @@ class NativeHome(
         return box
     }
 
-    private fun copyLink(url: String) {
+    private fun copyLink(url: String, toast: Boolean = true) {
         try {
             val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("link", url))
-            android.widget.Toast.makeText(ctx, model?.label("copied", "Link copied") ?: "Link copied", android.widget.Toast.LENGTH_SHORT).show()
+            if (toast) android.widget.Toast.makeText(ctx, model?.label("copied", "Link copied") ?: "Link copied", android.widget.Toast.LENGTH_SHORT).show()
         } catch (_: Exception) {
         }
     }
@@ -2238,10 +2299,12 @@ class NativeHome(
             rowKey = r.key
             val warn = p.look == "warn"
             val dashed = p.look == "dashed"
+            val plain = p.look == "plain"
             val center = !warn
             val radius = dp(if (warn || dashed) 16 else 24).toFloat()
             frame.outlineProvider = roundOutline(radius)
             frame.background = when {
+                plain -> null
                 warn -> rounded(withAlpha(pkAmber300, 0.06f), radius, dp(1), withAlpha(pkAmber300, 0.3f))
                 dashed -> {
                     val fill = withAlpha(colors.canvas, 0.7f)
@@ -2264,6 +2327,7 @@ class NativeHome(
                 images.clear(art)
             }
             when {
+                plain -> col.setPadding(dp(16), dp(4), dp(16), dp(8))
                 warn -> col.setPadding(dp(20), dp(14), dp(20), dp(16))
                 dashed -> col.setPadding(dp(24), dp(44), dp(24), dp(44))
                 p.look == "art" -> col.setPadding(dp(28), dp(52), dp(28), dp(52))
@@ -2294,8 +2358,8 @@ class NativeHome(
             }
             body.visibility = if (p.body == null) View.GONE else View.VISIBLE
             body.text = p.body ?: ""
-            body.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (warn) 12.5f else if (dashed) 14f else 13.5f)
-            body.setTextColor(colors.muted)
+            body.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (plain) 11.5f else if (warn) 12.5f else if (dashed) 14f else 13.5f)
+            body.setTextColor(if (plain) colors.subtle else colors.muted)
             (body.layoutParams as LinearLayout.LayoutParams).topMargin = if (p.title == null && p.kicker == null) 0 else dp(if (warn) 2 else 16)
             pills.center = center
             pills.removeAllViews()
@@ -2386,6 +2450,1071 @@ class NativeHome(
             }
             if (col.isAttachedToWindow && pulse?.isStarted != true) pulse?.start()
         }
+    }
+
+    // ---- The Addons page (its cards, rails, the featured addon, an addon's page) --------------
+
+    private val adRose300 = 0xFFFDA4AF.toInt()
+    private val adRose500 = 0xFFF43F5E.toInt()
+    private val adEmerald500 = 0xFF10B981.toInt()
+    private val adEdge get() = withAlpha(colors.ink, 0.08f)
+
+    /** An addon's logo: a rounded square (its picture, else its initial on its gradient). */
+    private fun adLogoView(l: AdLogo, size: Int): View {
+        val px = dp(size)
+        val r = max(dp(4), (px * 0.22f).toInt()).toFloat()
+        val box = FrameLayout(ctx)
+        box.clipToOutline = true
+        box.outlineProvider = roundOutline(r)
+        val bg = if (l.from != null && l.to != null) {
+            GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(l.from, l.to)).apply { cornerRadius = r }
+        } else {
+            rounded(colors.surface, r)
+        }
+        box.background = bg
+        box.addView(label(l.initial.take(1).uppercase(), 10f, bold = true, lines = 1).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, px * 0.5f)
+            setTextColor(withAlpha(Color.WHITE, 0.95f))
+            includeFontPadding = false
+        }, FrameLayout.LayoutParams(wrap, wrap, Gravity.CENTER))
+        if (l.images.isNotEmpty()) {
+            val img = NetImage(ctx)
+            img.scaleType = ImageView.ScaleType.CENTER_CROP
+            img.background = rounded(withAlpha(Color.WHITE, 0.06f), r)
+            box.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+            images.load(img, l.images, px, px, alpha = true) { ok -> img.visibility = if (ok) View.VISIBLE else View.GONE }
+        }
+        box.foreground = rounded(Color.TRANSPARENT, r, max(1, dp(1) / 2), withAlpha(Color.WHITE, 0.08f))
+        return box
+    }
+
+    /** A small pill: community stars, rising, new, a curated tag. */
+    private fun adPillView(p: AdPill, small: Boolean = true): View {
+        val (fg, bg, ring) = when (p.tone) {
+            "star" -> Triple(colors.accent, withAlpha(colors.canvas, 0.7f), withAlpha(colors.accent, 0.3f))
+            "rise" -> Triple(adRose300, withAlpha(adRose500, 0.15f), withAlpha(adRose500, 0.4f))
+            "new" -> Triple(pkGreen, withAlpha(adEmerald500, 0.15f), withAlpha(adEmerald500, 0.3f))
+            "good" -> Triple(colors.accent, withAlpha(colors.accent, 0.15f), 0)
+            "warn" -> Triple(colors.muted, withAlpha(colors.ink, 0.1f), 0)
+            else -> Triple(colors.subtle, withAlpha(colors.ink, 0.1f), 0)
+        }
+        val upper = p.tone == "new" || p.tone == "good" || p.tone == "warn" || p.tone == "neutral"
+        val line = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPaddingRelative(dp(6), dp(2), dp(7), dp(2))
+            background = rounded(bg, dp(10).toFloat(), if (ring != 0) max(1, dp(1)) else 0, ring)
+        }
+        val res = when (p.icon) {
+            "star" -> R.drawable.ic_star
+            "trend" -> R.drawable.ic_trending_up
+            "sparkles" -> R.drawable.ic_sparkles
+            else -> 0
+        }
+        if (res != 0) line.addView(ImageView(ctx).apply { setImageDrawable(icon(res, fg)) }, LinearLayout.LayoutParams(dp(9), dp(9)).apply { marginEnd = dp(4) })
+        line.addView(label("", if (small) 10.5f else 11f, bold = true, lines = 1).apply {
+            if (upper) caps(this, p.text, if (p.tone == "new") 0.14f else 0.1f) else text = p.text
+            setTextColor(fg)
+        })
+        return line
+    }
+
+    /** The faint logo behind a card and the canvas fading over it (the page's CardArtBackdrop). */
+    private fun adArt(frame: FrameLayout, art: String?, w: Int, h: Int) {
+        if (art == null) return
+        val img = NetImage(ctx)
+        img.scaleType = ImageView.ScaleType.CENTER_CROP
+        img.alpha = 0.1f
+        frame.addView(img, 0, FrameLayout.LayoutParams(MATCH, MATCH))
+        images.load(img, listOf(art), max(w / 4, dp(40)), max(h / 4, dp(40)))
+        val c = colors.canvas
+        val rtl = model?.rtl == true
+        frame.addView(View(ctx).apply {
+            background = GradientDrawable(
+                if (rtl) GradientDrawable.Orientation.RIGHT_LEFT else GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(c, c, withAlpha(c, 0.78f), withAlpha(c, 0.42f)),
+            )
+        }, 1, FrameLayout.LayoutParams(MATCH, MATCH))
+    }
+
+    /** An addon as a card down the page (see [AdCard]). */
+    private inner class AdCardHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val frame = itemView as FrameLayout
+        private var rowKey = ""
+
+        init {
+            pkCard(frame, 10)
+            frame.clipToOutline = true
+            frame.outlineProvider = roundOutline(dp(16).toFloat())
+            frame.isClickable = true
+            frame.isFocusable = true
+            frame.setOnClickListener { act("ad", row = rowKey, what = "open") }
+        }
+
+        fun bind(r: HomeRow, c: AdCard) {
+            rowKey = r.key
+            if (c.more) act("ad", row = r.key, what = "more")
+            frame.removeAllViews()
+            frame.background = focusable(rounded(colors.surface, dp(16).toFloat(), max(1, dp(1)), adEdge))
+            frame.alpha = if (c.dim) 0.6f else 1f
+            frame.contentDescription = c.name
+            adArt(frame, c.art, width(), dp(120))
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(18), dp(18), dp(16), dp(18))
+            }
+            row.addView(adLogoView(c.logo, 56), LinearLayout.LayoutParams(dp(56), dp(56)))
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            val nameLine = FlowRow(ctx, dp(8), dp(4)).apply { middle = true }
+            nameLine.addView(label(c.name, 16f, bold = true, lines = 2).apply { setTextColor(colors.ink) })
+            for (p in c.pills) nameLine.addView(adPillView(p))
+            if (c.variant == "feature" && c.button != null) {
+                val top = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                top.addView(nameLine, LinearLayout.LayoutParams(0, wrap, 1f))
+                top.addView(adButton(c.button, dp(36)), LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(10) })
+                texts.addView(top)
+            } else {
+                texts.addView(nameLine)
+            }
+            c.desc?.let {
+                texts.addView(label(it, if (c.variant == "feature") 13f else 13.5f, lines = 3).apply {
+                    setTextColor(colors.muted)
+                    setLineSpacing(0f, 1.3f)
+                }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(6) })
+            }
+            if (c.tags.isNotEmpty()) {
+                val tags = FlowRow(ctx, dp(6), dp(6))
+                for (t in c.tags) tags.addView(adPillView(t))
+                texts.addView(tags, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+            }
+            row.addView(texts, LinearLayout.LayoutParams(0, wrap, 1f).apply {
+                marginStart = dp(16)
+                marginEnd = dp(10)
+            })
+            if (c.variant != "feature" && c.button != null) {
+                row.addView(adButton(c.button, dp(36)), LinearLayout.LayoutParams(wrap, wrap).apply { gravity = Gravity.CENTER_VERTICAL })
+            }
+            if (c.chevron) {
+                row.addView(ImageView(ctx).apply {
+                    setImageDrawable(icon(R.drawable.ic_chevron_right, colors.subtle))
+                    scaleX = if (model?.rtl == true) -1f else 1f
+                }, LinearLayout.LayoutParams(dp(16), dp(16)).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    marginStart = dp(6)
+                })
+            }
+            frame.addView(row, FrameLayout.LayoutParams(MATCH, wrap))
+        }
+
+        private fun adButton(b: PkButton, h: Int): View = pkButtonView(b, h, h / 2f) { act("ad", row = rowKey, what = "btn") }.apply {
+            setPaddingRelative(dp(14), 0, dp(16), 0)
+        }
+    }
+
+    /** Addons as tiles, two across or a sideways strip (see [AdTiles]). */
+    private inner class AdTilesHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val frame = itemView as FrameLayout
+        private var rowKey = ""
+
+        init {
+            pkCard(frame, 12)
+        }
+
+        fun bind(r: HomeRow, t: AdTiles) {
+            rowKey = r.key
+            frame.removeAllViews()
+            val lp = frame.layoutParams as RecyclerView.LayoutParams
+            if (t.strip) {
+                lp.marginStart = 0
+                lp.marginEnd = 0
+                val scroll = android.widget.HorizontalScrollView(ctx).apply {
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    clipToPadding = false
+                    setPadding(dp(16), 0, dp(16), dp(8))
+                }
+                val line = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                t.items.forEachIndexed { i, it ->
+                    line.addView(tile(it, i, dp(236)), LinearLayout.LayoutParams(dp(236), MATCH).apply { if (i > 0) marginStart = dp(12) })
+                }
+                scroll.addView(line, FrameLayout.LayoutParams(wrap, wrap))
+                frame.addView(scroll, FrameLayout.LayoutParams(MATCH, wrap))
+                return
+            }
+            lp.marginStart = dp(16)
+            lp.marginEnd = dp(16)
+            val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            val w = (width() - dp(32) - dp(12)) / 2
+            var i = 0
+            while (i < t.items.size) {
+                val line = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                for (k in 0 until 2) {
+                    val idx = i + k
+                    val v = if (idx < t.items.size) tile(t.items[idx], idx, w) else View(ctx)
+                    line.addView(v, LinearLayout.LayoutParams(0, MATCH, 1f).apply { if (k > 0) marginStart = dp(12) })
+                }
+                col.addView(line, LinearLayout.LayoutParams(MATCH, wrap).apply { if (i > 0) topMargin = dp(12) })
+                i += 2
+            }
+            frame.addView(col, FrameLayout.LayoutParams(MATCH, wrap))
+        }
+
+        private fun tile(t: AdTile, i: Int, w: Int): View {
+            val card = FrameLayout(ctx).apply {
+                clipToOutline = true
+                outlineProvider = roundOutline(dp(16).toFloat())
+                background = focusable(rounded(colors.surface, dp(16).toFloat(), max(1, dp(1)), adEdge))
+                isClickable = true
+                isFocusable = true
+                contentDescription = t.name
+                setOnClickListener { act("ad", row = rowKey, what = "open", i = i) }
+            }
+            adArt(card, t.art, w, dp(220))
+            val col = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(18), dp(16), dp(16))
+            }
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            top.addView(adLogoView(t.logo, 48), LinearLayout.LayoutParams(dp(48), dp(48)))
+            val names = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            names.addView(label(t.name, 15f, bold = true, lines = 2).apply { setTextColor(colors.ink) })
+            if (t.pills.isNotEmpty()) {
+                val pl = FlowRow(ctx, dp(4), dp(4))
+                for (p in t.pills) pl.addView(adPillView(p))
+                names.addView(pl, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(4) })
+            }
+            top.addView(names, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = dp(12) })
+            col.addView(top)
+            t.desc?.let {
+                col.addView(label(it, 13f, lines = 3).apply {
+                    setTextColor(colors.muted)
+                    setLineSpacing(0f, 1.3f)
+                }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(14) })
+            }
+            col.addView(View(ctx), LinearLayout.LayoutParams(MATCH, 0, 1f))
+            col.addView(pkButtonView(t.button, dp(44), dp(22).toFloat()) { act("ad", row = rowKey, what = "btn", i = i) }.apply {
+                setPaddingRelative(dp(12), 0, dp(12), 0)
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(16) })
+            card.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
+            return card
+        }
+    }
+
+    /** The featured addon (see [AdHero]). */
+    private inner class AdHeroHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val frame = itemView as FrameLayout
+        private var rowKey = ""
+
+        init {
+            pkCard(frame, 40)
+            frame.clipToOutline = true
+            frame.outlineProvider = roundOutline(dp(24).toFloat())
+            frame.minimumHeight = dp(240)
+            frame.isClickable = true
+            frame.isFocusable = true
+            frame.setOnClickListener { act("ad", row = rowKey, what = "open") }
+        }
+
+        fun bind(r: HomeRow, h: AdHero) {
+            rowKey = r.key
+            frame.removeAllViews()
+            frame.background = focusable(rounded(colors.surface, dp(24).toFloat(), max(1, dp(1)), adEdge))
+            frame.contentDescription = h.title
+            val rtl = model?.rtl == true
+            if (h.from != null && h.to != null) {
+                // The accent's glow on the end half, fading into the card toward the text.
+                val toStart = if (rtl) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT
+                frame.addView(View(ctx).apply {
+                    alpha = 0.6f
+                    background = GradientDrawable(toStart, intArrayOf(h.from, h.to))
+                }, FrameLayout.LayoutParams((width() - dp(32)) / 2, MATCH, Gravity.END))
+                val s = colors.surface
+                frame.addView(View(ctx).apply {
+                    background = GradientDrawable(toStart, intArrayOf(Color.TRANSPARENT, s))
+                }, FrameLayout.LayoutParams((width() - dp(32)) * 2 / 3, MATCH, Gravity.END))
+            }
+            val col = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(28), dp(32), dp(28), dp(32))
+            }
+            val eyebrow = FlowRow(ctx, dp(8), dp(4)).apply { middle = true }
+            eyebrow.addView(label("", 10.5f, bold = true, lines = 1).apply {
+                caps(this, h.eyebrow, 0.32f)
+                setTextColor(colors.subtle)
+            })
+            for (p in h.pills) eyebrow.addView(adPillView(p, small = false))
+            col.addView(eyebrow)
+            col.addView(label(h.title, 42f, lines = 2).apply {
+                typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                setTextColor(colors.ink)
+                setLineSpacing(0f, 1.05f)
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(12) })
+            h.subtitle?.let {
+                col.addView(label(it, 14.5f).apply {
+                    setTextColor(colors.muted)
+                    setLineSpacing(0f, 1.35f)
+                }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(12) })
+            }
+            val actions = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            actions.addView(pkButtonView(h.button, dp(36), dp(18).toFloat()) { act("ad", row = rowKey, what = "btn") }.apply {
+                setPaddingRelative(dp(20), 0, dp(20), 0)
+            })
+            val link = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPaddingRelative(dp(16), dp(8), dp(12), dp(8))
+            }
+            link.addView(label(h.link, 12.5f, lines = 1).apply { setTextColor(colors.muted) })
+            link.addView(ImageView(ctx).apply {
+                setImageDrawable(icon(R.drawable.ic_chevron_right, colors.muted))
+                scaleX = if (rtl) -1f else 1f
+            }, LinearLayout.LayoutParams(dp(13), dp(13)).apply { marginStart = dp(4) })
+            actions.addView(link)
+            col.addView(actions, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(28) })
+            frame.addView(col, FrameLayout.LayoutParams(MATCH, wrap, Gravity.CENTER_VERTICAL))
+        }
+    }
+
+    /** "Top on stremio-addons.net" and its cards (see [AdCommunity]). */
+    private inner class AdCommunityHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private var rowKey = ""
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, wrap).apply { bottomMargin = dp(44) }
+        }
+
+        fun bind(r: HomeRow, c: AdCommunity) {
+            rowKey = r.key
+            col.removeAllViews()
+            val head = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPaddingRelative(dp(16), 0, dp(16), 0)
+            }
+            val logoBox = FrameLayout(ctx).apply {
+                clipToOutline = true
+                outlineProvider = roundOutline(dp(28).toFloat())
+                background = rounded(colors.surface, dp(28).toFloat(), max(1, dp(1)), adEdge)
+                isClickable = true
+                isFocusable = true
+                contentDescription = c.site
+                setOnClickListener { act("ad", row = rowKey, what = "site") }
+            }
+            c.logo?.let { u ->
+                val img = NetImage(ctx)
+                img.scaleType = ImageView.ScaleType.CENTER_CROP
+                logoBox.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, listOf(u), dp(56), dp(56))
+            }
+            head.addView(logoBox, LinearLayout.LayoutParams(dp(56), dp(56)))
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(label("", 10.5f, bold = true, lines = 1).apply {
+                caps(this, c.kicker, 0.22f)
+                setTextColor(colors.accent)
+            })
+            texts.addView(label("", 22f, lines = 2).apply {
+                val sb = android.text.SpannableStringBuilder(c.title + " ")
+                val at = sb.length
+                sb.append(c.site)
+                sb.setSpan(android.text.style.StyleSpan(Typeface.BOLD), at, sb.length, 0)
+                sb.setSpan(android.text.style.UnderlineSpan(), at, sb.length, 0)
+                text = sb
+                setTextColor(colors.ink)
+                isClickable = true
+                setOnClickListener { act("ad", row = rowKey, what = "site") }
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(4) })
+            texts.addView(label(c.sub, 12.5f, lines = 2).apply { setTextColor(colors.muted) }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(4) })
+            head.addView(texts, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = dp(16) })
+            col.addView(head)
+            val bar = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPaddingRelative(dp(16), 0, dp(16), 0)
+            }
+            val tabs = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(4), dp(4), dp(4), dp(4))
+                background = rounded(withAlpha(colors.canvas, 0.4f), dp(20).toFloat(), max(1, dp(1)), adEdge)
+            }
+            for (tb in c.tabs) {
+                tabs.addView(label(tb.label, 12f, bold = true, lines = 1).apply {
+                    gravity = Gravity.CENTER
+                    setPaddingRelative(dp(12), 0, dp(12), 0)
+                    setTextColor(if (tb.on) colors.canvas else colors.muted)
+                    background = focusable(rounded(if (tb.on) colors.ink else Color.TRANSPARENT, dp(16).toFloat()))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { act("ad", row = rowKey, what = "tab:" + tb.id) }
+                }, LinearLayout.LayoutParams(wrap, dp(32)))
+            }
+            bar.addView(tabs)
+            bar.addView(pkButtonView(PkButton("site", c.browse, "soft", "external"), dp(36), dp(18).toFloat()) { act("ad", row = rowKey, what = "site") }.apply {
+                setPaddingRelative(dp(12), 0, dp(14), 0)
+            }, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(8) })
+            col.addView(bar, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(16) })
+            val body: View = when (c.state) {
+                "ok" -> {
+                    val scroll = android.widget.HorizontalScrollView(ctx).apply {
+                        isHorizontalScrollBarEnabled = false
+                        overScrollMode = View.OVER_SCROLL_NEVER
+                        clipToPadding = false
+                        setPadding(dp(16), 0, dp(16), 0)
+                    }
+                    val line = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                    c.cards.forEachIndexed { i, cc -> line.addView(card(cc, i), LinearLayout.LayoutParams(dp(280), MATCH).apply { if (i > 0) marginStart = dp(12) }) }
+                    scroll.addView(line)
+                    scroll
+                }
+                "loading" -> LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPaddingRelative(dp(16), 0, 0, 0)
+                    for (i in 0 until 3) addView(View(ctx).apply { background = rounded(withAlpha(colors.surface, 0.4f), dp(16).toFloat(), max(1, dp(1)), adEdge) },
+                        LinearLayout.LayoutParams(dp(280), dp(216)).apply { if (i > 0) marginStart = dp(12) })
+                }
+                else -> label(c.message ?: "", 13f).apply {
+                    setTextColor(colors.muted)
+                    gravity = Gravity.CENTER
+                    textAlignment = View.TEXT_ALIGNMENT_CENTER
+                    setPadding(dp(20), dp(28), dp(20), dp(28))
+                    background = rounded(withAlpha(colors.canvas, 0.3f), dp(16).toFloat(), max(1, dp(1)), adEdge)
+                }
+            }
+            col.addView(body, LinearLayout.LayoutParams(MATCH, wrap).apply {
+                topMargin = dp(16)
+                if (c.state != "ok" && c.state != "loading") {
+                    marginStart = dp(16)
+                    marginEnd = dp(16)
+                }
+            })
+        }
+
+        private fun card(c: AdCommunityCard, i: Int): View {
+            val card = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                clipToOutline = true
+                outlineProvider = roundOutline(dp(16).toFloat())
+                background = focusable(rounded(colors.surface, dp(16).toFloat(), max(1, dp(1)), adEdge))
+                isClickable = true
+                isFocusable = true
+                contentDescription = c.name
+                setOnClickListener { act("ad", row = rowKey, what = "card", i = i) }
+            }
+            val top = FrameLayout(ctx)
+            val s = colors.surface
+            top.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(s, toward(s, colors.ink, 0.06f)))
+            c.background?.let { u ->
+                val img = NetImage(ctx)
+                img.scaleType = ImageView.ScaleType.CENTER_CROP
+                top.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, listOf(u), dp(280), dp(96))
+            }
+            top.addView(View(ctx).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(s, withAlpha(s, 0.3f), Color.TRANSPARENT))
+            }, FrameLayout.LayoutParams(MATCH, MATCH))
+            c.stars?.let { st ->
+                top.addView(adPillView(AdPill(st, "star", "star"), small = false), FrameLayout.LayoutParams(wrap, wrap, Gravity.TOP or Gravity.END).apply {
+                    topMargin = dp(10)
+                    marginEnd = dp(10)
+                })
+            }
+            c.logo?.let { u ->
+                val box = FrameLayout(ctx).apply {
+                    clipToOutline = true
+                    outlineProvider = roundOutline(dp(8).toFloat())
+                    background = rounded(withAlpha(colors.canvas, 0.8f), dp(8).toFloat(), max(1, dp(1)), adEdge)
+                    setPadding(dp(4), dp(4), dp(4), dp(4))
+                }
+                val img = NetImage(ctx)
+                img.scaleType = ImageView.ScaleType.FIT_CENTER
+                box.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, listOf(u), dp(32), dp(32), alpha = true) { ok -> if (!ok) box.visibility = View.GONE }
+                top.addView(box, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.START).apply {
+                    marginStart = dp(10)
+                    bottomMargin = dp(10)
+                })
+            }
+            card.addView(top, LinearLayout.LayoutParams(MATCH, dp(96)))
+            val body = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                minimumHeight = dp(120)
+            }
+            body.addView(label(c.name, 14f, bold = true, lines = 2).apply { setTextColor(colors.ink) })
+            c.desc?.let { body.addView(label(it, 11.5f, lines = 2).apply { setTextColor(colors.subtle) }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(2) }) }
+            body.addView(View(ctx), LinearLayout.LayoutParams(MATCH, 0, 1f))
+            val foot = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val types = FlowRow(ctx, dp(4), dp(4))
+            for (t in c.types) types.addView(label("", 9.5f, bold = true, lines = 1).apply {
+                caps(this, t, 0.14f)
+                setTextColor(colors.subtle)
+                setPaddingRelative(dp(6), dp(2), dp(6), dp(2))
+                background = rounded(withAlpha(colors.surface, 0.6f), dp(8).toFloat())
+            })
+            foot.addView(types, LinearLayout.LayoutParams(0, wrap, 1f))
+            val btn = if (c.installed != null) PkButton("installed", c.installed, "accentpill", "check")
+            else PkButton("install", c.install ?: "", "ink", "plus", c.busy)
+            foot.addView(pkButtonView(btn, dp(32), dp(16).toFloat()) { act("ad", row = rowKey, what = "install", i = i) }.apply {
+                setPaddingRelative(dp(10), 0, dp(12), 0)
+            })
+            body.addView(foot, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+            card.addView(body, LinearLayout.LayoutParams(MATCH, 0, 1f))
+            return card
+        }
+    }
+
+    /** A section's heading (see [AdHead]). */
+    private fun adHeading(title: String, blurb: String?, action: String?, open: Boolean, size: Float, onAction: (() -> Unit)?): View {
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, dp(12))
+        }
+        val line = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.BOTTOM
+        }
+        val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(label(title, size, lines = 2).apply {
+            typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            setTextColor(colors.ink)
+        })
+        blurb?.let { texts.addView(label(it, 14f).apply { setTextColor(colors.muted); setLineSpacing(0f, 1.3f) }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(6) }) }
+        line.addView(texts, LinearLayout.LayoutParams(0, wrap, 1f))
+        if (action != null && onAction != null) {
+            val a = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPaddingRelative(dp(10), dp(6), 0, dp(4))
+                isClickable = true
+                isFocusable = true
+                background = focusable(rounded(Color.TRANSPARENT, dp(10).toFloat()))
+                setOnClickListener { onAction() }
+            }
+            a.addView(label(action, 12.5f, bold = true, lines = 1).apply { setTextColor(colors.accent) })
+            a.addView(ImageView(ctx).apply {
+                setImageDrawable(icon(R.drawable.ic_chevron_right, colors.accent))
+                rotation = if (open) 90f else 0f
+                scaleX = if (!open && model?.rtl == true) -1f else 1f
+            }, LinearLayout.LayoutParams(dp(12), dp(12)).apply { marginStart = dp(2) })
+            line.addView(a)
+        }
+        box.addView(line)
+        box.addView(View(ctx).apply { setBackgroundColor(withAlpha(colors.ink, 0.07f)) }, LinearLayout.LayoutParams(MATCH, max(1, dp(1))).apply { topMargin = dp(12) })
+        return box
+    }
+
+    private inner class AdHeadHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val frame = itemView as FrameLayout
+        private var rowKey = ""
+
+        init {
+            pkCard(frame, 20)
+        }
+
+        fun bind(r: HomeRow, h: AdHead) {
+            rowKey = r.key
+            frame.removeAllViews()
+            frame.addView(adHeading(h.title, h.blurb, h.action, h.open, h.size) { act("ad", row = rowKey, what = "more") })
+        }
+    }
+
+    /** "Browse by category": six coloured tiles (see [AdCategories]). */
+    private inner class AdCatsHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private var rowKey = ""
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            pkCard(col, 44)
+        }
+
+        fun bind(r: HomeRow, c: AdCategories) {
+            rowKey = r.key
+            col.removeAllViews()
+            col.addView(adHeading(c.title, c.blurb, null, false, 26f, null), LinearLayout.LayoutParams(MATCH, wrap).apply { bottomMargin = dp(20) })
+            var i = 0
+            while (i < c.tiles.size) {
+                val line = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                for (k in 0 until 2) {
+                    val idx = i + k
+                    val v = if (idx < c.tiles.size) tile(c.tiles[idx], idx) else View(ctx)
+                    line.addView(v, LinearLayout.LayoutParams(0, dp(120), 1f).apply { if (k > 0) marginStart = dp(12) })
+                }
+                col.addView(line, LinearLayout.LayoutParams(MATCH, wrap).apply { if (i > 0) topMargin = dp(12) })
+                i += 2
+            }
+        }
+
+        private fun tile(t: AdCategory, i: Int): View {
+            val f = FrameLayout(ctx).apply {
+                clipToOutline = true
+                outlineProvider = roundOutline(dp(16).toFloat())
+                isClickable = true
+                isFocusable = true
+                contentDescription = t.title
+                setOnClickListener { act("ad", row = rowKey, what = "cat", i = i) }
+            }
+            val base = colors.canvas
+            f.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(t.from ?: colors.surface, t.to ?: colors.surface)).apply {
+                cornerRadius = dp(16).toFloat()
+            }
+            f.addView(View(ctx).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(withAlpha(base, 0.85f), withAlpha(base, 0.3f), Color.TRANSPARENT))
+            }, FrameLayout.LayoutParams(MATCH, MATCH))
+            t.icon?.let { u ->
+                val img = NetImage(ctx)
+                img.scaleType = ImageView.ScaleType.FIT_CENTER
+                img.alpha = 0.55f
+                f.addView(img, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.TOP or Gravity.END).apply {
+                    topMargin = dp(14)
+                    marginEnd = dp(14)
+                })
+                images.load(img, listOf(u), dp(56), dp(56), alpha = true)
+            }
+            val texts = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), 0, dp(16), dp(14))
+            }
+            texts.addView(label(t.title, 19f, lines = 1).apply {
+                typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                setTextColor(colors.ink)
+            })
+            texts.addView(label(t.blurb, 12f, lines = 2).apply { setTextColor(colors.muted) })
+            f.addView(texts, FrameLayout.LayoutParams(MATCH, wrap, Gravity.BOTTOM))
+            f.foreground = rounded(Color.TRANSPARENT, dp(16).toFloat(), max(1, dp(1)), adEdge)
+            return f
+        }
+    }
+
+    /** An installed addon, as the page's phone row: its logo and name, then its controls. */
+    private inner class AdInstalledHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val card = itemView as LinearLayout
+        private var rowKey = ""
+
+        init {
+            card.orientation = LinearLayout.VERTICAL
+            pkCard(card, 8)
+            card.setPadding(dp(14), dp(12), dp(14), dp(12))
+            card.isClickable = true
+            card.isFocusable = true
+            card.setOnClickListener { act("ad", row = rowKey, what = "open") }
+        }
+
+        fun bind(r: HomeRow, a: AdInstalled) {
+            rowKey = r.key
+            card.removeAllViews()
+            card.background = focusable(rounded(colors.surface, dp(12).toFloat(), max(1, dp(1)), adEdge))
+            card.alpha = if (a.dim) 0.6f else 1f
+            card.contentDescription = a.name
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            top.addView(adLogoView(a.logo, 36).apply { alpha = if (a.enabled) 1f else 0.45f }, LinearLayout.LayoutParams(dp(36), dp(36)))
+            val texts = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                alpha = if (a.enabled) 1f else 0.55f
+            }
+            texts.addView(label(a.name, 14f, lines = 2).apply { setTextColor(colors.ink) })
+            texts.addView(label(a.sub, 11.5f, lines = 1).apply { setTextColor(colors.subtle) }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(2) })
+            top.addView(texts, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = dp(12) })
+            card.addView(top)
+            val controls = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            if (!a.dim) {
+                // The switch: on (accent) or off.
+                val sw = FrameLayout(ctx).apply {
+                    background = focusable(rounded(if (a.enabled) colors.accent else withAlpha(colors.ink, 0.18f), dp(11).toFloat()))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { act("ad", row = rowKey, what = "toggle") }
+                }
+                val knob = colors.ink
+                sw.addView(View(ctx).apply {
+                    background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(knob) }
+                }, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER_VERTICAL or (if (a.enabled) Gravity.END else Gravity.START)).apply {
+                    marginStart = dp(3)
+                    marginEnd = dp(3)
+                })
+                controls.addView(sw, LinearLayout.LayoutParams(dp(40), dp(22)))
+                a.manage?.let { m ->
+                    controls.addView(pkButtonView(PkButton("manage", m, "raised", "settings"), dp(30), dp(15).toFloat()) { act("ad", row = rowKey, what = "manage") }.apply {
+                        setPaddingRelative(dp(12), 0, dp(14), 0)
+                    }, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(8) })
+                }
+            }
+            controls.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
+            controls.addView(pkButtonView(a.pill, dp(30), dp(15).toFloat()) { act("ad", row = rowKey, what = "remove") }.apply {
+                setPaddingRelative(dp(12), 0, dp(14), 0)
+            })
+            card.addView(controls, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(12) })
+        }
+    }
+
+    /** An addon's page, its top (see [AdDetail]). */
+    private inner class AdDetailHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val frame = itemView as FrameLayout
+        private var rowKey = ""
+
+        init {
+            frame.layoutParams = RecyclerView.LayoutParams(MATCH, wrap)
+        }
+
+        fun bind(r: HomeRow, d: AdDetail) {
+            rowKey = r.key
+            frame.removeAllViews()
+            val c = colors.canvas
+            frame.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(colors.surface, c, c))
+            if (d.background != null) {
+                val img = NetImage(ctx)
+                img.scaleType = ImageView.ScaleType.CENTER_CROP
+                img.alpha = 0.55f
+                frame.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, listOf(d.background), width(), dp(420))
+                frame.addView(View(ctx).apply {
+                    background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(c, withAlpha(c, 0.88f), withAlpha(c, 0.6f), withAlpha(c, 0.3f)))
+                }, FrameLayout.LayoutParams(MATCH, MATCH))
+            } else if (d.glow != null) {
+                // The logo, stretched huge and faint: the page's blurred glow.
+                val img = NetImage(ctx)
+                img.scaleType = ImageView.ScaleType.CENTER_CROP
+                img.alpha = 0.28f
+                if (android.os.Build.VERSION.SDK_INT >= 31) {
+                    img.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(dp(40).toFloat(), dp(40).toFloat(), android.graphics.Shader.TileMode.CLAMP))
+                }
+                frame.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, listOf(d.glow), dp(12), dp(12), alpha = true)
+                frame.addView(View(ctx).apply {
+                    background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.TRANSPARENT, withAlpha(c, 0.24f)))
+                }, FrameLayout.LayoutParams(MATCH, MATCH))
+            }
+            frame.addView(View(ctx).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, withAlpha(c, 0.28f)))
+            }, FrameLayout.LayoutParams(MATCH, MATCH))
+            val col = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(96), dp(20), dp(24))
+            }
+            col.addView(adLogoView(d.logo, 96), LinearLayout.LayoutParams(dp(96), dp(96)))
+            col.addView(label("", 11f, bold = true, lines = 3).apply {
+                caps(this, d.eyebrow, 0.2f)
+                setTextColor(colors.subtle)
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(20) })
+            col.addView(label(d.name, 28f).apply {
+                typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                setTextColor(colors.ink)
+                setLineSpacing(0f, 1.1f)
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+            d.rising?.let { col.addView(adPillView(it, small = false), LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(8) }) }
+            d.desc?.let { text ->
+                val desc = label(text, 14f).apply {
+                    setTextColor(colors.muted)
+                    setLineSpacing(0f, 1.4f)
+                    if (!d.descOpen) {
+                        maxLines = 3
+                        ellipsize = TextUtils.TruncateAt.END
+                    }
+                }
+                col.addView(desc, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(10) })
+                val toggle = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(6), dp(8), dp(4))
+                    isClickable = true
+                    isFocusable = true
+                    visibility = View.GONE
+                    setOnClickListener { act("ad", row = rowKey, what = "desc") }
+                }
+                toggle.addView(label("", 11.5f, bold = true, lines = 1).apply {
+                    caps(this, if (d.descOpen) d.less else d.more, 0.18f)
+                    setTextColor(colors.accent)
+                })
+                toggle.addView(ImageView(ctx).apply {
+                    setImageDrawable(icon(R.drawable.ic_chevron_down, colors.accent))
+                    rotation = if (d.descOpen) 180f else 0f
+                }, LinearLayout.LayoutParams(dp(12), dp(12)).apply { marginStart = dp(4) })
+                col.addView(toggle, LinearLayout.LayoutParams(wrap, wrap))
+                // "View more" only when the text runs past its three lines.
+                desc.post {
+                    val l = desc.layout ?: return@post
+                    val cut = l.lineCount > 0 && l.getEllipsisCount(l.lineCount - 1) > 0
+                    toggle.visibility = if (d.descOpen || cut) View.VISIBLE else View.GONE
+                }
+            }
+            val buttons = FlowRow(ctx, dp(8), dp(8)).apply { middle = true }
+            for (b in d.buttons) {
+                buttons.addView(pkButtonView(b, dp(44), dp(22).toFloat()) { act("ad", row = rowKey, what = "btn:" + b.id) }.apply {
+                    setPaddingRelative(dp(16), 0, dp(18), 0)
+                })
+            }
+            col.addView(buttons, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(16) })
+            if (d.tags.isNotEmpty()) {
+                val tags = FlowRow(ctx, dp(6), dp(6))
+                for (t in d.tags) tags.addView(adPillView(t))
+                col.addView(tags, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(12) })
+            }
+            frame.addView(col, FrameLayout.LayoutParams(MATCH, wrap))
+            d.stars?.let { st ->
+                val s = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    isClickable = true
+                    isFocusable = true
+                    setPadding(dp(6), dp(4), dp(6), dp(4))
+                    background = focusable(rounded(Color.TRANSPARENT, dp(10).toFloat()))
+                    setOnClickListener { act("ad", row = rowKey, what = "btn:rate") }
+                }
+                s.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_star, colors.accent)) }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginEnd = dp(8) })
+                s.addView(label(st, 26f, bold = true, lines = 1).apply { setTextColor(colors.ink) })
+                frame.addView(s, FrameLayout.LayoutParams(wrap, wrap, Gravity.TOP or Gravity.END).apply {
+                    topMargin = dp(92)
+                    marginEnd = dp(16)
+                })
+            }
+        }
+    }
+
+    /** "Project information" (see [AdInfo]). */
+    private inner class AdInfoHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private var rowKey = ""
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, wrap)
+            col.setPadding(dp(20), dp(32), dp(20), dp(32))
+        }
+
+        fun bind(r: HomeRow, a: AdInfo) {
+            rowKey = r.key
+            col.removeAllViews()
+            col.setBackgroundColor(withAlpha(colors.surface, 0.15f))
+            val head = FlowRow(ctx, dp(16), dp(4)).apply { middle = true }
+            head.addView(label(a.title, 22f, lines = 1).apply {
+                typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                setTextColor(colors.ink)
+            })
+            head.addView(label("", 10.5f, lines = 1).apply {
+                caps(this, a.note, 0.22f)
+                setTextColor(colors.subtle)
+            })
+            col.addView(head, LinearLayout.LayoutParams(MATCH, wrap).apply { bottomMargin = dp(24) })
+            val line = withAlpha(colors.ink, 0.08f)
+            col.addView(View(ctx).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(MATCH, max(1, dp(1))))
+            for ((k, v) in a.stats) {
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(12), 0, dp(12))
+                }
+                row.addView(label("", 12f, lines = 1).apply {
+                    caps(this, k, 0.16f)
+                    setTextColor(colors.subtle)
+                })
+                row.addView(label(v, 13.5f, lines = 1).apply {
+                    setTextColor(colors.ink)
+                    gravity = Gravity.END
+                    textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+                }, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = dp(24) })
+                col.addView(row)
+                col.addView(View(ctx).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(MATCH, max(1, dp(1))))
+            }
+            val urlHead = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            urlHead.addView(label("", 12f, lines = 1).apply {
+                caps(this, a.urlLabel, 0.16f)
+                setTextColor(colors.subtle)
+            }, LinearLayout.LayoutParams(0, wrap, 1f))
+            a.copy?.let { cp ->
+                urlHead.addView(pkButtonView(PkButton("copy", cp, "soft", "copy", copy = a.url), dp(28), dp(14).toFloat()) { act("ad", row = rowKey, what = "copyurl") }.apply {
+                    setPaddingRelative(dp(10), 0, dp(10), 0)
+                }, LinearLayout.LayoutParams(wrap, wrap).apply { marginEnd = dp(6) })
+            }
+            urlHead.addView(pkButtonView(PkButton("reveal", a.reveal, "soft", if (a.copy != null) "eye-off" else "eye"), dp(28), dp(14).toFloat()) { act("ad", row = rowKey, what = "reveal") }.apply {
+                setPaddingRelative(dp(10), 0, dp(10), 0)
+            })
+            col.addView(urlHead, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(32) })
+            col.addView(label(a.url, 12.5f).apply {
+                mono(this)
+                setTextColor(colors.muted)
+                setLineSpacing(0f, 1.35f)
+                setPadding(dp(16), dp(16), dp(16), dp(16))
+                background = rounded(withAlpha(colors.canvas, 0.6f), dp(12).toFloat(), max(1, dp(1)), line)
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(12) })
+            a.hint?.let { col.addView(label(it, 11.5f).apply { setTextColor(colors.subtle); setLineSpacing(0f, 1.3f) }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(12) }) }
+            col.addView(View(ctx).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(MATCH, max(1, dp(1))).apply { topMargin = dp(40) })
+            col.addView(label(a.foot, 12f).apply {
+                setTextColor(colors.subtle)
+                gravity = Gravity.CENTER_HORIZONTAL
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(24) })
+            col.addView(label(a.credit, 11.5f).apply {
+                setTextColor(colors.subtle)
+                gravity = Gravity.CENTER_HORIZONTAL
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+                setLineSpacing(0f, 1.35f)
+                isClickable = true
+                setOnClickListener { act("ad", row = rowKey, what = "site") }
+            }, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+        }
+    }
+
+    /** "Documentation" (see [AdDoc]). */
+    private inner class AdDocHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private var rowKey = ""
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, wrap)
+            col.setPadding(dp(20), dp(32), dp(20), dp(8))
+        }
+
+        fun bind(r: HomeRow, d: AdDoc) {
+            rowKey = r.key
+            col.removeAllViews()
+            col.setBackgroundColor(withAlpha(colors.surface, 0.15f))
+            val head = FlowRow(ctx, dp(16), dp(4)).apply { middle = true }
+            head.addView(label(d.title, 22f, lines = 1).apply {
+                typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                setTextColor(colors.ink)
+            })
+            head.addView(label("", 10.5f, lines = 1).apply {
+                caps(this, d.note, 0.22f)
+                setTextColor(colors.subtle)
+            })
+            col.addView(head, LinearLayout.LayoutParams(MATCH, wrap).apply { bottomMargin = dp(24) })
+            val body = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            for ((k, text) in d.parts) {
+                val v = when (k) {
+                    "h1" -> label(text, 20f).apply { typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL); setTextColor(colors.ink) }
+                    "h2" -> label(text, 17f).apply { typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL); setTextColor(colors.ink) }
+                    "h3" -> label("", 14f, bold = true).apply { caps(this, text, 0.14f); setTextColor(colors.subtle) }
+                    "li" -> label("•  $text", 14f).apply { setTextColor(colors.muted); setLineSpacing(0f, 1.4f) }
+                    "code" -> label(text, 12.5f).apply {
+                        mono(this)
+                        setTextColor(colors.muted)
+                        setPadding(dp(12), dp(10), dp(12), dp(10))
+                        background = rounded(withAlpha(colors.canvas, 0.6f), dp(10).toFloat())
+                    }
+                    else -> label(text, 14f).apply { setTextColor(colors.muted); setLineSpacing(0f, 1.4f) }
+                }
+                val top = when (k) {
+                    "h1" -> dp(20)
+                    "h2" -> dp(16)
+                    "h3" -> dp(14)
+                    "li" -> dp(4)
+                    else -> dp(10)
+                }
+                body.addView(v, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = if (body.childCount == 0) 0 else top })
+            }
+            if (!d.open) {
+                // Folded at about the page's 420px, the text fading out at the fold.
+                val fold = FrameLayout(ctx)
+                fold.addView(body, FrameLayout.LayoutParams(MATCH, wrap))
+                val under = toward(colors.canvas, colors.surface, 0.15f)
+                fold.addView(View(ctx).apply {
+                    background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(under, Color.TRANSPARENT))
+                }, FrameLayout.LayoutParams(MATCH, dp(64), Gravity.BOTTOM))
+                col.addView(fold, LinearLayout.LayoutParams(MATCH, dp(420)))
+            } else {
+                col.addView(body)
+            }
+            val toggle = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(12), dp(8), dp(8))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { act("ad", row = rowKey, what = "doc") }
+            }
+            toggle.addView(label("", 11.5f, bold = true, lines = 1).apply {
+                caps(this, if (d.open) d.less else d.more, 0.18f)
+                setTextColor(colors.accent)
+            })
+            toggle.addView(ImageView(ctx).apply {
+                setImageDrawable(icon(R.drawable.ic_chevron_down, colors.accent))
+                rotation = if (d.open) 180f else 0f
+            }, LinearLayout.LayoutParams(dp(12), dp(12)).apply { marginStart = dp(4) })
+            col.addView(toggle, LinearLayout.LayoutParams(wrap, wrap))
+            col.addView(View(ctx).apply { setBackgroundColor(withAlpha(colors.ink, 0.08f)) }, LinearLayout.LayoutParams(MATCH, max(1, dp(1))).apply { topMargin = dp(24) })
+        }
+    }
+
+    // ---- A toast and a question with a text field --------------------------------------------
+
+    private var toastShown = -1
+    private var promptDialog: android.app.AlertDialog? = null
+    private var promptKey: String? = null
+
+    private fun bindToast(t: HomeToast?) {
+        if (t == null || t.id == toastShown) return
+        toastShown = t.id
+        if (!isShowing && !wanted) return
+        android.widget.Toast.makeText(ctx, t.text, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun bindPrompt(p: HomePrompt?) {
+        if (p == null) {
+            promptKey = null
+            promptDialog?.let {
+                promptDialog = null
+                it.dismiss()
+            }
+            return
+        }
+        if (p.key == promptKey && promptDialog?.isShowing == true) return
+        promptDialog?.dismiss()
+        promptKey = p.key
+        val field = android.widget.EditText(ctx).apply {
+            setText(p.text)
+            hint = p.hint
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSelection(text.length)
+        }
+        val box = FrameLayout(ctx).apply {
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(field)
+        }
+        var sent = false
+        val dlg = android.app.AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(p.title)
+            .setView(box)
+            .setPositiveButton(p.ok) { _, _ ->
+                sent = true
+                act("prompt", what = p.key, text = field.text?.toString() ?: "")
+            }
+            .setNegativeButton(p.cancel, null)
+            .create()
+        dlg.setOnDismissListener {
+            if (promptDialog === dlg) {
+                promptDialog = null
+                if (!sent) act("prompt", what = p.key)
+            }
+        }
+        promptDialog = dlg
+        dlg.show()
+        field.requestFocus()
+        dlg.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
     }
 
     // ---- A full-screen step over everything (the picker's: connecting, peer-to-peer…) -----------
@@ -6452,6 +7581,16 @@ class NativeHome(
         private const val T_PK_DIAG = 38
         private const val T_PK_PANEL = 39
         private const val T_PK_LOADER = 40
+        private const val T_AD_CARD = 41
+        private const val T_AD_TILES = 42
+        private const val T_AD_HERO = 43
+        private const val T_AD_COMM = 44
+        private const val T_AD_HEAD = 45
+        private const val T_AD_CATS = 46
+        private const val T_AD_INST = 47
+        private const val T_AD_DETAIL = 48
+        private const val T_AD_INFO = 49
+        private const val T_AD_DOC = 50
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

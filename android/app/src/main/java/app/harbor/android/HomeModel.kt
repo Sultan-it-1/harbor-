@@ -59,6 +59,10 @@ class HomeModel(
     val guide: HomeGuide? = null,
     /** A full-screen step over everything (the play picker's: connecting, peer-to-peer…). */
     val stage: PkStage? = null,
+    /** A short message at the bottom (a toast); shown once per [HomeToast.id]. */
+    val toast: HomeToast? = null,
+    /** A question with a text field (paste an addon's address); sends {a:"prompt", what:key, text}. */
+    val prompt: HomePrompt? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -134,7 +138,8 @@ class HomeModel(
                     // a heading over a grid ("head": an award's winning films and their count).
                     val onlyChoices = r.optJSONObject("chips") != null || (r.optJSONArray("tools")?.length() ?: 0) > 0 || r.optBoolean("head", false)
                     val pk = if (r.str("kind") == "pk") PkParse.block(r.optJSONObject("pk")) ?: return@mapNotNull null else null
-                    if (items.isEmpty() && ed == null && !onlyChoices && pk == null && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
+                    val ad = if (r.str("kind") == "ad") AdParse.block(r.optJSONObject("ad")) ?: return@mapNotNull null else null
+                    if (items.isEmpty() && ed == null && !onlyChoices && pk == null && ad == null && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
                     HomeRow(
                         key = key,
                         title = r.str("title") ?: "",
@@ -160,6 +165,7 @@ class HomeModel(
                             "versus" -> HomeRow.Kind.VERSUS
                             "pitch" -> HomeRow.Kind.PITCH
                             "pk" -> HomeRow.Kind.PK
+                            "ad" -> HomeRow.Kind.AD
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -201,6 +207,7 @@ class HomeModel(
                             HomeCard(title = l.str("title") ?: "", images = l.optJSONArray("img").strings(), rating = null, sub = l.str("sub"), progress = 0f, rank = 0)
                         },
                         pk = pk,
+                        ad = ad,
                     )
                 },
                 cwEmpty = cw?.let { (it.str("title") ?: "") to (it.str("text") ?: "") },
@@ -376,6 +383,17 @@ class HomeModel(
                     )
                 },
                 stage = PkParse.stage(o.optJSONObject("stage")),
+                toast = o.optJSONObject("toast")?.let { t -> t.str("text")?.let { HomeToast(t.optInt("id", 0), it) } },
+                prompt = o.optJSONObject("prompt")?.let { q ->
+                    HomePrompt(
+                        key = q.str("key") ?: "prompt",
+                        title = q.str("title") ?: "",
+                        hint = q.str("hint") ?: "",
+                        text = q.str("text") ?: "",
+                        ok = q.str("ok") ?: "OK",
+                        cancel = q.str("cancel") ?: "Cancel",
+                    )
+                },
                 match = o.optJSONObject("match")?.let { mt ->
                     fun side(k: String) = mt.optJSONObject(k)?.let { s ->
                         MatchSide(name = s.str("name") ?: "", logo = s.str("logo"), score = s.str("score") ?: "0", yellow = s.optInt("yellow", 0), red = s.optInt("red", 0))
@@ -508,11 +526,13 @@ class HomeRow(
     val lead: HomeCard? = null,
     /** PK: one of the play picker's blocks (its big card, qualities, sources, messages). */
     val pk: PkBlock? = null,
+    /** AD: one of the Addons page's blocks (cards, tiles, the featured one, an addon's page). */
+    val ad: AdBlock? = null,
 ) {
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS, SOURCES, VERSUS, PITCH, PK }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS, SOURCES, VERSUS, PITCH, PK, AD }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -808,6 +828,10 @@ class HomeGuide(
 }
 
 class GuideTick(val at: Long, val label: String)
+
+class HomeToast(val id: Int, val text: String)
+
+class HomePrompt(val key: String, val title: String, val hint: String, val text: String, val ok: String, val cancel: String)
 
 class GuideChannel(val name: String, val number: String?, val logo: String?, val programs: List<GuideProgram>)
 

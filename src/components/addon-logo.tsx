@@ -122,7 +122,8 @@ export function resolveAddonLogo(logo: string | null | undefined, transportUrl: 
   }
 }
 
-function paletteFor(seed: string): readonly [string, string] {
+/** The gradient behind an addon's initial when it has no logo. */
+export function paletteFor(seed: string): readonly [string, string] {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length] as [string, string];

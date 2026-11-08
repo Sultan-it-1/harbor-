@@ -47,6 +47,24 @@ export function openInstallerViewport(url: string, title?: string, logo?: string
   );
 }
 
+const CLOSED_EVENT = "harbor:installer-closed";
+
+/** The addon setup page is open over everything (a native screen steps aside for it). */
+export function useInstallerOpen(): boolean {
+  const [open, setOpen] = useState(() => typeof window !== "undefined" && !!window.__harborInstallerOpen);
+  useEffect(() => {
+    const on = () => setOpen(true);
+    const off = () => setOpen(false);
+    window.addEventListener(EVENT, on);
+    window.addEventListener(CLOSED_EVENT, off);
+    return () => {
+      window.removeEventListener(EVENT, on);
+      window.removeEventListener(CLOSED_EVENT, off);
+    };
+  }, []);
+  return open;
+}
+
 export function InstallerViewportRoot() {
   const [request, setRequest] = useState<InstallerDetail | null>(null);
   useEffect(() => {
@@ -131,6 +149,7 @@ function InstallerViewport({
     return () => {
       document.body.style.overflow = "";
       window.__harborInstallerOpen = false;
+      window.dispatchEvent(new Event(CLOSED_EVENT));
     };
   }, []);
 
