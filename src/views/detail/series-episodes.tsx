@@ -260,6 +260,9 @@ export function SeriesEpisodes({
           traktWatched,
           stremioWatched,
           simklWatched,
+          undefined,
+          undefined,
+          meta.id,
         ),
       );
     }
@@ -500,6 +503,9 @@ export function SeriesEpisodes({
                   traktWatched,
                   stremioWatched,
                   simklWatched,
+                  undefined,
+                  undefined,
+                  meta.id,
                 )
               }
               thumbnailFor={(ep) =>

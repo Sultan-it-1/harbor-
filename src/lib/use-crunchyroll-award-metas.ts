@@ -5,9 +5,10 @@ import {
   type AwardWin,
 } from "@/lib/anime-awards";
 import type { Meta } from "@/lib/cinemeta";
-import { jikanSearchByTitle } from "@/lib/providers/jikan";
+import { animeSearchByTitle } from "@/lib/anilist/catalog";
 
 const CACHE_KEY = "harbor.anime_awards.metas.v2";
+const NULLS_CLEARED_KEY = "harbor.anime_awards.metas.v2.anilist";
 
 type CacheValue = Meta | null;
 
@@ -24,6 +25,11 @@ function loadCache(): Record<string, CacheValue> {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     memCache = raw ? JSON.parse(raw) : {};
+    // "No match" from the months Jikan (closed 1 Oct 2026) didn't answer: asked again.
+    if (localStorage.getItem(NULLS_CLEARED_KEY) !== "1") {
+      for (const [k, v] of Object.entries(memCache ?? {})) if (v == null) delete memCache![k];
+      localStorage.setItem(NULLS_CLEARED_KEY, "1");
+    }
   } catch {
     memCache = {};
   }
@@ -56,24 +62,38 @@ function scheduleSave() {
 
 let resolveAllPromise: Promise<void> | null = null;
 
+/** Titles looked up per request (AniList takes about 18 lists in one). */
+const AWARD_GROUP = 18;
+
 async function resolveAll(onProgress: () => void): Promise<void> {
   if (resolveAllPromise) return resolveAllPromise;
   resolveAllPromise = (async () => {
     const cache = loadCache();
-    const winners = Array.from(uniqueWinnerFranchisesAcrossSources().entries());
-    for (const [fk, win] of winners) {
-      if (fk in cache) continue;
-      try {
-        const results = await jikanSearchByTitle(win.title, 1);
-        cache[fk] = results[0] ?? null;
-      } catch {
-        cache[fk] = null;
-      }
-      scheduleSave();
-      invalidateAnimeAwardSynonyms();
-      onProgress();
+    const winners = Array.from(uniqueWinnerFranchisesAcrossSources().entries()).filter(([fk]) => !(fk in cache));
+    // AniList answers 30 requests a minute and the anime page's rows come first: the titles go a
+    // group at a time (each group one request), a few seconds apart, once the rows have been
+    // asked for. What's found is kept, so this happens once. A title AniList couldn't be asked
+    // about (no network) isn't kept as "no match", so it is asked again next time.
+    for (let i = 0; i < winners.length; i += AWARD_GROUP) {
+      await new Promise((r) => setTimeout(r, i === 0 ? 3000 : 4000));
+      await Promise.all(
+        winners.slice(i, i + AWARD_GROUP).map(async ([fk, win]) => {
+          try {
+            const results = await animeSearchByTitle(win.title, 1);
+            cache[fk] = results[0] ?? null;
+          } catch {
+            return;
+          }
+          scheduleSave();
+          invalidateAnimeAwardSynonyms();
+          onProgress();
+        }),
+      );
     }
-  })();
+  })().finally(() => {
+    // A later visit tries the ones that couldn't be asked.
+    resolveAllPromise = null;
+  });
   return resolveAllPromise;
 }
 

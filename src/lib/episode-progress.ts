@@ -47,6 +47,14 @@ export function resumeDefaultSeason(
   return candidate;
 }
 
+/** A show's key in Trakt's watched set: "imdb:tt…" or "tmdb:123" (from "tmdb:tv:123"). */
+function traktShowKey(id: string | null | undefined): string | null {
+  if (!id) return null;
+  if (/^tt\d+$/.test(id)) return `imdb:${id}`;
+  const tmdb = id.match(/^tmdb:(?:tv:)?(\d+)$/);
+  return tmdb ? `tmdb:${tmdb[1]}` : null;
+}
+
 export function getEpisodeProgress(
   resumeId: string,
   season: number,
@@ -58,6 +66,8 @@ export function getEpisodeProgress(
   simklWatched?: Set<string>,
   traktSeason?: number,
   traktEpisode?: number,
+  /** The show's other id ("tmdb:tv:123", "tt…"), also looked for in [traktWatched]. */
+  traktAltId?: string | null,
 ): EpisodeProgress {
   const entry = readResumeEntry(resumeId, season, episode);
   const startedAt = entry?.t ?? 0;
@@ -69,8 +79,11 @@ export function getEpisodeProgress(
   const durationMs = runtimeMin && runtimeMin > 0 ? runtimeMin * 60 * 1000 : 0;
   const ratio = durationMs > 0 && ms > 0 ? Math.min(1, ms / durationMs) : 0;
 
-  const traktKey = traktImdbId ? `imdb:${traktImdbId}:${traktSeason ?? season}:${traktEpisode ?? episode}` : null;
-  const traktDone = traktKey ? traktWatched.has(traktKey) : false;
+  const se = `${traktSeason ?? season}:${traktEpisode ?? episode}`;
+  const traktDone = [traktImdbId, traktAltId].some((id) => {
+    const key = traktShowKey(id);
+    return key != null && traktWatched.has(`${key}:${se}`);
+  });
   const stremioDone = stremioWatched ? stremioWatched.has(`${season}:${episode}`) : false;
   const simklDone = simklWatched ? simklWatched.has(`${season}:${episode}`) : false;
   const done = manual === true || traktDone || stremioDone || simklDone;

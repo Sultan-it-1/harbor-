@@ -67,7 +67,8 @@ export function AnimeView({ active = true }: { active?: boolean }) {
   /** Loads [specs]' first pages, a few at a time (the first load, and the rows that failed). */
   const loadSpecs = useCallback((specs: typeof SPECS, isCancelled: () => boolean) => {
     void (async () => {
-      const BATCH = 6;
+      // AniList takes the rows' lists as one request (see @/lib/anilist/catalog).
+      const BATCH = 18;
       const GAP_MS = 350;
       for (let i = 0; i < specs.length; i += BATCH) {
         if (isCancelled()) return;

@@ -97,21 +97,66 @@ export async function pushWatched(target: TraktTarget): Promise<boolean> {
   return false;
 }
 
-export async function fetchWatchedKeySet(): Promise<Set<string>> {
-  const rows = await fetchWatchedHistory(1000);
-  const set = new Set<string>();
-  for (const r of rows) {
-    if (r.type === "movie") {
-      if (r.imdb) set.add(`imdb:${r.imdb}`);
-      if (r.tmdb) set.add(`tmdb:${r.tmdb}`);
-    } else {
-      if (r.showImdb && r.season != null && r.number != null) {
-        set.add(`imdb:${r.showImdb}:${r.season}:${r.number}`);
-      }
-      if (r.showTmdb && r.season != null && r.number != null) {
-        set.add(`tmdb:${r.showTmdb}:${r.season}:${r.number}`);
+type WatchedIds = { imdb?: string | null; tmdb?: number | null };
+type RawWatchedShow = {
+  show?: { ids?: WatchedIds };
+  seasons?: Array<{ number: number; episodes?: Array<{ number: number }> }>;
+};
+type RawWatchedMovie = { movie?: { ids?: WatchedIds } };
+
+const KEY_SET_TTL_MS = 2 * 60_000;
+let keySet: { set: Set<string>; at: number } | null = null;
+let keySetInflight: Promise<Set<string>> | null = null;
+
+/**
+ * Everything Trakt has as watched, as keys: "imdb:tt…" / "tmdb:123" for films and
+ * "imdb:tt…:S:E" / "tmdb:123:S:E" for episodes. Episodes come from the watched list (every
+ * episode of every show, however long ago) and the latest history; the answer is shared for two
+ * minutes by the pages that ask.
+ */
+export function fetchWatchedKeySet(): Promise<Set<string>> {
+  if (keySet && Date.now() - keySet.at < KEY_SET_TTL_MS) return Promise.resolve(keySet.set);
+  if (keySetInflight) return keySetInflight;
+  keySetInflight = (async () => {
+    const [rows, shows, movies] = await Promise.all([
+      fetchWatchedHistory(1000),
+      traktRequest<RawWatchedShow[]>("/sync/watched/shows").catch(() => null),
+      traktRequest<RawWatchedMovie[]>("/sync/watched/movies").catch(() => null),
+    ]);
+    const set = new Set<string>();
+    const showKeys = (ids: WatchedIds | undefined): string[] => {
+      const out: string[] = [];
+      if (ids?.imdb) out.push(`imdb:${ids.imdb}`);
+      if (ids?.tmdb) out.push(`tmdb:${ids.tmdb}`);
+      return out;
+    };
+    for (const r of rows) {
+      if (r.type === "movie") {
+        if (r.imdb) set.add(`imdb:${r.imdb}`);
+        if (r.tmdb) set.add(`tmdb:${r.tmdb}`);
+      } else {
+        if (r.showImdb && r.season != null && r.number != null) {
+          set.add(`imdb:${r.showImdb}:${r.season}:${r.number}`);
+        }
+        if (r.showTmdb && r.season != null && r.number != null) {
+          set.add(`tmdb:${r.showTmdb}:${r.season}:${r.number}`);
+        }
       }
     }
-  }
-  return set;
+    for (const m of movies ?? []) for (const k of showKeys(m.movie?.ids)) set.add(k);
+    for (const sh of shows ?? []) {
+      const keys = showKeys(sh.show?.ids);
+      if (keys.length === 0) continue;
+      for (const season of sh.seasons ?? []) {
+        for (const e of season.episodes ?? []) {
+          for (const k of keys) set.add(`${k}:${season.number}:${e.number}`);
+        }
+      }
+    }
+    if (set.size > 0 || shows != null) keySet = { set, at: Date.now() };
+    return set;
+  })().finally(() => {
+    keySetInflight = null;
+  });
+  return keySetInflight;
 }

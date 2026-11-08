@@ -4,6 +4,7 @@ import {
   TRAKT_CLIENT_ID,
   TRAKT_CLIENT_SECRET,
 } from "./config";
+import { androidFetch, isAndroidApp } from "@/lib/android";
 import { getSession, setSession } from "./session";
 import type { TraktSession } from "./types";
 
@@ -95,7 +96,15 @@ async function doFetch(path: string, opts: TraktRequestOptions): Promise<Respons
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   };
-  return fetch(`${TRAKT_API_BASE}${path}`, init);
+  const url = `${TRAKT_API_BASE}${path}`;
+  // The Android app: a read the WebView can't get through (no answer, a blocked request) is asked
+  // by the shell instead. Writes aren't: one that did reach Trakt would be sent twice.
+  if (!isAndroidApp() || init.method !== "GET") return fetch(url, init);
+  try {
+    return await fetch(url, init);
+  } catch {
+    return androidFetch(url, { ...init, timeoutMs: 20000 });
+  }
 }
 
 export async function traktRequest<T>(

@@ -78,6 +78,9 @@ export function usePlayerWatched(params: {
       traktWatched,
       stremioWatched,
       simklWatched,
+      undefined,
+      undefined,
+      meta.id,
     ).watched;
 
   return { watchedFor };

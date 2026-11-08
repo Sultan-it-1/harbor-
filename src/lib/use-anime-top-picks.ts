@@ -3,15 +3,14 @@ import type { Meta } from "@/lib/cinemeta";
 import { subscribe as subscribeTaste } from "@/lib/discover/store";
 import { getDownvotedIds, getUpvotedIds, subscribePrefs } from "@/lib/feed/preferences";
 import { recentlyPlayed, subscribePlayback, watchTitleKey } from "@/lib/playback-history";
+import { animeFranchiseKey, stripFranchiseSuffix } from "@/lib/providers/jikan";
 import {
-  animeFranchiseKey,
-  jikanByGenre,
-  jikanNewReleases,
-  jikanTopAiring,
-  jikanTopAnime,
-  jikanTopPopular,
-  stripFranchiseSuffix,
-} from "@/lib/providers/jikan";
+  animeByGenre,
+  animeMostPopular,
+  animeNewReleases,
+  animeTopAiring,
+  animeTopRated,
+} from "@/lib/anilist/catalog";
 import { kitsuRelated, parseKitsuId } from "@/lib/providers/kitsu";
 import type { LibraryItem } from "@/lib/stremio";
 import { malIdForItem } from "@/lib/use-watch-history-recs";
@@ -154,10 +153,10 @@ export function useAnimeTopPicks(input: {
       const { seeds } = finishedFranchises(libItems);
       const pageSeed = dayIndex();
       const [airing, fresh, ...genreLists] = await Promise.all([
-        jikanTopAiring(pageFor("airing", pageSeed)).catch(() => [] as Meta[]),
-        jikanNewReleases(pageFor("new", pageSeed)).catch(() => [] as Meta[]),
+        animeTopAiring(pageFor("airing", pageSeed)).catch(() => [] as Meta[]),
+        animeNewReleases(pageFor("new", pageSeed)).catch(() => [] as Meta[]),
         ...genres.map((id) =>
-          jikanByGenre(id, pageFor(`g${id}`, pageSeed)).catch(() => [] as Meta[]),
+          animeByGenre(id, pageFor(`g${id}`, pageSeed)).catch(() => [] as Meta[]),
         ),
       ]);
       if (cancelled) return;
@@ -198,9 +197,9 @@ export function useAnimeTopPicks(input: {
       while (byFranchise.size < CAP && page <= 5) {
         if (cancelled) return;
         const more = await Promise.all([
-          ...genres.map((id) => jikanByGenre(id, page).catch(() => [] as Meta[])),
-          page === 2 ? jikanTopAnime(1).catch(() => [] as Meta[]) : Promise.resolve([]),
-          page === 3 ? jikanTopPopular(1).catch(() => [] as Meta[]) : Promise.resolve([]),
+          ...genres.map((id) => animeByGenre(id, page).catch(() => [] as Meta[])),
+          page === 2 ? animeTopRated(1).catch(() => [] as Meta[]) : Promise.resolve([]),
+          page === 3 ? animeMostPopular(1).catch(() => [] as Meta[]) : Promise.resolve([]),
         ]);
         if (cancelled) return;
         for (const list of more) for (const m of list) add(m, "top");
@@ -208,7 +207,7 @@ export function useAnimeTopPicks(input: {
       }
 
       if (byFranchise.size < CAP) {
-        const floor = await jikanTopAiring(1).catch(() => [] as Meta[]);
+        const floor = await animeTopAiring(1).catch(() => [] as Meta[]);
         if (cancelled) return;
         const watched = recentlyPlayed();
         for (const m of floor) {

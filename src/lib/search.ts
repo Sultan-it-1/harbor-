@@ -1,4 +1,5 @@
 import { get } from "@/lib/providers/tmdb/tmdb-client";
+import { animeSearchByTitle } from "@/lib/anilist/catalog";
 import { movieMeta, seriesMeta, type Page, type RawMovie, type RawSeries } from "@/lib/providers/tmdb/tmdb-meta-mappers";
 import { MOVIE_GENRES, TV_GENRES } from "@/lib/feed/tags";
 import type { Meta } from "@/lib/cinemeta";
@@ -103,40 +104,27 @@ export function searchLiveTvChannels(
   return hits;
 }
 
-type JikanAnime = {
-  mal_id: number;
-  title?: string;
-  title_english?: string;
-  year?: number | null;
-  aired?: { from?: string };
-  images?: { jpg?: { large_image_url?: string; image_url?: string } };
-  trailer?: { images?: { maximum_image_url?: string } };
-  synopsis?: string;
-  score?: number;
-};
-
-export async function searchAnime(query: string, limit = 8, run?: SearchRun): Promise<AnimeHit[]> {
+/** Anime by name, from AniList (Jikan's public API closed on 1 Oct 2026). */
+export async function searchAnime(query: string, limit = 8, _run?: SearchRun): Promise<AnimeHit[]> {
   const q = query.trim();
   if (q.length < 2) return [];
   try {
-    const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&order_by=popularity&sort=asc&limit=${limit}&sfw=true`;
-    const data = run
-      ? await run.json<{ data?: JikanAnime[] }>(url)
-      : await safeFetch(url).then((r) => (r.ok ? (r.json() as Promise<{ data?: JikanAnime[] }>) : null));
-    if (!data) return [];
-    return (data.data ?? []).map((a) => {
-      const year = a.year ?? (a.aired?.from ? Number(a.aired.from.slice(0, 4)) : null);
-      const name = a.title_english?.trim() || a.title?.trim() || "Untitled";
-      return {
-        malId: a.mal_id,
-        name,
-        year: year ? String(year) : null,
-        poster: a.images?.jpg?.large_image_url ?? a.images?.jpg?.image_url ?? null,
-        background: a.trailer?.images?.maximum_image_url ?? null,
-        overview: a.synopsis ?? "",
-        score: a.score ?? 0,
-      };
-    });
+    const metas = await animeSearchByTitle(q, limit);
+    const out: AnimeHit[] = [];
+    for (const m of metas) {
+      const malId = m.id.startsWith("mal:") ? Number(m.id.slice(4)) : NaN;
+      if (!Number.isFinite(malId)) continue;
+      out.push({
+        malId,
+        name: m.name || "Untitled",
+        year: m.releaseInfo ?? null,
+        poster: m.poster ?? null,
+        background: null,
+        overview: m.description ?? "",
+        score: m.imdbRating ? Number(m.imdbRating) : 0,
+      });
+    }
+    return out;
   } catch {
     return [];
   }
