@@ -2056,7 +2056,7 @@ class NativeHome(
             texts.addView(label("", 12.5f, bold = true, lines = 1).apply {
                 caps(this, t.label, 0.16f)
                 setTextColor(if (t.on) colors.ink else colors.muted)
-            })
+            }, LinearLayout.LayoutParams(wrap, wrap))
             val st = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -4137,7 +4137,7 @@ class NativeHome(
             score.addView(label(mt.home.score, 44f, bold = true, lines = 1).apply { setTextColor(colors.ink); fontFeatureSettings = "tnum" })
             score.addView(label("-", 28f, bold = true, lines = 1).apply { setTextColor(colors.subtle); setPadding(dp(12), 0, dp(12), 0) })
             score.addView(label(mt.away.score, 44f, bold = true, lines = 1).apply { setTextColor(colors.ink); fontFeatureSettings = "tnum" })
-            mid.addView(score)
+            mid.addView(score, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             mid.addView(label(mt.status, 13f, bold = true, lines = 1).apply {
                 setTextColor(colors.canvas)
                 setPaddingRelative(dp(16), dp(6), dp(16), dp(6))
@@ -4477,6 +4477,8 @@ class NativeHome(
         private val extra = label("", 14f, lines = 1)
         private val synopsis = label("", 16f)
         private val synopsisToggle = label("", 13.5f, bold = true, lines = 1)
+        /** The gap under the synopsis, which stays when there is no "Read more" under it. */
+        private val synopsisGap = View(ctx)
         private var key = ""
         /** The hero's words (tagline, logo or name, pills, awards): hidden while the details load. */
         private val words = LinearLayout(ctx)
@@ -4545,8 +4547,8 @@ class NativeHome(
             col.addView(synopsisToggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 marginStart = gutter
                 marginEnd = gutter
-                bottomMargin = dp(28)
             })
+            col.addView(synopsisGap, LinearLayout.LayoutParams(MATCH, dp(28)))
         }
 
         private fun toggleSynopsis() {
@@ -4654,6 +4656,7 @@ class NativeHome(
 
             val text = d.synopsis
             synopsis.visibility = if (text.isNullOrBlank()) View.GONE else View.VISIBLE
+            synopsisGap.visibility = synopsis.visibility
             synopsis.text = text ?: ""
             synopsis.setTextColor(colors.muted)
             val open = key in synopsisOpen
@@ -4822,14 +4825,19 @@ class NativeHome(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.BOTTOM
             }
-            top.addView(label(d.day.toString(), 12.5f, bold = true, lines = 1).apply {
+            // The day's number whole, then how many: on a phone's narrow box the two may run into
+            // the box's padding (as the page's do), never cut to "…".
+            top.addView(label(d.day.toString(), 12.5f, bold = true).apply {
                 fontFeatureSettings = "tnum"
                 setTextColor(if (d.today) colors.ink else if (d.inMonth) colors.muted else colors.subtle)
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            top.addView(View(ctx), LinearLayout.LayoutParams(0, 0, 1f))
             if (d.count > 0) {
-                top.addView(label(d.count.toString(), 10.5f, bold = true, lines = 1).apply { setTextColor(colors.subtle) })
+                top.addView(label(d.count.toString(), 10.5f, bold = true, lines = 1).apply { setTextColor(colors.subtle) },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(2) })
             }
-            box.addView(top, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
+            box.clipToPadding = false
+            box.addView(top, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = -dp(5) })
             d.items.forEachIndexed { k, it ->
                 val chip = LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -4854,7 +4862,10 @@ class NativeHome(
                 box.addView(chip, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
             }
             d.more?.let { more ->
-                box.addView(label(more, 11f, lines = 1).apply {
+                // "+2 more", or "+2" when the box is too narrow for the words.
+                box.addView(FitText(ctx, more, more.substringBefore(' ')).apply {
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    maxLines = 1
                     setTextColor(colors.subtle)
                     setPaddingRelative(dp(4), dp(2), dp(4), dp(2))
                     isClickable = true
@@ -7825,5 +7836,21 @@ class NativeHome(
         private const val C_SPORT = 111
         /** The hero turns to its next slide after this long. */
         private const val HERO_TURN_MS = 15_000L
+    }
+}
+
+/** A one-line text that shows [short] in place of [full] when [full] does not fit its width. */
+private class FitText(ctx: Context, private val full: String, private val short: String) : TextView(ctx) {
+    init {
+        text = full
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            val room = MeasureSpec.getSize(widthMeasureSpec) - compoundPaddingLeft - compoundPaddingRight
+            val want = if (paint.measureText(full) <= room) full else short
+            if (text.toString() != want) text = want
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 }

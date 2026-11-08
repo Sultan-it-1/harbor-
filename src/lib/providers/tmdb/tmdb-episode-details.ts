@@ -75,8 +75,8 @@ export async function tmdbEpisodeDetail(
 
     return {
       id: data.id,
-      episodeNumber: data.episode_number,
-      seasonNumber: data.season_number,
+      episodeNumber: data.episode_number ?? episodeNumber,
+      seasonNumber: data.season_number ?? seasonNumber,
       name: data.name,
       overview: data.overview,
       stillPath: data.still_path,
