@@ -2548,14 +2548,14 @@ class NativeHome(
         return line
     }
 
-    /** The faint logo behind a card and the canvas fading over it (the page's CardArtBackdrop). */
-    private fun adArt(frame: FrameLayout, art: String?, w: Int, h: Int) {
-        if (art == null) return
+    /** The faint logo behind a card and the canvas fading over it (the page's CardArtBackdrop).
+     *  It is the card's own logo at the logo's size: one load serves both. */
+    private fun adArt(frame: FrameLayout, art: String?, logo: AdLogo, size: Int) {
+        if (art == null || logo.images.isEmpty()) return
         val img = NetImage(ctx)
         img.scaleType = ImageView.ScaleType.CENTER_CROP
-        img.alpha = 0.1f
         frame.addView(img, 0, FrameLayout.LayoutParams(MATCH, MATCH))
-        images.load(img, listOf(art), max(w / 4, dp(40)), max(h / 4, dp(40)))
+        images.load(img, logo.images, dp(size), dp(size), alpha = true) { ok -> if (ok) img.alpha = 0.1f }
         val c = colors.canvas
         val rtl = model?.rtl == true
         frame.addView(View(ctx).apply {
@@ -2587,7 +2587,7 @@ class NativeHome(
             frame.background = focusable(rounded(colors.surface, dp(16).toFloat(), max(1, dp(1)), adEdge))
             frame.alpha = if (c.dim) 0.6f else 1f
             frame.contentDescription = c.name
-            adArt(frame, c.art, width(), dp(120))
+            adArt(frame, c.art, c.logo, 56)
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(dp(18), dp(18), dp(16), dp(18))
@@ -2653,6 +2653,7 @@ class NativeHome(
         }
 
         fun bind(r: HomeRow, t: AdTiles) {
+            val keepX = if (rowKey == r.key) (frame.getChildAt(0) as? android.widget.HorizontalScrollView)?.scrollX ?: 0 else 0
             rowKey = r.key
             frame.removeAllViews()
             val lp = frame.layoutParams as RecyclerView.LayoutParams
@@ -2671,6 +2672,8 @@ class NativeHome(
                 }
                 scroll.addView(line, FrameLayout.LayoutParams(wrap, wrap))
                 frame.addView(scroll, FrameLayout.LayoutParams(MATCH, wrap))
+                // Redrawn (an addon installed, its stars in): where it was scrolled to.
+                if (keepX > 0) scroll.post { scroll.scrollTo(keepX, 0) }
                 return
             }
             lp.marginStart = dp(16)
@@ -2701,7 +2704,7 @@ class NativeHome(
                 contentDescription = t.name
                 setOnClickListener { act("ad", row = rowKey, what = "open", i = i) }
             }
-            adArt(card, t.art, w, dp(220))
+            adArt(card, t.art, t.logo, 48)
             val col = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(16), dp(18), dp(16), dp(16))
@@ -2824,7 +2827,11 @@ class NativeHome(
             col.layoutParams = RecyclerView.LayoutParams(MATCH, wrap).apply { bottomMargin = dp(44) }
         }
 
+        private var strip: android.widget.HorizontalScrollView? = null
+
         fun bind(r: HomeRow, c: AdCommunity) {
+            val keepX = if (rowKey == r.key) strip?.scrollX ?: 0 else 0
+            strip = null
             rowKey = r.key
             col.removeAllViews()
             val head = LinearLayout(ctx).apply {
@@ -2904,6 +2911,8 @@ class NativeHome(
                     val line = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
                     c.cards.forEachIndexed { i, cc -> line.addView(card(cc, i), LinearLayout.LayoutParams(dp(280), MATCH).apply { if (i > 0) marginStart = dp(12) }) }
                     scroll.addView(line)
+                    strip = scroll
+                    if (keepX > 0) scroll.post { scroll.scrollTo(keepX, 0) }
                     scroll
                 }
                 "loading" -> LinearLayout(ctx).apply {

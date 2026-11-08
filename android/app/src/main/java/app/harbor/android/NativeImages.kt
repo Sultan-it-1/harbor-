@@ -10,7 +10,6 @@ import android.os.Looper
 import android.util.LruCache
 import android.widget.ImageView
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
 /** An ImageView that remembers which picture it is waiting for (see [NativeImages.load]). */
@@ -32,17 +31,68 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
     @Volatile var appAssets: android.content.res.AssetManager? = null
 
     private val main = Handler(Looper.getMainLooper())
-    private val pool = Executors.newFixedThreadPool(3) { r ->
-        Thread(r, "harbor-native-img").apply {
-            isDaemon = true
-            priority = Thread.NORM_PRIORITY - 1
-        }
-    }
+    /** Pictures from the network: newest first (what's on screen now, not what scrolled past). */
+    private val net = pool("harbor-native-img", 5)
+    /** The app's own pictures and ones carried in their address: never stuck behind the network. */
+    private val local = pool("harbor-native-img-local", 2)
     private val memory = object : LruCache<String, Bitmap>(cacheBytes()) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
-    /** Addresses that failed this session: the next candidate is tried straight away. */
-    private val failed = ConcurrentHashMap.newKeySet<String>()
+    /** Addresses that failed lately (when): the next candidate is tried straight away. Tried
+     *  again after two minutes (a network that was down at the start doesn't leave them blank). */
+    private val failed = ConcurrentHashMap<String, Long>()
+
+    private fun recentlyFailed(url: String): Boolean {
+        val at = failed[url] ?: return false
+        if (System.currentTimeMillis() - at < 120_000L) return true
+        failed.remove(url)
+        return false
+    }
+    /** Hosts that timed out or couldn't be reached lately (when): their pictures aren't waited for
+     *  for a minute (the network coming back after that gets them again). */
+    private val deadHosts = ConcurrentHashMap<String, Long>()
+
+    private fun hostDown(url: String): Boolean {
+        val h = host(url) ?: return false
+        val at = deadHosts[h] ?: return false
+        if (System.currentTimeMillis() - at < 60_000L) return true
+        deadHosts.remove(h)
+        return false
+    }
+    /**
+     * Pictures being fetched, and the views waiting for each (main thread only). A view asking
+     * for one already on its way waits for it instead of fetching it again: a page that redraws
+     * its cards (new views each time) no longer piles up copies of the same downloads, which
+     * kept every other picture in the app waiting.
+     */
+    private val inflight = HashMap<String, MutableList<Waiter>>()
+
+    private class Waiter(val view: NetImage, val keep: Boolean, val onResult: ((Boolean) -> Unit)?)
+
+    private fun pool(name: String, threads: Int): java.util.concurrent.ThreadPoolExecutor =
+        java.util.concurrent.ThreadPoolExecutor(
+            threads,
+            threads,
+            30L,
+            java.util.concurrent.TimeUnit.SECONDS,
+            // A stack: the most recent request goes first.
+            object : java.util.concurrent.LinkedBlockingDeque<Runnable>() {
+                override fun offer(e: Runnable): Boolean = offerFirst(e)
+            },
+        ) { r ->
+            Thread(r, name).apply {
+                isDaemon = true
+                priority = Thread.NORM_PRIORITY - 1
+            }
+        }.apply { allowCoreThreadTimeOut(true) }
+
+    private fun host(url: String): String? = try {
+        java.net.URI(url).host
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun isLocal(url: String) = url.startsWith("data:") || url.startsWith(APP_ORIGIN)
 
     /**
      * Shows the first of [urls] that loads in [view], decoded for about [widthPx] x [heightPx].
@@ -54,7 +104,9 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
      */
     fun load(view: NetImage, urls: List<String>, widthPx: Int, heightPx: Int, alpha: Boolean = false, crop: Boolean = false, keep: Boolean = false, onResult: ((Boolean) -> Unit)? = null) {
         val list = urls.filter {
-            (it.startsWith("https://") || it.startsWith("http://") || it.startsWith("data:image/")) && it !in failed
+            (it.startsWith("https://") || it.startsWith("http://") || it.startsWith("data:image/")) &&
+                !recentlyFailed(it) &&
+                (isLocal(it) || !hostDown(it))
         }.distinct()
         val w = widthPx.coerceAtLeast(1)
         val h = heightPx.coerceAtLeast(1)
@@ -63,7 +115,6 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
             onResult?.invoke(true)
             return
         }
-        view.job?.cancel(false)
         view.job = null
         view.want = sig
         if (list.isEmpty()) {
@@ -72,44 +123,64 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
             return
         }
         memory.get(memKey(list[0], w, h, crop))?.let {
+            view.animate().cancel()
             view.alpha = 1f
             view.setImageBitmap(it)
             onResult?.invoke(true)
             return
         }
-        val holding = keep && view.drawable != null
-        if (!holding) view.setImageDrawable(null)
-        view.job = pool.submit {
+        if (!(keep && view.drawable != null)) view.setImageDrawable(null)
+        val waiter = Waiter(view, keep, onResult)
+        synchronized(inflight) {
+            inflight[sig]?.let {
+                it.add(waiter)
+                return
+            }
+            inflight[sig] = mutableListOf(waiter)
+        }
+        val lane = if (list.all { isLocal(it) }) local else net
+        lane.execute {
+            // Nobody wants it any more (the card was redrawn or scrolled away): skip the work.
+            val wanted = synchronized(inflight) { inflight[sig]?.any { it.view.want == sig } == true }
             var bmp: Bitmap? = null
-            for (u in list) {
-                val key = memKey(u, w, h, crop)
-                bmp = memory.get(key) ?: decode(u, w, h, alpha, crop)?.also { memory.put(key, it) }
-                if (bmp != null) break
-                failed.add(u)
+            if (wanted) {
+                for (u in list) {
+                    val key = memKey(u, w, h, crop)
+                    bmp = memory.get(key) ?: decode(u, w, h, alpha, crop)?.also { memory.put(key, it) }
+                    if (bmp != null) break
+                    failed[u] = System.currentTimeMillis()
+                }
             }
             val result = bmp
             main.post {
-                if (view.want != sig) return@post
-                view.job = null
-                if (result != null) {
-                    if (holding && view.drawable != null) {
-                        view.animate().cancel()
-                        view.alpha = 1f
-                        view.setImageBitmap(result)
-                    } else {
-                        view.alpha = 0f
-                        view.setImageBitmap(result)
-                        view.animate().alpha(1f).setDuration(180).start()
+                val waiting = synchronized(inflight) { inflight.remove(sig) } ?: return@post
+                for (wt in waiting) {
+                    val v = wt.view
+                    if (v.want != sig) continue
+                    if (!wanted) {
+                        // Skipped while nobody wanted it, wanted again since: ask once more.
+                        load(v, urls, widthPx, heightPx, alpha, crop, wt.keep, wt.onResult)
+                        continue
                     }
+                    if (result != null) {
+                        if (wt.keep && v.drawable != null) {
+                            v.animate().cancel()
+                            v.alpha = 1f
+                            v.setImageBitmap(result)
+                        } else {
+                            v.alpha = 0f
+                            v.setImageBitmap(result)
+                            v.animate().alpha(1f).setDuration(180).start()
+                        }
+                    }
+                    wt.onResult?.invoke(result != null)
                 }
-                onResult?.invoke(result != null)
             }
         }
     }
 
     /** Forget what [view] was showing or waiting for (it scrolled away for good). */
     fun clear(view: NetImage) {
-        view.job?.cancel(false)
         view.job = null
         view.want = null
         view.setImageDrawable(null)
@@ -140,7 +211,11 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
                     store.download(target, headers).use { it.readBytes() }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // A host that doesn't answer (or can't be found) isn't waited for again this session.
+            if (e is java.net.SocketTimeoutException || e is java.net.UnknownHostException || e is java.net.ConnectException) {
+                host(url)?.let { deadHosts[it] = System.currentTimeMillis() }
+            }
             return null
         }
         return try {
