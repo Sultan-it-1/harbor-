@@ -49,6 +49,13 @@ import { useImdbId } from "./play-picker/use-imdb-id";
 import { usePipelineResult } from "./play-picker/use-pipeline-result";
 import { useStreamIds } from "./play-picker/use-stream-ids";
 import { t } from "@/lib/i18n/translate";
+import { useT } from "@/lib/i18n";
+import { addonLogoSrc } from "@/components/addon-logo";
+import { streamBadges } from "@/components/format-badge";
+import { useNativeBrowsePage, useAssetDataUrls, type NativeRowInput } from "@/views/native/native-screens";
+import { pendingAddons, useStremioSources } from "./play-picker/stremio-layout";
+import { condenseDescription } from "./play-picker/stremio-row";
+import { qualityTier } from "./play-picker/quality-filter";
 
 const TIER_ORDER: Tier[] = ["4K_DV", "4K_HDR", "4K", "1080p_HDR", "1080p", "720p", "SD", "ROUGH"];
 
@@ -68,7 +75,7 @@ export function PlayPicker({
   resume?: boolean;
 }) {
   const isDownload = intent === "download";
-  const { openPlayer, openSettings, exitPickerToDetail } = useView();
+  const { openPlayer, openSettings, exitPickerToDetail, topKind } = useView();
   const backToDetail = () => {
     void exitWindowFullscreen();
     exitPickerToDetail(meta);
@@ -478,6 +485,128 @@ export function PlayPicker({
   const noSourcesConfigured =
     addons !== null && addons.length === 0 && debrids.length === 0;
 
+  // Android: the sources drawn natively (see @/views/native/native-screens) as the page's
+  // Stremio-style list: the title (the episode's line, its name and overview), the addons and the
+  // qualities to pick (with their counts) and Refresh, then each source (the addon's logo, name,
+  // description, labels, Play); "Searching streams" and the addons still answering as on the page.
+  // The other layout, the empty ladder and the page's full-screen steps (auto-play, P2P,
+  // debrid down…) keep the page.
+  const tt = useT();
+  const stremioNative = settings.pickerLayout === "stremio" || isDownload;
+  const listed = stremioNative && filteredPicker ? displayStreams : [];
+  const preserve = addonOrderMode || !!hostMatch;
+  const src = useStremioSources(listed, addons, preserve);
+  const logoOf = (s: ScoredStream) =>
+    src.addonLogoMap.get(s.addonUrl ?? "") ?? src.addonLogoMap.get(s.addonId) ?? addonLogoSrc(s.addonId, s.addonName ?? "") ?? null;
+  const toData = useAssetDataUrls(src.visibleStreams.map(logoOf));
+  const waiting = pendingAddons(addons, listed);
+  const pickerNativeBlocked =
+    !stremioNative ||
+    noSourcesConfigured ||
+    !!p2pConfirm ||
+    showAutoTransition ||
+    debridDown ||
+    autoExhausted ||
+    !!downloadConfirm ||
+    (addonsSettled && (!filteredPicker || filteredPicker.all.length === 0));
+  const pickerRows = useMemo<NativeRowInput[]>(() => {
+    const out: NativeRowInput[] = [];
+    const card = (key: string, c: { title: string; sub?: string | null; tone?: "plain" | "danger"; busy?: boolean; icon?: string }) =>
+      out.push({ key, title: "", kind: "action", metas: [], cards: [{ title: c.title, sub: c.sub ?? null, tone: c.tone ?? "plain", busy: c.busy, icon: c.icon }] });
+    if (isDownload) card("download", { title: tt("Choose a source to save offline. You can track progress on the Downloads page."), icon: "download" });
+    if (stubBanner) card("stub", { title: stubBanner, icon: "alert" });
+    if (!addonsSettled && (!filteredPicker || filteredPicker.all.length === 0)) card("searching", { title: tt("Searching streams"), busy: true });
+    if (src.visibleStreams.length > 0) {
+      out.push({
+        key: "sources",
+        title: "",
+        kind: "sources",
+        metas: [],
+        cards: src.visibleStreams.map((s) => {
+          const raw = s.title?.trim() || s.description?.trim() || "";
+          const failed = failedStreams.has(s);
+          return {
+            title: s.name?.trim() || s.addonName || "Source",
+            desc: (settings.fullStreamDescription ? raw : condenseDescription(raw)) || null,
+            img: [toData(logoOf(s))].filter((u): u is string => !!u),
+            kicker: s.addonName ?? null,
+            tags: settings.showQualityBadge ? streamBadges(s).map(shortBadge) : [],
+            tone: failed ? ("danger" as const) : undefined,
+            sub: failed ? tt("Unavailable, try another.") : null,
+          };
+        }),
+        onOpen: (i) => {
+          const s = src.visibleStreams[i];
+          if (s) playManually(s);
+        },
+      });
+    }
+    if (!pipelineDone && listed.length > 0) {
+      const n = Math.max(waiting.length, Math.max(0, (addons?.length ?? 0) - addonCount));
+      card("pending", {
+        title: waiting[0]
+          ? `${tt("Waiting for")} ${waiting[0].manifest?.name ?? waiting[0].manifest?.id ?? ""}`
+          : n === 1
+            ? tt("1 addon loading")
+            : n > 1
+              ? tt("{n} addons loading", { n })
+              : tt("Loading more sources"),
+        busy: true,
+      });
+    }
+    if (resolveError) card("error", { title: resolveError, tone: engineWarming ? "plain" : "danger", busy: engineWarming });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tt, isDownload, stubBanner, addonsSettled, filteredPicker, src.visibleStreams, failedStreams, settings.fullStreamDescription, settings.showQualityBadge, pipelineDone, listed.length, waiting.length, addons, addonCount, resolveError, engineWarming, toData]);
+  const pickerNative = useNativeBrowsePage("picker", {
+    active: topKind === "picker",
+    blocked: pickerNativeBlocked,
+    t: tt,
+    back: true,
+    onBack: backToDetail,
+    noTogether: true,
+    header: {
+      kicker: episode
+        ? `${meta.name} ${tt("· Season")} ${episode.imdbSeason ?? episode.season} ${tt("· Episode")} ${String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}`
+        : [meta.releaseInfo, ...(meta.genres ?? []).slice(0, 2)].filter(Boolean).join(" · ") || null,
+      title: episode ? episode.name || tt("Episode {n}", { n: episode.episode }) : meta.name,
+      size: 34,
+      body: episode?.overview || null,
+      backdrop: backdropSrc ? [backdropSrc] : [],
+    },
+    chips:
+      listed.length > 0
+        ? [
+            {
+              key: "addon",
+              items: [
+                { id: "all", label: `${tt("All sources")}  ${listed.length}`, on: src.filter === "all" },
+                ...src.addonOptions.map((o) => ({ id: o.id, label: `${o.name}  ${o.count}`, on: src.filter === o.id })),
+                { id: "refresh", label: `⟳  ${tt("Refresh")}`, on: false },
+              ],
+            },
+            ...(src.qualityOptions.length > 1
+              ? [
+                  {
+                    key: "quality",
+                    items: [
+                      { id: "all", label: `${tt("All")}  ${src.addonFiltered.length}`, on: src.quality === "all" },
+                      ...src.qualityOptions.map((o) => ({ id: o.tier, label: `${o.tier}  ${o.count}`, on: src.quality === o.tier })),
+                    ],
+                  },
+                ]
+              : []),
+          ]
+        : [{ key: "addon", items: [{ id: "refresh", label: `⟳  ${tt("Refresh")}`, on: false }] }],
+    onChip: (group, id) => {
+      if (id === "refresh") refresh();
+      else if (group === "addon") src.setFilter(id);
+      else if (group === "quality") src.setQuality(id);
+    },
+    rows: pickerRows,
+  });
+  void qualityTier;
+
   if (noSourcesConfigured) {
     return <NoSourcesConfiguredModal meta={meta} />;
   }
@@ -545,6 +674,8 @@ export function PlayPicker({
       />
     );
   }
+
+  if (pickerNative) return <main className="absolute inset-0 z-50 overflow-hidden bg-canvas" />;
 
   return (
     <main className="absolute inset-0 z-50 overflow-y-auto bg-canvas">
@@ -696,3 +827,39 @@ export function PlayPicker({
   );
 }
 
+
+/** A format label as short as the page's badge reads (4K, HDR10+, DV, Atmos…). */
+function shortBadge(kind: string): string {
+  const map: Record<string, string> = {
+    "8k": "8K",
+    "4k-uhd": "4K",
+    uhd: "UHD",
+    "2k-qhd": "2K",
+    hdr10: "HDR10",
+    "hdr10-plus": "HDR10+",
+    dv: "DV",
+    hdr: "HDR",
+    hlg: "HLG",
+    sdr: "SDR",
+    atmos: "Atmos",
+    "atmos-912": "Atmos 9.1.2",
+    truehd: "TrueHD",
+    "dts-hd": "DTS-HD",
+    "dts-hd-ma": "DTS-HD MA",
+    "dts-x": "DTS:X",
+    dts: "DTS",
+    dd: "DD",
+    ddp: "DD+",
+    ac3: "AC3",
+    eac3: "EAC3",
+    webdl: "WEB-DL",
+    webrip: "WEBRip",
+    bluray: "BluRay",
+    remux: "REMUX",
+    hevc: "HEVC",
+    av1: "AV1",
+    imax: "IMAX",
+    "3d": "3D",
+  };
+  return map[kind] ?? kind.toUpperCase();
+}

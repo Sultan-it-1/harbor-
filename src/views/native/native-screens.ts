@@ -629,7 +629,7 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action" | "live" | "guide" | "channel" | "livehero" | "sports";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action" | "live" | "guide" | "channel" | "livehero" | "sports" | "sources";
   /** Choices under the title (a series' seasons) and what picking one does. */
   chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
   onRowChip?: (id: string) => void;
@@ -722,6 +722,8 @@ export type NativeCardInput = {
   /** Live TV: the channel's logo and whether the programme's bar ([progress]) shows. */
   logo?: string | null;
   bar?: boolean;
+  /** A source's labels (4K, HDR, Atmos…). */
+  tags?: string[];
 };
 
 /** The page's row editor (Discover, Movies, Shows): the page-rows customisation it edits. */
@@ -796,6 +798,7 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
         busy: !!c.busy,
         logo: c.logo && isUrlOrData(c.logo) ? c.logo : null,
         bar: !!c.bar,
+        tags: c.tags ?? [],
       })),
       chips: r.chips ?? null,
       tools: r.tools ?? [],
@@ -814,6 +817,44 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
     lead: r.lead ? { title: r.lead.title, sub: r.lead.sub ?? null, img: (r.lead.img ?? []).filter(isUrlOrData) } : null,
     items: r.rank ? shown.map(cards.rank) : shown.map(cards.poster),
   };
+}
+
+/**
+ * Pictures that ship with the app (an addon's bundled logo) as data: addresses the native screen
+ * can draw (it can't reach the page's own files). Others pass through.
+ */
+const assetData = new Map<string, string | null>();
+export function useAssetDataUrls(srcs: Array<string | null | undefined>): (src: string | null | undefined) => string | null {
+  const [, bump] = useState(0);
+  const key = srcs.filter(Boolean).join("|");
+  useEffect(() => {
+    let alive = true;
+    const local = [...new Set(srcs.filter((s): s is string => !!s && !/^(https?:|data:)/i.test(s) && !assetData.has(s)))];
+    for (const s of local) {
+      assetData.set(s, null);
+      fetch(s)
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+        .then(
+          (b) =>
+            new Promise<string>((resolve, reject) => {
+              const fr = new FileReader();
+              fr.onload = () => resolve(String(fr.result));
+              fr.onerror = () => reject(fr.error);
+              fr.readAsDataURL(b);
+            }),
+        )
+        .then((d) => {
+          assetData.set(s, d);
+          if (alive) bump((n) => n + 1);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return (src) => (!src ? null : /^(https?:|data:)/i.test(src) ? src : (assetData.get(src) ?? null));
 }
 
 /** A small number for a string (Java's String.hashCode): the screen only compares it. */

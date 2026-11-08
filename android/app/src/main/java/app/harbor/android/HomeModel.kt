@@ -106,6 +106,7 @@ class HomeModel(
                             busy = c.optBoolean("busy", false),
                             logo = c.str("logo"),
                             bar = c.optBoolean("bar", false),
+                            tags = c.optJSONArray("tags").strings(),
                             desc = c.str("desc"),
                         )
                     }
@@ -148,6 +149,7 @@ class HomeModel(
                             "channel" -> HomeRow.Kind.CHANNEL
                             "livehero" -> HomeRow.Kind.LIVEHERO
                             "sports" -> HomeRow.Kind.SPORTS
+                            "sources" -> HomeRow.Kind.SOURCES
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -466,7 +468,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS, SOURCES }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -528,6 +530,8 @@ class HomeCard(
      *  the programme's bar ([progress]) shows. */
     val logo: String? = null,
     val bar: Boolean = false,
+    /** A source's quality and format labels (4K, HDR, Atmos…). */
+    val tags: List<String> = emptyList(),
 )
 
 /** A row's controls in the page's editor. [numerals] / [hero]: 1 on, 0 off, -1 not offered. */

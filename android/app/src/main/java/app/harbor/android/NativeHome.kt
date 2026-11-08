@@ -403,6 +403,12 @@ class NativeHome(
             if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
             for (r in m.rows) {
+                if (r.kind == HomeRow.Kind.SOURCES) {
+                    // A title's sources to play: a card each, down the page.
+                    val base = stableId(r.key) shl 20
+                    r.items.forEachIndexed { i, _ -> out.add(Section(T_SOURCE, base + i, r, start = i)) }
+                    continue
+                }
                 if (r.kind == HomeRow.Kind.ACTION) {
                     // Cards that do one thing (Browse a genre, Ask AI, play a link), no heading.
                     val base = stableId(r.key) shl 20
@@ -509,6 +515,7 @@ class NativeHome(
             T_QUEUE -> QueueHolder()
             T_WINNER -> WinnerHolder()
             T_ACTION -> ActionHolder()
+            T_SOURCE -> SourceHolder()
             T_CALBAR -> CalendarBarHolder()
             T_CALENDAR -> CalendarHolder()
             T_DL_TOP -> DownloadsTopHolder()
@@ -545,6 +552,7 @@ class NativeHome(
                 is DownloadGroupHolder -> m.downloads?.groups?.getOrNull(items[position].start)?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
+                is SourceHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ActionHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is WinnerHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
             }
@@ -1231,6 +1239,105 @@ class NativeHome(
             buttonText.setTextColor(colors.canvas)
             spinner.visibility = if (c.busy && c.button == null) View.VISIBLE else View.GONE
             spinner.indeterminateTintList = android.content.res.ColorStateList.valueOf(colors.muted)
+        }
+    }
+
+    /**
+     * A source to play, as the page lists them (Stremio style): the addon's round logo (or its
+     * initial), the source's name, its description, its format labels, "Unavailable" when it
+     * failed, and the round Play button. A tap anywhere plays it.
+     * Card: title = name, desc = description, images = the addon's logo, kicker = the addon's
+     * name, tags = labels, sub = the failure line, tone "danger" = failed.
+     */
+    private inner class SourceHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val card = itemView as LinearLayout
+        private val logoBox = FrameLayout(ctx)
+        private val logo = NetImage(ctx)
+        private val initial = label("", 13f, bold = true, lines = 1)
+        private val title = label("", 14.5f, bold = true, lines = 3)
+        private val desc = label("", 12.5f, lines = 4)
+        private val tags = FlowRow(ctx, dp(6), dp(6))
+        private val failed = label("", 13f, lines = 2)
+        private val play = FrameLayout(ctx)
+        private var rowKey = ""
+        private var index = -1
+
+        init {
+            card.orientation = LinearLayout.HORIZONTAL
+            card.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(16)
+                marginEnd = dp(16)
+                bottomMargin = dp(8)
+            }
+            card.setPadding(dp(14), dp(14), dp(14), dp(14))
+            card.isClickable = true
+            card.isFocusable = true
+            card.setOnClickListener { act("open", row = rowKey, i = index) }
+            logoBox.clipToOutline = true
+            logoBox.outlineProvider = roundOutline(dp(18).toFloat())
+            logo.scaleType = ImageView.ScaleType.CENTER_CROP
+            logoBox.addView(initial, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            logoBox.addView(logo, FrameLayout.LayoutParams(MATCH, MATCH))
+            card.addView(logoBox, LinearLayout.LayoutParams(dp(36), dp(36)))
+            val mid = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            title.setLineSpacing(0f, 1.15f)
+            mid.addView(title)
+            desc.setLineSpacing(0f, 1.2f)
+            mid.addView(desc, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            mid.addView(tags, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+            mid.addView(failed, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            card.addView(mid, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12); marginEnd = dp(12) })
+            play.isClickable = true
+            play.isFocusable = true
+            play.setOnClickListener { act("open", row = rowKey, i = index) }
+            play.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(19), dp(19), Gravity.CENTER))
+            card.addView(play, LinearLayout.LayoutParams(dp(44), dp(44)).apply { gravity = Gravity.CENTER_VERTICAL })
+        }
+
+        fun bind(r: HomeRow, i: Int, c: HomeCard) {
+            rowKey = r.key
+            index = i
+            val bad = c.tone == "danger"
+            card.contentDescription = c.title
+            card.background = focusable(
+                rounded(
+                    if (bad) withAlpha(0xFFE5484D.toInt(), 0.05f) else withAlpha(colors.surface, 0.4f),
+                    dp(16).toFloat(),
+                    dp(1),
+                    if (bad) withAlpha(0xFFE5484D.toInt(), 0.4f) else withAlpha(colors.ink, 0.08f),
+                ),
+            )
+            logoBox.background = rounded(colors.surface, dp(18).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            initial.text = (c.kicker ?: c.title).trim().take(1).uppercase()
+            initial.setTextColor(colors.muted)
+            if (c.images.isNotEmpty()) {
+                logo.visibility = View.VISIBLE
+                images.load(logo, c.images, dp(36), dp(36)) { ok -> logo.visibility = if (ok) View.VISIBLE else View.GONE }
+            } else {
+                images.clear(logo)
+                logo.visibility = View.GONE
+            }
+            title.text = c.title
+            title.setTextColor(colors.ink)
+            desc.text = c.desc ?: ""
+            desc.visibility = if (c.desc.isNullOrBlank()) View.GONE else View.VISIBLE
+            desc.setTextColor(colors.muted)
+            tags.removeAllViews()
+            for (tg in c.tags) {
+                tags.addView(label(tg, 10.5f, bold = true, lines = 1).apply {
+                    setTextColor(colors.ink)
+                    setPaddingRelative(dp(7), dp(2), dp(7), dp(2))
+                    background = rounded(withAlpha(colors.canvas, 0.6f), dp(5).toFloat(), dp(1), withAlpha(colors.ink, 0.14f))
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                })
+            }
+            tags.visibility = if (c.tags.isEmpty()) View.GONE else View.VISIBLE
+            failed.text = c.sub ?: ""
+            failed.visibility = if (bad && !c.sub.isNullOrBlank()) View.VISIBLE else View.GONE
+            failed.setTextColor(0xFFE5484D.toInt())
+            play.background = focusable(GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(colors.accent) })
+            play.contentDescription = model?.label("play", "Play")
+            play.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
         }
     }
 
@@ -4553,6 +4660,7 @@ class NativeHome(
         private const val T_ACTION = 25
         private const val T_GRID_CHANNEL = 26
         private const val T_LIVEHERO = 27
+        private const val T_SOURCE = 28
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

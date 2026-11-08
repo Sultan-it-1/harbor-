@@ -8,27 +8,12 @@ import { QualityFilterBar, qualityTier, qualityTiersOf } from "./quality-filter"
 import { addonInstanceKey, buildAddonOptions } from "./picker-utils";
 import { t } from "@/lib/i18n/translate";
 
-export function StremioLayout({
-  streams,
-  addons,
-  pipelineDone,
-  loadingAddonCount,
-  failedStreams,
-  preserveOrder,
-  matchFor,
-  onPlay,
-}: {
-  streams: ScoredStream[];
-  addons: Addon[] | null;
-  pipelineDone: boolean;
-  loadingAddonCount: number;
-  failedStreams: Set<ScoredStream>;
-  preserveOrder?: boolean;
-  matchFor?: (s: ScoredStream) => "same" | "close" | null;
-  onPlay: (stream: ScoredStream) => void;
-}) {
+/**
+ * What the Stremio-style list shows: the addons to filter by (with counts), the qualities, and
+ * the sources in order (also Android's native source list, so both show the same).
+ */
+export function useStremioSources(streams: ScoredStream[], addons: Addon[] | null, preserveOrder?: boolean) {
   const [filter, setFilter] = useState<string>("all");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [quality, setQuality] = useState<string>("all");
   const addonLogoMap = useMemo(() => {
     const m = new Map<string, string | null>();
@@ -81,6 +66,44 @@ export function StremioLayout({
       return 0;
     });
   }, [addonFiltered, quality, filter, addonRank, preserveOrder]);
+  return { filter, setFilter, quality, setQuality, addonLogoMap, addonOptions, qualityOptions, addonFiltered, visibleStreams };
+}
+
+/** The addons that may still answer (their logos), as the "Waiting for …" pill counts them. */
+export function pendingAddons(addons: Addon[] | null, streams: ScoredStream[]): Addon[] {
+  if (!addons || addons.length === 0) return [];
+  const returned = new Set(streams.map((s) => s.addonId));
+  return addons.filter((a) => {
+    const id = a.manifest?.id;
+    if (!id) return false;
+    const hasStream = (a.manifest?.resources ?? []).some((r) => (typeof r === "string" ? r === "stream" : r.name === "stream"));
+    if (!hasStream) return false;
+    return !returned.has(id);
+  });
+}
+
+export function StremioLayout({
+  streams,
+  addons,
+  pipelineDone,
+  loadingAddonCount,
+  failedStreams,
+  preserveOrder,
+  matchFor,
+  onPlay,
+}: {
+  streams: ScoredStream[];
+  addons: Addon[] | null;
+  pipelineDone: boolean;
+  loadingAddonCount: number;
+  failedStreams: Set<ScoredStream>;
+  preserveOrder?: boolean;
+  matchFor?: (s: ScoredStream) => "same" | "close" | null;
+  onPlay: (stream: ScoredStream) => void;
+}) {
+  const [filterOpen, setFilterOpen] = useState(false);
+  const { filter, setFilter, quality, setQuality, addonLogoMap, addonOptions, qualityOptions, addonFiltered, visibleStreams } =
+    useStremioSources(streams, addons, preserveOrder);
   const filterLabel = filter === "all"
     ? "All"
     : addonOptions.find((o) => o.id === filter)?.name ?? "All";
@@ -184,19 +207,7 @@ function PendingAddonsPill({
   streams: ScoredStream[];
   fallbackCount: number;
 }) {
-  const pending = useMemo(() => {
-    if (!addons || addons.length === 0) return [] as Addon[];
-    const returned = new Set(streams.map((s) => s.addonId));
-    return addons.filter((a) => {
-      const id = a.manifest?.id;
-      if (!id) return false;
-      const hasStream = (a.manifest?.resources ?? []).some((r) =>
-        typeof r === "string" ? r === "stream" : r.name === "stream",
-      );
-      if (!hasStream) return false;
-      return !returned.has(id);
-    });
-  }, [addons, streams]);
+  const pending = useMemo(() => pendingAddons(addons, streams), [addons, streams]);
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (pending.length <= 1) return;

@@ -87,7 +87,7 @@ export function StremioRow({
   );
 }
 
-function condenseDescription(text: string): string {
+export function condenseDescription(text: string): string {
   if (!text) return "";
   const [first, ...rest] = text.split("\n");
   const head = first.length > 90 ? first.slice(0, 90).trimEnd() + "…" : first;
