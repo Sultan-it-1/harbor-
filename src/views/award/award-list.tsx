@@ -1,6 +1,7 @@
 import { ArrowUpRight, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AWARD_CATALOG } from "@/lib/awards-catalog";
+import type { Meta } from "@/lib/cinemeta";
 import { readAwardHistory, type CategoryHistory } from "@/lib/awards-history";
 import { tmdbPersonIdByName } from "@/lib/providers/tmdb";
 import type { AwardType } from "@/lib/providers/wikidata";
@@ -8,8 +9,8 @@ import { useSettings } from "@/lib/settings";
 import { useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
 
-export function AwardList({ awardType, tint }: { awardType: AwardType; tint: string }) {
-  const t = useT();
+/** The award's winners by category, filtered by decade and by a search (also Android's native list). */
+export function useAwardList(awardType: AwardType) {
   const meta = AWARD_CATALOG[awardType];
   const history = useMemo(
     () => readAwardHistory(awardType, meta.categories),
@@ -50,6 +51,29 @@ export function AwardList({ awardType, tint }: { awardType: AwardType; tint: str
 
   const filtered = decade !== null || query.trim().length > 0;
   const noResults = filtered && filteredHistory.length === 0;
+  return { history, decades, decade, setDecade, query, setQuery, filteredHistory, noResults };
+}
+
+/** A category's works are series (Emmys' series categories…): TMDB is searched for TV first. */
+export function prefersTv(categoryName: string): boolean {
+  return TV_CATEGORY_RX.test(categoryName);
+}
+
+/** A winner's work looked up on TMDB and opened. */
+export async function openAwardWork(
+  key: string,
+  title: string,
+  year: number,
+  preferTv: boolean,
+  openMeta: (m: Meta) => void,
+): Promise<void> {
+  const hit = await resolveAwardWork(key, title, year, preferTv);
+  if (hit) openMeta({ id: `tmdb:${hit.type}:${hit.id}`, type: hit.type === "movie" ? "movie" : "series", name: title });
+}
+
+export function AwardList({ awardType, tint }: { awardType: AwardType; tint: string }) {
+  const t = useT();
+  const { history, decades, decade, setDecade, query, setQuery, filteredHistory, noResults } = useAwardList(awardType);
 
   if (history.length === 0) {
     return (

@@ -1,6 +1,7 @@
 import { ExternalLink, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNativeSheet } from "@/views/native/native-screens";
 import { AwardLogo, laurelColorFor } from "@/components/icons/award-logo";
 import { Laurel } from "@/components/icons/laurel";
 import type { AwardEntry, AwardType } from "@/lib/providers/wikidata";
@@ -84,8 +85,43 @@ export function AwardDetailModal({
   const wins = entries.filter((e) => e.result === "won").length;
   const noms = entries.filter((e) => e.result === "nominated").length;
   const tint = laurelColorFor(type);
+  // Android's native screen: the same list as its own menu sliding up from the bottom (the award
+  // and its count on top, then each work: year, Won / Nom, title or categories; a tap opens it).
+  const native = useNativeSheet(
+    `award:${type}:${entries.length}`,
+    [
+      {
+        id: "hdr",
+        label: [
+          TYPE_TITLE[type],
+          [wins > 0 ? `${wins} ${wins === 1 ? "win" : "wins"}` : null, noms > 0 ? `${noms} ${noms === 1 ? "nomination" : "nominations"}` : null]
+            .filter(Boolean)
+            .join(" · "),
+        ]
+          .filter(Boolean)
+          .join("  ·  "),
+        icon: "star",
+        stay: true,
+      },
+      { id: "-", label: "", divider: true },
+      ...groups.map((g, i) => {
+        const cats = g.categories.join(", ");
+        return {
+          id: `w:${i}`,
+          label: [g.year ? String(g.year) : null, g.result === "won" ? t("Won") : t("Nom"), g.workTitle ?? (cats || g.awardName)].filter(Boolean).join("  ·  "),
+          active: g.result === "won",
+          onSelect: () => {
+            void resolveWork(g, type === "emmy").then((m) => {
+              if (m) openMeta(m);
+            });
+          },
+        };
+      }),
+    ],
+    onClose,
+  );
 
-  if (!pos) return null;
+  if (native || !pos) return null;
 
   return createPortal(
     <div

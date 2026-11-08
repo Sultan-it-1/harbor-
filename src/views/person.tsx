@@ -193,7 +193,7 @@ export function PersonView({ personId }: { personId: number }) {
   const native = useNativeBrowsePage("person", {
     scrollKey: String(personId),
     active: topKind === "person",
-    hidden: !!openAward,
+    // (A person's award opens as the screen's own menu: it stays up.)
     t,
     back: true,
     header: nativeHeader,

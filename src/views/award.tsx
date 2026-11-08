@@ -15,9 +15,10 @@ import type { AwardType } from "@/lib/providers/wikidata";
 import { useSettings } from "@/lib/settings";
 import { useScrollMemory, useView } from "@/lib/view";
 import { useT } from "@/lib/i18n";
-import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
+import { useNativeBrowsePage, useNativeSheet, type NativeRowInput } from "@/views/native/native-screens";
 import { AwardHero } from "./award/award-hero";
-import { AwardList } from "./award/award-list";
+import { AwardList, openAwardWork, prefersTv, useAwardList } from "./award/award-list";
+import { tmdbPersonIdByName } from "@/lib/providers/tmdb";
 import { FilmGrid } from "./award/film-grid";
 import { PeopleRail } from "./award/people-rail";
 
@@ -150,6 +151,48 @@ export function AwardView({ awardType }: { awardType: AwardType }) {
       bodyLines: 6,
     };
   }, [films, meta, tint, t]);
+  // The List: the page's winners by category (decades and a search over them), each winner's year
+  // in the award's colour, the work, who won it; a tap opens the work, a long-press lists who
+  // won it (a tap on a name opens the person).
+  const list = useAwardList(awardType);
+  const { openMeta } = useView();
+  const [recipients, setRecipients] = useState<string[] | null>(null);
+  useNativeSheet(
+    recipients && recipients.length > 0 ? `recipients:${recipients.join("|")}` : null,
+    (recipients ?? []).map((name, i) => ({
+      id: `r:${i}`,
+      label: name,
+      icon: "users",
+      onSelect: () => {
+        void tmdbPersonIdByName(settings.tmdbKey, name).then((id) => {
+          if (id) openPerson(id);
+        });
+      },
+    })),
+    () => setRecipients(null),
+  );
+  const listRows = useMemo<NativeRowInput[]>(
+    () =>
+      list.filteredHistory.map((group) => ({
+        key: `cat:${group.category.key}`,
+        title: group.category.name,
+        note: group.entries.length === 1 ? t("{n} year", { n: 1 }) : t("{n} years", { n: group.entries.length }),
+        kind: "winners" as const,
+        metas: [],
+        cards: group.entries.map((e) => ({ title: e.workTitle, sub: String(e.year), desc: e.recipients.join(", ") || null, tint })),
+        onOpen: (i) => {
+          const e = group.entries[i];
+          if (e && settings.tmdbKey) void openAwardWork(settings.tmdbKey, e.workTitle, e.year, prefersTv(group.category.name), openMeta);
+        },
+        onAction: (a, i) => {
+          const e = group.entries[i];
+          if (a !== "hold" || !e || !settings.tmdbKey || e.recipients.length === 0) return false;
+          setRecipients(e.recipients);
+          return true;
+        },
+      })),
+    [list.filteredHistory, t, tint, settings.tmdbKey, openMeta],
+  );
   const nativeRows = useMemo<NativeRowInput[]>(() => {
     const out: NativeRowInput[] = [
       {
@@ -167,6 +210,7 @@ export function AwardView({ awardType }: { awardType: AwardType }) {
         onRowChip: (id) => selectMode(id === "list" ? "list" : "gallery"),
       },
     ];
+    if (mode === "list") return [...out, ...listRows];
     if (!hasKey) return out;
     if (films.length > 0) {
       out.push({
@@ -220,16 +264,47 @@ export function AwardView({ awardType }: { awardType: AwardType }) {
     rail("directors", t("Acclaimed directors"), people.directors);
     rail("writers", t("Honored writers"), people.writers);
     return out;
-  }, [t, mode, selectMode, hasKey, films, filmsTotal, expanded, filmsDone, loadMore, onViewAll, people, tint, openPerson]);
+  }, [t, mode, selectMode, hasKey, films, filmsTotal, expanded, filmsDone, loadMore, onViewAll, people, tint, openPerson, listRows]);
   const native = useNativeBrowsePage("award", {
     scrollKey: awardType,
     active: topKind === "award",
-    blocked: mode === "list",
     t,
     back: true,
     header: nativeHeader,
     rows: nativeRows,
-    message: !hasKey
+    search:
+      mode === "list" && list.history.length > 0
+        ? { key: `award-list:${awardType}`, hint: t("Search by recipient or title…"), text: list.query, onQuery: list.setQuery }
+        : null,
+    chips:
+      mode === "list" && list.decades.length > 0
+        ? [
+            {
+              key: "decade",
+              items: [
+                { id: "all", label: t("All years"), on: list.decade === null },
+                ...list.decades.map((d) => ({ id: String(d), label: `${d}s`, on: list.decade === d })),
+              ],
+            },
+          ]
+        : [],
+    onChip: (group, id) => {
+      if (group === "decade") list.setDecade(id === "all" ? null : Number(id));
+    },
+    message: mode === "list"
+      ? list.history.length === 0
+        ? { text: t("No winners are catalogued for this award yet.") }
+        : list.noResults
+          ? {
+              text: t("No winners match these filters."),
+              action: t("Clear filters"),
+              onAction: () => {
+                list.setDecade(null);
+                list.setQuery("");
+              },
+            }
+          : null
+      : !hasKey
       ? { text: t("Add a TMDB key in Settings to unlock posters and the artists behind this award.") }
       : isEmpty
         ? { text: t("No winners are catalogued for this award yet.") }

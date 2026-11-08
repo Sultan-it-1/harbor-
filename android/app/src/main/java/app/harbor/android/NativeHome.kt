@@ -1095,6 +1095,8 @@ class NativeHome(
         private val line = LinearLayout(ctx)
         private val year = label("", 14f, bold = true, lines = 1)
         private val title = label("", 14f, lines = 2)
+        /** Who won it (an award's recipients), under the title. */
+        private val desc = label("", 13f, lines = 2)
         /** The faint line under it (the page's border). */
         private val rule = View(ctx)
         private var rowKey = ""
@@ -1113,7 +1115,14 @@ class NativeHome(
             line.setPadding(0, dp(10), 0, dp(10))
             year.fontFeatureSettings = "tnum"
             line.addView(year, LinearLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.WRAP_CONTENT))
-            line.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(16) })
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(title)
+            texts.addView(desc, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })
+            line.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(16) })
+            col.setOnLongClickListener {
+                act("hold", row = rowKey, i = index)
+                true
+            }
             col.addView(line, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
             col.addView(rule, LinearLayout.LayoutParams(MATCH, dp(1)))
         }
@@ -1128,6 +1137,9 @@ class NativeHome(
             year.setTextColor(c.tint ?: colors.accent)
             title.text = c.title
             title.setTextColor(colors.ink)
+            desc.text = c.desc ?: ""
+            desc.visibility = if (c.desc.isNullOrBlank()) View.GONE else View.VISIBLE
+            desc.setTextColor(colors.muted)
         }
     }
 
