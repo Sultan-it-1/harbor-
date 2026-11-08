@@ -274,6 +274,7 @@ class HomeModel(
                         synopsis = d.str("synopsis"),
                         taglineLink = d.optBoolean("taglineLink", false),
                         extra = d.str("extra"),
+                        pending = d.optBoolean("pending", false),
                     )
                 },
                 queue = o.optJSONObject("queue")?.let { q ->
@@ -698,6 +699,8 @@ class HomeDetail(
     val taglineLink: Boolean = false,
     /** A second, outlined button after Play (a live channel's "Open in TV Shows"): {a:"d", what:"extra"}. */
     val extra: String? = null,
+    /** The title's full details are still on their way: its words wait, then come in at once. */
+    val pending: Boolean = false,
 )
 
 class DetailPill(val id: String, val label: String, val kind: String)

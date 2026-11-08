@@ -317,31 +317,59 @@ class NativeHome(
     }
 
     /** On (Home on screen, nothing over it) or off; [bottomPx] = room kept for the page's tab bar. */
-    fun show(on: Boolean, bottomPx: Int) {
+    /**
+     * On screen or not. [linger]: another native screen is coming in over this one, so this one
+     * stays (under it) until that one has faded in, rather than leaving the page's dark background
+     * showing between them.
+     */
+    fun show(on: Boolean, bottomPx: Int, linger: Boolean = false) {
         val lp = root.layoutParams as? ViewGroup.MarginLayoutParams
         if (lp != null && lp.bottomMargin != bottomPx.coerceAtLeast(0)) {
             lp.bottomMargin = bottomPx.coerceAtLeast(0)
             root.layoutParams = lp
         }
         wanted = on
-        applyVisibility()
+        applyVisibility(linger)
     }
 
-    private fun applyVisibility() {
+    private var lingering = false
+    private val hideLater = Runnable {
+        lingering = false
+        if (!(wanted && model != null)) root.visibility = View.GONE
+    }
+
+    private fun applyVisibility(linger: Boolean = false) {
         val want = wanted && model != null
+        if (lingering) {
+            if (!want) return // on its way out already
+            // Back before it left (a quick Back): on top again.
+            root.removeCallbacks(hideLater)
+            lingering = false
+            root.animate().cancel()
+            root.alpha = 1f
+            root.bringToFront()
+            return
+        }
         if (want == isShowing) return
         root.animate().cancel()
         if (want) {
+            // Over the screen it replaces (which waits under it), fading in.
+            root.bringToFront()
             root.alpha = 0f
             root.visibility = View.VISIBLE
-            root.animate().alpha(1f).setDuration(120).start()
+            root.animate().alpha(1f).setDuration(140).start()
             bindSheet(model?.sheet)
         } else {
             if (searchField.hasFocus()) hideKeyboard(searchField)
-            root.visibility = View.GONE
             // The screen stepping aside closes its menu (and the page hears it closed).
             sheetDialog?.dismiss()
             promptDialog?.dismiss()
+            if (linger) {
+                lingering = true
+                root.postDelayed(hideLater, 200)
+            } else {
+                root.visibility = View.GONE
+            }
         }
     }
 
@@ -404,10 +432,6 @@ class NativeHome(
             if (m.header != null) out.add(Section(T_HEADER, -6))
             if (m.calendar != null) out.add(Section(T_CALBAR, -13))
             if (m.match != null) out.add(Section(T_MATCH, -16))
-            m.guide?.let { g ->
-                out.add(Section(T_GUIDE_RULER, -17))
-                g.channels.forEachIndexed { i, _ -> out.add(Section(T_GUIDE_ROW, (-1000L - i), start = i)) }
-            }
             if (m.search != null) out.add(Section(T_SEARCH, -8))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
             if (m.showCustomize || m.edit) out.add(Section(T_TOOLS, -2))
@@ -415,6 +439,11 @@ class NativeHome(
             m.chips.forEachIndexed { i, _ -> out.add(Section(T_CHIPS, -100L - i, chipsIndex = i)) }
             if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
+            // Live TV's guide: under the page's bar (playlist, search, Home / Grid / Guide, categories).
+            m.guide?.let { g ->
+                out.add(Section(T_GUIDE_RULER, -17))
+                g.channels.forEachIndexed { i, _ -> out.add(Section(T_GUIDE_ROW, (-1000L - i), start = i)) }
+            }
             for (r in m.rows) {
                 if (r.kind == HomeRow.Kind.VERSUS) {
                     // Two sides' figures, a line each, in a card (the match's stats).
@@ -4397,6 +4426,12 @@ class NativeHome(
         private val synopsis = label("", 16f)
         private val synopsisToggle = label("", 13.5f, bold = true, lines = 1)
         private var key = ""
+        /** The hero's words (tagline, logo or name, pills, awards): hidden while the details load. */
+        private val words = LinearLayout(ctx)
+        private var shownFor = ""
+        private val reveal = Runnable { showWords() }
+        /** The logo is on its way: the name waits for it (a while at most). */
+        private val nameFallback = Runnable { if (logo.visibility != View.VISIBLE) title.visibility = View.VISIBLE }
 
         init {
             col.orientation = LinearLayout.VERTICAL
@@ -4407,14 +4442,16 @@ class NativeHome(
             frame.addView(shadeSide, FrameLayout.LayoutParams(MATCH, MATCH))
             content.orientation = LinearLayout.VERTICAL
             content.setPaddingRelative(gutter, 0, gutter, dp(28))
-            content.addView(tagline, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
+            words.orientation = LinearLayout.VERTICAL
+            words.addView(tagline, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
             logo.scaleType = ImageView.ScaleType.FIT_START
-            content.addView(logo, LinearLayout.LayoutParams((width() * 0.72f).toInt(), dp(96)))
+            words.addView(logo, LinearLayout.LayoutParams((width() * 0.72f).toInt(), dp(96)))
             title.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
             title.setShadowLayer(dp(12).toFloat(), 0f, dp(3).toFloat(), 0x73000000)
-            content.addView(title)
-            content.addView(pills, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
-            content.addView(awards, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+            words.addView(title)
+            words.addView(pills, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
+            words.addView(awards, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+            content.addView(words, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT))
 
             actions.orientation = LinearLayout.HORIZONTAL
             actions.gravity = Gravity.CENTER_VERTICAL
@@ -4465,6 +4502,13 @@ class NativeHome(
             model?.detail?.let { bind(it) }
         }
 
+        private fun showWords() {
+            words.removeCallbacks(reveal)
+            for (v in listOf(words, synopsis, synopsisToggle)) {
+                if (v.alpha < 1f) v.animate().alpha(1f).setDuration(220).start()
+            }
+        }
+
         fun bind(d: HomeDetail) {
             val m = model ?: return
             val rtl = m.rtl
@@ -4475,7 +4519,7 @@ class NativeHome(
                 frame.layoutParams = flp
             }
             frame.setBackgroundColor(colors.canvas)
-            images.load(backdrop, d.backdrop, width(), heroHeight(), crop = true)
+            images.load(backdrop, d.backdrop, width(), heroHeight(), crop = true, keep = shownFor == m.top.toString())
             shadeUp.background = GradientDrawable(
                 GradientDrawable.Orientation.BOTTOM_TOP,
                 intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.55f), Color.TRANSPARENT),
@@ -4494,15 +4538,45 @@ class NativeHome(
 
             title.text = d.title
             title.setTextColor(colors.ink)
-            title.visibility = View.VISIBLE
             logo.scaleType = if (rtl) ImageView.ScaleType.FIT_END else ImageView.ScaleType.FIT_START
-            logo.visibility = View.GONE
+            words.removeCallbacks(nameFallback)
             if (d.logo != null) {
-                logo.visibility = View.INVISIBLE
+                // The logo takes the name's place: the name doesn't show first and then swap.
+                if (logo.visibility == View.GONE) logo.visibility = View.INVISIBLE
+                if (logo.visibility != View.VISIBLE) {
+                    title.visibility = View.GONE
+                    words.postDelayed(nameFallback, 900)
+                }
                 images.load(logo, listOf(d.logo), (width() * 0.72f).toInt(), dp(96), alpha = true) { ok ->
+                    words.removeCallbacks(nameFallback)
                     logo.visibility = if (ok) View.VISIBLE else View.GONE
                     title.visibility = if (ok) View.GONE else View.VISIBLE
                 }
+            } else {
+                images.clear(logo)
+                logo.visibility = View.GONE
+                title.visibility = View.VISIBLE
+            }
+            // While the details load (another title, its name only): its words wait, then fade in
+            // together, instead of the year, genres, text and logo changing one after another.
+            // (A page showing another title has another "top": see HomeModel.top.)
+            val ident = m.top.toString()
+            if (ident != shownFor) {
+                shownFor = ident
+                words.removeCallbacks(reveal)
+                if (d.pending) {
+                    words.animate().cancel()
+                    words.alpha = 0f
+                    synopsis.alpha = 0f
+                    synopsisToggle.alpha = 0f
+                    words.postDelayed(reveal, 1200)
+                } else {
+                    words.alpha = 1f
+                    synopsis.alpha = 1f
+                    synopsisToggle.alpha = 1f
+                }
+            } else if (!d.pending && words.alpha < 1f) {
+                showWords()
             }
 
             pills.removeAllViews()
@@ -5599,14 +5673,118 @@ class NativeHome(
     }
 
     /**
+     * Lets [target] follow a finger sideways; let go past a quarter of the width (or flung) and
+     * [onTurn] is told which way: forward is toward the reading direction's start (a swipe to the
+     * left, to the right in Arabic), as when turning a page. Taps still reach the buttons inside.
+     */
+    private inner class SwipeFrame : FrameLayout(ctx) {
+        var target: View? = null
+        var onTurn: ((forward: Boolean) -> Unit)? = null
+        var canPrev = false
+        var canNext = false
+        private val slop = android.view.ViewConfiguration.get(ctx).scaledTouchSlop
+        private var downX = 0f
+        private var downY = 0f
+        private var dragging = false
+        private var tracker: android.view.VelocityTracker? = null
+        /** Where the card went (px, signed) on the last turn, until the next title takes it back. */
+        private var turnedTo = 0f
+        private val settle = Runnable {
+            if (turnedTo != 0f) {
+                turnedTo = 0f
+                target?.animate()?.translationX(0f)?.alpha(1f)?.setDuration(180)?.start()
+            }
+        }
+
+        fun takeTurnedFrom(): Float {
+            val v = turnedTo
+            turnedTo = 0f
+            removeCallbacks(settle)
+            return v
+        }
+
+        private fun forward(dx: Float) = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) dx > 0 else dx < 0
+
+        private fun allowed(dx: Float) = if (forward(dx)) canNext else canPrev
+
+        override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = e.x
+                    downY = e.y
+                    dragging = false
+                    tracker?.recycle()
+                    tracker = android.view.VelocityTracker.obtain().also { it.addMovement(e) }
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    tracker?.addMovement(e)
+                    if (!dragging && startDrag(e)) return true
+                }
+            }
+            return dragging
+        }
+
+        private fun startDrag(e: android.view.MotionEvent): Boolean {
+            val dx = e.x - downX
+            val dy = e.y - downY
+            if (target?.visibility != View.VISIBLE || abs(dx) < slop || abs(dx) < abs(dy) * 1.5f) return false
+            dragging = true
+            parent?.requestDisallowInterceptTouchEvent(true)
+            target?.animate()?.cancel()
+            return true
+        }
+
+        override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+            val t = target ?: return false
+            tracker?.addMovement(e)
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> return true
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (!dragging && !startDrag(e)) return true
+                    val dx = e.x - downX
+                    // Toward an end of the queue it gives only a little.
+                    t.translationX = if (allowed(dx)) dx else dx * 0.25f
+                    t.alpha = 1f - min(0.35f, abs(t.translationX) / max(1, width).toFloat())
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    val wasDragging = dragging
+                    dragging = false
+                    val dx = e.x - downX
+                    val vt = tracker
+                    vt?.computeCurrentVelocity(1000)
+                    val vx = vt?.xVelocity ?: 0f
+                    vt?.recycle()
+                    tracker = null
+                    if (!wasDragging) return true
+                    val flung = abs(vx) > dp(700) && (vx > 0) == (dx > 0)
+                    val go = e.actionMasked == android.view.MotionEvent.ACTION_UP && allowed(dx) && (abs(dx) > width * 0.25f || flung)
+                    if (go) {
+                        val to = (if (dx > 0) 1 else -1) * width.toFloat()
+                        t.animate().translationX(to).alpha(0f).setDuration(160).withEndAction {
+                            turnedTo = to
+                            onTurn?.invoke(forward(dx))
+                            // No new title after all (the end of the queue): back in place.
+                            postDelayed(settle, 700)
+                        }.start()
+                    } else {
+                        t.animate().translationX(0f).alpha(1f).setDuration(180).start()
+                    }
+                }
+            }
+            return true
+        }
+    }
+
+    /**
      * The discovery queue, like the page: a big card for the title up now (its tag, name, year ·
      * runtime · IMDb · genres, overview; Play tonight, Save, Skip, Not interested; details at the
      * top; previous / next at the sides), then the queue's pictures in a strip (a tap jumps there,
      * the one up now ringed in the accent colour, the ones already passed faded).
+     * The card turns to the next / previous title with a swipe (no arrows).
      */
     private inner class QueueHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
         private val col = itemView as LinearLayout
-        private val wrap = FrameLayout(ctx)
+        private val wrap = SwipeFrame()
         private val card = BackedBox(ctx)
         private val backdrop = NetImage(ctx)
         private val shadeUp = View(ctx)
@@ -5622,8 +5800,6 @@ class NativeHome(
         private val facts = FlowRow(ctx, dp(10), dp(4))
         private val desc = label("", 15.5f, lines = 3)
         private val buttons = FlowRow(ctx, dp(12), dp(8))
-        private val prev = FrameLayout(ctx)
-        private val next = FrameLayout(ctx)
         private val message = label("", 15f)
         private val stripLabel = label("", 11f, bold = true, lines = 1)
         /** The queue's pictures: a list of its own, so only those in sight are made and loaded. */
@@ -5690,17 +5866,8 @@ class NativeHome(
                 marginStart = dp(24)
                 marginEnd = dp(24)
             })
-            for ((v, start) in listOf(prev to true, next to false)) {
-                v.isClickable = true
-                v.isFocusable = true
-                v.setOnClickListener { act("q", what = if (start) "prev" else "next") }
-                v.addView(ImageView(ctx).apply { tag = "ic" }, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
-                v.elevation = dp(6).toFloat()
-                wrap.addView(v, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER_VERTICAL or if (start) Gravity.START else Gravity.END).apply {
-                    marginStart = dp(12)
-                    marginEnd = dp(12)
-                })
-            }
+            wrap.target = card
+            wrap.onTurn = { forward -> act("q", what = if (forward) "next" else "prev") }
             message.gravity = Gravity.CENTER
             message.textAlignment = View.TEXT_ALIGNMENT_CENTER
             message.setPadding(dp(32), dp(48), dp(32), dp(48))
@@ -5729,8 +5896,8 @@ class NativeHome(
             val rtl = model?.rtl == true
             val has = q.title.isNotBlank()
             card.visibility = if (has) View.VISIBLE else View.GONE
-            prev.visibility = card.visibility
-            next.visibility = card.visibility
+            wrap.canPrev = has && q.canPrev
+            wrap.canNext = has && q.canNext
             message.visibility = if (has || q.message.isNullOrBlank()) View.GONE else View.VISIBLE
             message.text = q.message ?: ""
             message.setTextColor(colors.muted)
@@ -5801,20 +5968,20 @@ class NativeHome(
             buttons.addView(button(R.drawable.ic_skip_forward, q.label("skip", "Skip"), "skip"))
             buttons.addView(button(R.drawable.ic_thumbs_down, q.label("block", "Not interested"), "block"))
 
-            for ((v, enabled) in listOf(prev to q.canPrev, next to q.canNext)) {
-                v.isEnabled = enabled
-                v.alpha = if (enabled) 1f else 0.25f
-                v.background = focusable(rounded(withAlpha(colors.canvas, 0.8f), dp(22).toFloat(), dp(1), withAlpha(colors.ink, 0.12f)))
-                val left = (v === prev) != rtl
-                v.contentDescription = if (v === prev) q.label("prev", "Previous") else q.label("next", "Next")
-                v.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(if (left) R.drawable.ic_chevron_left else R.drawable.ic_chevron_right, withAlpha(colors.ink, 0.75f)))
-            }
-
-            // Another title: it slides in (the page's 200 ms change).
+            // Another title: it slides in (the page's 200 ms change); after a swipe the whole card
+            // comes in from the side it was swiped toward's other side.
             if (shownTitle.isNotEmpty() && shownTitle != q.title + q.position) {
-                content.alpha = 0f
-                content.translationX = dp(if (rtl) -24 else 24).toFloat()
-                content.animate().alpha(1f).translationX(0f).setDuration(200).start()
+                val from = wrap.takeTurnedFrom()
+                if (from != 0f) {
+                    card.animate().cancel()
+                    card.translationX = -from * 0.35f
+                    card.alpha = 0f
+                    card.animate().translationX(0f).alpha(1f).setDuration(220).start()
+                } else {
+                    content.alpha = 0f
+                    content.translationX = dp(if (rtl) -24 else 24).toFloat()
+                    content.animate().alpha(1f).translationX(0f).setDuration(200).start()
+                }
             }
             shownTitle = q.title + q.position
         }

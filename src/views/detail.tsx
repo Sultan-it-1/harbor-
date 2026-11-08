@@ -766,6 +766,8 @@ export function DetailView({
             : t("Open in Movies")
         : null,
       synopsis: overview || null,
+      // The full details are still loading: the native hero holds its words until they're in.
+      pending: loading,
     };
   }, [showSeasonPill, seasonPillLabel, isAnime, year, rating, imdbRatingValue, settings.showRtBadge, scores, mdblist, runtime, genres, backdrop, meta.background, detail?.backdrop, logo, title, loading, detectingAnime, tagline, upcoming, smartPlayLabel, overview, liveContext, meta.type, t]);
   const nativeRows = useMemo<NativeRowInput[]>(() => {

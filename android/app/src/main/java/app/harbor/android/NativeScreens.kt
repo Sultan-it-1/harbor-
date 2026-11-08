@@ -40,8 +40,10 @@ class NativeScreens(private val ctx: Context, private val images: NativeImages, 
     /** [page] on screen (null or "" = none), leaving [bottomPx] for the page's tab bar. */
     fun show(page: String?, bottomPx: Int) {
         val want = page?.takeIf { it.isNotBlank() }
-        for ((p, s) in screens) if (p != want) s.show(false, bottomPx)
+        // The new one first (it comes in on top), then the others leave: while it fades in, the
+        // one it replaces stays under it instead of the page's dark background flashing between.
         if (want != null) screen(want).show(true, bottomPx)
+        for ((p, s) in screens) if (p != want) s.show(false, bottomPx, linger = want != null)
         current = want
     }
 

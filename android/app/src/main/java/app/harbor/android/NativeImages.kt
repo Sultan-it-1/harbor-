@@ -49,9 +49,10 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
      * A view that is bound to something else before the picture arrives never gets it.
      * [onResult] (main thread) says whether a picture is shown. [crop]: the view shows it
      * centre-cropped to [widthPx] x [heightPx] (a hero): its largest version is fetched and only
-     * that middle part is decoded, at full sharpness.
+     * that middle part is decoded, at full sharpness. [keep]: the picture shown now stays until the
+     * new one is ready (a hero whose picture is swapped for a better one doesn't go blank between).
      */
-    fun load(view: NetImage, urls: List<String>, widthPx: Int, heightPx: Int, alpha: Boolean = false, crop: Boolean = false, onResult: ((Boolean) -> Unit)? = null) {
+    fun load(view: NetImage, urls: List<String>, widthPx: Int, heightPx: Int, alpha: Boolean = false, crop: Boolean = false, keep: Boolean = false, onResult: ((Boolean) -> Unit)? = null) {
         val list = urls.filter {
             (it.startsWith("https://") || it.startsWith("http://") || it.startsWith("data:image/")) && it !in failed
         }.distinct()
@@ -76,7 +77,8 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
             onResult?.invoke(true)
             return
         }
-        view.setImageDrawable(null)
+        val holding = keep && view.drawable != null
+        if (!holding) view.setImageDrawable(null)
         view.job = pool.submit {
             var bmp: Bitmap? = null
             for (u in list) {
@@ -90,9 +92,15 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
                 if (view.want != sig) return@post
                 view.job = null
                 if (result != null) {
-                    view.alpha = 0f
-                    view.setImageBitmap(result)
-                    view.animate().alpha(1f).setDuration(180).start()
+                    if (holding && view.drawable != null) {
+                        view.animate().cancel()
+                        view.alpha = 1f
+                        view.setImageBitmap(result)
+                    } else {
+                        view.alpha = 0f
+                        view.setImageBitmap(result)
+                        view.animate().alpha(1f).setDuration(180).start()
+                    }
                 }
                 onResult?.invoke(result != null)
             }
