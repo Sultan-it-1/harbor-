@@ -12,6 +12,7 @@ import { getPlaybackPosition, subscribePlaybackClock } from "@/lib/player/playba
 import type { PlayerSrc } from "@/lib/view";
 import { CLOUD_OK } from "@/lib/stremio";
 import { isSwapOnTrial, PLACEHOLDER_MAX_SEC } from "@/lib/player/swap-state";
+import { MIN_PLAYED_MS, usePlayedTime } from "./use-played-time";
 
 /** Don't save progress from a placeholder clip or a just-switched source that hasn't started:
  *  it would overwrite where you really were. */
@@ -36,6 +37,7 @@ export function useResumeAutosave(params: {
   const latestRef = useRef({ src, snap, season, episode });
   latestRef.current = { src, snap, season, episode };
   const lastGoodPosRef = useRef(0);
+  const played = usePlayedTime(snap.status, `${src.url}|${src.meta.id}|${season}|${episode}`);
 
   useEffect(() => {
     lastGoodPosRef.current = 0;
@@ -54,6 +56,9 @@ export function useResumeAutosave(params: {
     const id = s.meta.id;
     if (!id || id.startsWith("iptv:")) return;
     if (unreliable(sn)) return;
+    // A stream that failed or never really got going leaves nothing behind (Continue Watching
+    // would show a title you couldn't watch, with a progress and time left made up of the attempt).
+    if (sn.status === "error" || sn.durationSec <= 0 || played.current < MIN_PLAYED_MS) return;
     const pos = getPlaybackPosition() || lastGoodPosRef.current;
     if (pos < MIN_POSITION_SEC) return;
     lastSavedRef.current = pos * 1000;

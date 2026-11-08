@@ -4,6 +4,7 @@ import { cloudWriteId, libraryGetOne, libraryPut, type LibraryItem } from "@/lib
 import type { PlayerSnapshot } from "@/lib/player/bridge";
 import { getPlaybackPosition, subscribePlaybackClock } from "@/lib/player/playback-clock";
 import type { PlayerSrc } from "@/lib/view";
+import { MIN_PLAYED_MS, usePlayedTime } from "./use-played-time";
 
 const TICK_MS = 30000;
 const BASE_REFRESH_MS = 30000;
@@ -42,30 +43,22 @@ export function useStremioSync(params: {
   const wroteOnceRef = useRef(false);
   const latestRef = useRef({ src, snap, authKey, canonicalId, resolutionSettled });
   latestRef.current = { src, snap, authKey, canonicalId, resolutionSettled };
+  const played = usePlayedTime(snap.status, `${src.url}|${src.meta.id}`);
+  /** A failed or barely started stream writes nothing to the library (see usePlayedTime). */
+  const notYet = (sn: PlayerSnapshot) => sn.status === "error" || played.current < MIN_PLAYED_MS;
 
   const ourVideoId = videoIdFor(src, canonicalId);
 
+  // (The library learns of an episode once it has played a while — the regular write — not the
+  // moment it starts: a source that fails no longer lists the title as being watched.)
   useEffect(() => {
     const vid = ourVideoId;
-    if (vid && baseItemRef.current) {
-      const { src: s, snap: sn, authKey: ak } = latestRef.current;
-      const cid = sessionCidRef.current ?? latestRef.current.canonicalId;
-      const base = baseItemRef.current?._id === cid ? baseItemRef.current : null;
-      const seeded = base?.state as { video_id?: string; timeOffset?: number } | undefined;
-      const alreadyResumed =
-        seeded?.video_id === vid && (seeded?.timeOffset ?? 0) > MIN_POSITION_SEC * 1000;
-      if (ak && cid && base && !alreadyResumed) {
-        void writeLibraryItem(ak, s, sn, base, cid, 0.001, false, vid).then((mt) => {
-          if (mt) lastWrittenMtimesRef.current.add(mt);
-        });
-      }
-    }
     return () => {
       const { src: s, snap: sn, authKey: ak } = latestRef.current;
       const cid = sessionCidRef.current ?? latestRef.current.canonicalId;
       if (!ak || !cid || !vid) return;
       const pos = getPlaybackPosition() || lastGoodPosRef.current;
-      if (pos < MIN_POSITION_SEC || unreliable(sn)) return;
+      if (pos < MIN_POSITION_SEC || unreliable(sn) || notYet(sn)) return;
       const base = baseItemRef.current?._id === cid ? baseItemRef.current : null;
       void writeLibraryItem(ak, s, sn, base, cid, pos, false, vid).then((mt) => {
         if (mt) lastWrittenMtimesRef.current.add(mt);
@@ -124,7 +117,7 @@ export function useStremioSync(params: {
     const cid = sessionCidRef.current ?? liveCid;
     if (!cid) return;
     const pos = getPlaybackPosition() || lastGoodPosRef.current;
-    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0 || unreliable(sn)) return;
+    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0 || unreliable(sn) || notYet(sn)) return;
     const vid = videoIdFor(s, cid);
     const fresh =
       withGet || !wroteOnceRef.current ? await libraryGetOne(ak, cid).catch(() => null) : null;
@@ -160,7 +153,7 @@ export function useStremioSync(params: {
     const cid = sessionCidRef.current ?? liveCid;
     if (!cid) return Promise.resolve();
     const pos = getPlaybackPosition() || lastGoodPosRef.current;
-    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0 || unreliable(sn)) return Promise.resolve();
+    if (pos < MIN_POSITION_SEC || sn.durationSec <= 0 || unreliable(sn) || notYet(sn)) return Promise.resolve();
     const base = baseItemRef.current?._id === cid ? baseItemRef.current : null;
     return writeLibraryItem(ak, s, sn, base, cid, pos, true).then((mt) => {
       if (mt) lastWrittenMtimesRef.current.add(mt);

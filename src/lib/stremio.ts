@@ -85,7 +85,12 @@ export function isCwMember(i: LibraryItem): boolean {
     const local = resumeForItem(i)?.ms ?? 0;
     return local > 0;
   }
-  if (i.state.timeOffset > 0) return true;
+  // An attempt that never was the title (a placeholder or error clip under 90 s, as a source that
+  // fails plays) isn't something being watched: no card with a made-up progress and time left.
+  const dur = i.state.duration ?? 0;
+  if (dur > 0 && dur < 90_000) return false;
+  // A start mark of a few milliseconds (written as a source began) isn't progress either.
+  if (i.state.timeOffset > 5_000) return true;
   if ((i.state.flaggedWatched ?? 0) > 0) return false;
   const local = resumeForItem(i)?.ms ?? 0;
   if (local <= 0) return false;

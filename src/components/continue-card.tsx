@@ -340,7 +340,8 @@ function downscaleTmdb(url?: string): string | undefined {
 }
 
 export function formatRemaining(t: (key: string, vars?: Record<string, string | number>) => string, ms: number) {
-  const minutes = Math.max(0, Math.round(ms / 60000));
+  // Up, not to the nearest: a minute or less to go reads "1m left", never "0m left".
+  const minutes = Math.max(0, Math.ceil(ms / 60000));
   if (minutes < 60) return t("{m}m left", { m: minutes });
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
