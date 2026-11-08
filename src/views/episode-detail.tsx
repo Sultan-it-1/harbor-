@@ -152,8 +152,8 @@ export function EpisodeDetailView({
 
   // Android: drawn natively (see @/views/native/native-screens) like the page: the still behind
   // the hero, the series' name (it opens the series), "S1E3 — name", aired / runtime / rating,
-  // Play Episode, the synopsis, the guest stars, the stills (full screen on a tap). Loading, an
-  // error and Trakt comments keep the page.
+  // Play Episode, the synopsis, the guest stars, the stills (full screen on a tap). An error and
+  // Trakt comments keep the page.
   const nativeDetail = useMemo(() => {
     if (!episodeData || !seriesMeta) return null;
     const pills: Array<{ id: string; label: string; kind: string }> = [];
@@ -210,11 +210,14 @@ export function EpisodeDetailView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeData, t, openPerson]);
   const native = useNativeBrowsePage("episode", {
+    scrollKey: `${seriesId}:${season}:${episode}`,
     active: topKind === "episode-detail",
-    blocked: !!error || !nativeDetail || settings.showTraktComments === true,
+    blocked: !!error || settings.showTraktComments === true,
     t,
     back: true,
     detail: nativeDetail,
+    // Still loading: the screen says so (rather than the page showing for a moment).
+    message: nativeDetail ? null : { text: t("Loading…") },
     rows: nativeRows,
     onDetail: (what) => {
       if (what === "play") handlePlay();

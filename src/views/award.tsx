@@ -222,6 +222,7 @@ export function AwardView({ awardType }: { awardType: AwardType }) {
     return out;
   }, [t, mode, selectMode, hasKey, films, filmsTotal, expanded, filmsDone, loadMore, onViewAll, people, tint, openPerson]);
   const native = useNativeBrowsePage("award", {
+    scrollKey: awardType,
     active: topKind === "award",
     blocked: mode === "list",
     t,

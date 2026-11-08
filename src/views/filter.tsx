@@ -73,6 +73,7 @@ export function FilterView({ filter }: { filter: MetaFilter }) {
     [filter, t],
   );
   const native = useNativeBrowsePage("filter", {
+    scrollKey: JSON.stringify(filter),
     active: topKind === "filter",
     t,
     back: true,

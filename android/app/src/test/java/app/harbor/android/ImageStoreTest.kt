@@ -230,6 +230,18 @@ class ImageStoreTest {
         assertEquals("https://image.tmdb.org/t/p/w342/abc.jpg", ImageStore.phoneSized("https://image.tmdb.org/t/p/w342/abc.jpg", 1080))
     }
 
+    @Test fun heroesGetTheLargestPicture() {
+        assertEquals("https://image.tmdb.org/t/p/original/abc.jpg", ImageStore.heroSized("https://image.tmdb.org/t/p/w780/abc.jpg"))
+        assertEquals("https://image.tmdb.org/t/p/original/abc.jpg", ImageStore.heroSized("https://image.tmdb.org/t/p/w1280/abc.jpg"))
+        assertEquals("https://image.tmdb.org/t/p/original/abc.jpg", ImageStore.heroSized("https://image.tmdb.org/t/p/original/abc.jpg"))
+        assertEquals("https://image.tmdb.org/t/p/w500/logo.svg", ImageStore.heroSized("https://image.tmdb.org/t/p/w500/logo.svg"))
+        assertEquals(
+            "https://images.metahub.space/background/large/tt0111161/img",
+            ImageStore.heroSized("https://images.metahub.space/background/medium/tt0111161/img"),
+        )
+        assertEquals("https://media.kitsu.app/c.jpg", ImageStore.heroSized("https://media.kitsu.app/c.jpg"))
+    }
+
     @Test fun metaSurvivesARoundTrip() {
         val m = ImageStore.Meta("https://x/y", "image/png", "\"e\"", "Sat, 05 Apr 2025 04:55:55 GMT", 123, 456, false)
         assertEquals(m, ImageStore.Meta.decode(m.encode()))

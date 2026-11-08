@@ -1477,7 +1477,7 @@ class NativeHome(
                 frame.layoutParams = flp
             }
             frame.setBackgroundColor(colors.canvas)
-            images.load(backdrop, d.backdrop, width(), heroHeight())
+            images.load(backdrop, d.backdrop, width(), heroHeight(), crop = true)
             shadeUp.background = GradientDrawable(
                 GradientDrawable.Orientation.BOTTOM_TOP,
                 intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.55f), Color.TRANSPARENT),
@@ -2322,7 +2322,7 @@ class NativeHome(
                 art.visibility = View.GONE
                 if (c.logo != null) images.load(big, listOf(c.logo), (w * 0.4f).toInt(), (h * 0.42f).toInt(), alpha = true)
             }
-            if (c.images.isNotEmpty()) images.load(art, c.images, w, h) { ok -> if (!ok) logoInstead() } else logoInstead()
+            if (c.images.isNotEmpty()) images.load(art, c.images, w, h, crop = true) { ok -> if (!ok) logoInstead() } else logoInstead()
             card.addView(View(ctx).apply {
                 background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.35f), Color.TRANSPARENT))
             }, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -2580,7 +2580,7 @@ class NativeHome(
                 if (rtl) GradientDrawable.Orientation.RIGHT_LEFT else GradientDrawable.Orientation.LEFT_RIGHT,
                 intArrayOf(withAlpha(dark, 0.62f), withAlpha(dark, 0.25f), Color.TRANSPARENT, Color.TRANSPARENT),
             )
-            images.load(backdrop, q.backdrop, width() - dp(48), dp(560))
+            images.load(backdrop, q.backdrop, width() - dp(48), dp(560), crop = true)
 
             position.text = q.position
             position.letterSpacing = 0.22f
@@ -3024,7 +3024,7 @@ class NativeHome(
                 intArrayOf(colors.canvas, withAlpha(colors.canvas, 0.85f), withAlpha(colors.canvas, 0.35f), Color.TRANSPARENT),
             )
             backdrop.alpha = 1f
-            images.load(backdrop, s.images, width(), heroHeight())
+            images.load(backdrop, s.images, width(), heroHeight(), crop = true)
 
             rank.visibility = if (s.rank != null) View.VISIBLE else View.GONE
             rank.text = s.rank ?: ""

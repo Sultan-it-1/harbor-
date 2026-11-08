@@ -191,6 +191,7 @@ export function PersonView({ personId }: { personId: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [person, awardChips, knownFor, t]);
   const native = useNativeBrowsePage("person", {
+    scrollKey: String(personId),
     active: topKind === "person",
     hidden: !!openAward,
     t,

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { FloatingBack } from "@/chrome/floating-back";
 import { WindowControls } from "@/chrome/window-controls";
 import { WindowResizeEdges } from "@/chrome/window-resize-edges";
@@ -114,32 +114,55 @@ const importDownloads = () => import("@/views/downloads");
 const importMatchDetail = () => import("@/views/live/match-detail-view");
 const importOnboarding = () => import("@/components/onboarding");
 
-const AnimeView = lazy(() => importAnime().then((m) => ({ default: m.AnimeView })));
-const CalendarView = lazy(() => importCalendar().then((m) => ({ default: m.CalendarView })));
-const DetailView = lazy(() => importDetail().then((m) => ({ default: m.DetailView })));
-const AddonsView = lazy(() => importAddons().then((m) => ({ default: m.AddonsView })));
-const Discover = lazy(() => importDiscover().then((m) => ({ default: m.Discover })));
-const AwardView = lazy(() => importAward().then((m) => ({ default: m.AwardView })));
-const AnimeAwardView = lazy(() => importAnimeAward().then((m) => ({ default: m.AnimeAwardView })));
-const FilterView = lazy(() => importFilter().then((m) => ({ default: m.FilterView })));
-const GridView = lazy(() => importGrid().then((m) => ({ default: m.GridView })));
-const PersonView = lazy(() => importPerson().then((m) => ({ default: m.PersonView })));
-const CollectionView = lazy(() => importCollection().then((m) => ({ default: m.CollectionView })));
-const EpisodeDetailView = lazy(() => importEpisodeDetail().then((m) => ({ default: m.EpisodeDetailView })));
-const CollectionsView = lazy(() => import("@/views/collections").then((m) => ({ default: m.CollectionsView })));
-const PlayPicker = lazy(() => importPlayPicker().then((m) => ({ default: m.PlayPicker })));
-const PlayerView = lazy(() => importPlayer().then((m) => ({ default: m.PlayerView })));
-const Movies = lazy(() => importMovies().then((m) => ({ default: m.Movies })));
-const QueueView = lazy(() => importQueue().then((m) => ({ default: m.QueueView })));
-const ServiceView = lazy(() => importService().then((m) => ({ default: m.ServiceView })));
-const Settings = lazy(() => importSettings().then((m) => ({ default: m.Settings })));
-const Shows = lazy(() => importShows().then((m) => ({ default: m.Shows })));
-const LibraryView = lazy(() => importLibrary().then((m) => ({ default: m.LibraryView })));
-const LiveView = lazy(() => importLive().then((m) => ({ default: m.LiveView })));
-const MatchDetailView = lazy(() => importMatchDetail().then((m) => ({ default: m.MatchDetailView })));
-const PlaylistVodView = lazy(() => importVod().then((m) => ({ default: m.PlaylistVodView })));
-const DownloadsView = lazy(() => importDownloads().then((m) => ({ default: m.DownloadsView })));
-const OnboardingModal = lazy(() => importOnboarding().then((m) => ({ default: m.OnboardingModal })));
+/**
+ * A page loaded on demand (its own chunk). Once its code is in (preload() or the first opening),
+ * the page mounts straight away: React.lazy alone suspends on every first mount, and React holds a
+ * suspended page back for about 300 ms even when its code is already there (Android's native
+ * screen showed the page underneath meanwhile).
+ */
+function preloadable<P extends object>(load: () => Promise<ComponentType<P>>) {
+  let ready: ComponentType<P> | null = null;
+  const preload = () =>
+    load().then((c) => {
+      ready = c;
+      return c;
+    });
+  const Lazy = lazy(() => preload().then((c) => ({ default: c })));
+  function View(props: P) {
+    // Fixed for this mount: switching from the lazy one later would mount the page afresh.
+    const [C] = useState<ComponentType<P>>(() => ready ?? (Lazy as unknown as ComponentType<P>));
+    return <C {...props} />;
+  }
+  View.preload = preload;
+  return View;
+}
+
+const AnimeView = preloadable(() => importAnime().then((m) => m.AnimeView));
+const CalendarView = preloadable(() => importCalendar().then((m) => m.CalendarView));
+const DetailView = preloadable(() => importDetail().then((m) => m.DetailView));
+const AddonsView = preloadable(() => importAddons().then((m) => m.AddonsView));
+const Discover = preloadable(() => importDiscover().then((m) => m.Discover));
+const AwardView = preloadable(() => importAward().then((m) => m.AwardView));
+const AnimeAwardView = preloadable(() => importAnimeAward().then((m) => m.AnimeAwardView));
+const FilterView = preloadable(() => importFilter().then((m) => m.FilterView));
+const GridView = preloadable(() => importGrid().then((m) => m.GridView));
+const PersonView = preloadable(() => importPerson().then((m) => m.PersonView));
+const CollectionView = preloadable(() => importCollection().then((m) => m.CollectionView));
+const EpisodeDetailView = preloadable(() => importEpisodeDetail().then((m) => m.EpisodeDetailView));
+const CollectionsView = preloadable(() => import("@/views/collections").then((m) => m.CollectionsView));
+const PlayPicker = preloadable(() => importPlayPicker().then((m) => m.PlayPicker));
+const PlayerView = preloadable(() => importPlayer().then((m) => m.PlayerView));
+const Movies = preloadable(() => importMovies().then((m) => m.Movies));
+const QueueView = preloadable(() => importQueue().then((m) => m.QueueView));
+const ServiceView = preloadable(() => importService().then((m) => m.ServiceView));
+const Settings = preloadable(() => importSettings().then((m) => m.Settings));
+const Shows = preloadable(() => importShows().then((m) => m.Shows));
+const LibraryView = preloadable(() => importLibrary().then((m) => m.LibraryView));
+const LiveView = preloadable(() => importLive().then((m) => m.LiveView));
+const MatchDetailView = preloadable(() => importMatchDetail().then((m) => m.MatchDetailView));
+const PlaylistVodView = preloadable(() => importVod().then((m) => m.PlaylistVodView));
+const DownloadsView = preloadable(() => importDownloads().then((m) => m.DownloadsView));
+const OnboardingModal = preloadable(() => importOnboarding().then((m) => m.OnboardingModal));
 
 function useViewPreloader() {
   useEffect(() => {
@@ -155,7 +178,22 @@ function useViewPreloader() {
     if (isPhoneLayout()) {
       // Phone: only what the tab bar and a tap on a poster open next, one chunk per idle slot.
       // All 19 at once held a mid-range phone's main thread for over a second after start-up.
-      const queue = [importDetail, importPlayPicker, importDiscover, importLibrary, importMovies, importShows];
+      const queue = [
+        DetailView.preload,
+        PlayPicker.preload,
+        Discover.preload,
+        LibraryView.preload,
+        Movies.preload,
+        Shows.preload,
+        // The pages a title opens next, and the other pages drawn natively.
+        PersonView.preload,
+        EpisodeDetailView.preload,
+        CollectionView.preload,
+        FilterView.preload,
+        GridView.preload,
+        ServiceView.preload,
+        AnimeView.preload,
+      ];
       const next = () => {
         if (cancelled) return;
         const load = queue.shift();
@@ -171,25 +209,25 @@ function useViewPreloader() {
     }
     schedule(() => {
       if (cancelled) return;
-      void importDetail();
-      void importPlayPicker();
-      void importPlayer();
-      void importSettings();
-      void importAddons();
-      void importDiscover();
-      void importPerson();
-      void importFilter();
-      void importCalendar();
-      void importMovies();
-      void importShows();
-      void importLive();
-      void importAnime();
-      void importQueue();
-      void importAward();
-      void importAnimeAward();
-      void importService();
-      void importMatchDetail();
-      void importOnboarding();
+      void DetailView.preload();
+      void PlayPicker.preload();
+      void PlayerView.preload();
+      void Settings.preload();
+      void AddonsView.preload();
+      void Discover.preload();
+      void PersonView.preload();
+      void FilterView.preload();
+      void CalendarView.preload();
+      void Movies.preload();
+      void Shows.preload();
+      void LiveView.preload();
+      void AnimeView.preload();
+      void QueueView.preload();
+      void AwardView.preload();
+      void AnimeAwardView.preload();
+      void ServiceView.preload();
+      void MatchDetailView.preload();
+      void OnboardingModal.preload();
     });
     return () => {
       cancelled = true;

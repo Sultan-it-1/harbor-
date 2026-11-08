@@ -116,6 +116,7 @@ export function AnimeAwardView({ sourceId }: { sourceId: AwardSourceId }) {
     [t, filteredCategories, tint, settings.tmdbKey, openMeta],
   );
   const native = useNativeBrowsePage("anime-award", {
+    scrollKey: sourceId,
     active: topKind === "anime-award",
     t,
     back: true,

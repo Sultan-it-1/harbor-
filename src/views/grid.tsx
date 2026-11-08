@@ -138,6 +138,7 @@ export function GridView({ grid }: { grid: GridSpec }) {
   const noMatch = searching && shown.length === 0;
   const nothing = done && !searching && metas.length === 0;
   const native = useNativeBrowsePage("grid", {
+    scrollKey: grid.title,
     active: topKind === "grid",
     t,
     back: true,

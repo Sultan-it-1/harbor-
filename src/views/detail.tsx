@@ -697,7 +697,6 @@ export function DetailView({
   // in TV Shows / Movies" as on the page.
   const nativeBlocked =
     (meta.type !== "movie" && meta.type !== "series" && meta.type !== "anime" && !addonNative) ||
-    detectingAnime ||
     layoutEdit;
   const [episodesSink, episodesRows] = useNativeRowSink(nativeOn && !nativeBlocked);
   const showEpisodes = !!detail && !isAnime && isSeries && detail.seasons.length > 0;
@@ -930,6 +929,7 @@ export function DetailView({
     [watchOnRow, showEpisodes, showAnimeEpisodes, showCinemetaEpisodes, episodesRows, nativeRows],
   );
   const native = useNativeBrowsePage("detail", {
+    scrollKey: meta.id,
     active: topKind === "meta",
     blocked: nativeBlocked,
     hidden: trailerOpen || commentsOpen || awardsOpen,

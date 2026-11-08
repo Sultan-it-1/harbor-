@@ -155,6 +155,7 @@ export function ServiceView({ service }: { service: StreamingService }) {
     [t, category.id],
   );
   const native = useNativeBrowsePage("service", {
+    scrollKey: service,
     active: topKind === "service",
     t,
     back: true,

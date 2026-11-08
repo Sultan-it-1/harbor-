@@ -60,6 +60,7 @@ export function CollectionView({ collectionId }: { collectionId: number }) {
     [data, t],
   );
   const native = useNativeBrowsePage("collection", {
+    scrollKey: String(collectionId),
     active: topKind === "collection",
     t,
     back: true,

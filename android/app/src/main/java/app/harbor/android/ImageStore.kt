@@ -431,6 +431,8 @@ class ImageStore(
 
         private val MAX_AGE_RX = Regex("max-age=(\\d+)", RegexOption.IGNORE_CASE)
         private val TMDB_ORIGINAL = Regex("(https?://image\\.tmdb\\.org/t/p/)original(/.+)", RegexOption.IGNORE_CASE)
+        private val TMDB_SIZED = Regex("(https?://image\\.tmdb\\.org/t/p/)(w\\d+)(/.+)", RegexOption.IGNORE_CASE)
+        private val METAHUB_BACKGROUND = Regex("(https?://images\\.metahub\\.space/background/)(small|medium)(/.+)", RegexOption.IGNORE_CASE)
 
         fun keyFor(url: String): String =
             MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -445,6 +447,20 @@ class ImageStore(
             val m = TMDB_ORIGINAL.matchEntire(url) ?: return url
             if (m.groupValues[2].lowercase().endsWith(".svg")) return url
             return m.groupValues[1] + "w1280" + m.groupValues[2]
+        }
+
+        /**
+         * A full-width, tall picture cut from a wide one (a title's hero is ~1800px high on a
+         * phone, its backdrop 16:9): the largest version, since only its middle is shown, and a
+         * 780 or 1280px one is blown up two to four times. (Only the part shown is decoded.)
+         */
+        fun heroSized(url: String): String {
+            TMDB_SIZED.matchEntire(url)?.let { m ->
+                if (m.groupValues[3].lowercase().endsWith(".svg")) return url
+                return m.groupValues[1] + "original" + m.groupValues[3]
+            }
+            METAHUB_BACKGROUND.matchEntire(url)?.let { m -> return m.groupValues[1] + "large" + m.groupValues[3] }
+            return url
         }
     }
 }

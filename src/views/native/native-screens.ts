@@ -83,15 +83,63 @@ let popupsClear = true;
 let tabBarRoom = 0;
 let lastSent = "";
 let observing = false;
+/** Each page's newest model (models go out a moment late; the app ignores one it already has). */
+const latestModel = new Map<string, string>();
 
+function sendModel(json: string) {
+  try {
+    androidApi()?.homeSet?.(json);
+  } catch {
+    markFailed();
+  }
+}
+
+// Changes in one go (a page closing and the next opening, a page stepping aside and back) are
+// sent once, as they end up: the screen doesn't go away and fade back in between.
+let shownQueued = false;
 function sendShown() {
+  if (shownQueued) return;
+  shownQueued = true;
+  queueMicrotask(() => {
+    shownQueued = false;
+    sendShownNow();
+  });
+}
+
+// A screen going away with nothing after it waits a moment: the next page may still be on its
+// way (a page's code loading the first time, a page closing as the next one opens), and the
+// screen then goes straight to it instead of showing the page underneath in between. A popup
+// over the screen still sends it away at once.
+const HIDE_GRACE_MS = 160;
+let shownPage = "";
+let hideTimer = 0;
+
+function sendShownNow(graceOver = false) {
   let page = "";
   // Anything the page opens over a screen (dialogs, menus, the More sheet…) must show: the native
   // screen steps aside while one is open. Only one page is on top; the last that wants it wins.
   if (popupsClear) for (const [p, w] of wants) if (w) page = p;
+  if (!page && shownPage && popupsClear && !graceOver) {
+    if (!hideTimer) {
+      hideTimer = window.setTimeout(() => {
+        hideTimer = 0;
+        sendShownNow(true);
+      }, HIDE_GRACE_MS);
+    }
+    return;
+  }
+  if (hideTimer) {
+    window.clearTimeout(hideTimer);
+    hideTimer = 0;
+  }
+  shownPage = page;
   const key = `${page}|${tabBarRoom}|${window.innerWidth}`;
   if (key === lastSent) return;
   lastSent = key;
+  // The page's newest model first: a screen opened for another title must not show the last
+  // one's (the delayed send would leave it up for a moment).
+  const model = page ? latestModel.get(page) : undefined;
+  if (page && model) sendModel(model);
   try {
     androidApi()?.screenShow?.(page, tabBarRoom, window.innerWidth);
   } catch {
@@ -181,18 +229,14 @@ export function useNativeScreen(
     [o.inUse, o.model, page, colors, settings.badgePlacement],
   );
 
-  // Sent a moment after the last change: rows arrive one after another while a page loads.
+  // Sent a moment after the last change: rows arrive one after another while a page loads (at
+  // once when the screen comes up, see sendShownNow).
   useEffect(() => {
     if (!json) return;
-    const id = window.setTimeout(() => {
-      try {
-        androidApi()?.homeSet?.(json);
-      } catch {
-        markFailed();
-      }
-    }, 80);
+    latestModel.set(page, json);
+    const id = window.setTimeout(() => sendModel(json), 80);
     return () => window.clearTimeout(id);
-  }, [json]);
+  }, [json, page]);
 
   const onAction = useRef(o.onAction);
   onAction.current = o.onAction;
@@ -643,6 +687,13 @@ export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNat
   };
 }
 
+/** A small number for a string (Java's String.hashCode): the screen only compares it. */
+function hashKey(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return h;
+}
+
 function isUrlOrData(u: string | null | undefined): u is string {
   return typeof u === "string" && (/^https?:\/\//.test(u) || u.startsWith("data:image/"));
 }
@@ -704,6 +755,8 @@ export type NativePageInput = {
   onHold?: (rowKey: string, meta: Meta) => boolean;
   /** Changes when the page wants its top back in view. */
   resetTick?: number;
+  /** What the page shows (a title's, a person's id): another one starts at the top. */
+  scrollKey?: string;
   /** The page's row editor, drawn in the native screen too (rows then include hidden ones). */
   editor?: NativePageEditor | null;
 };
@@ -726,6 +779,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   });
 
   const { t, hero, header, cw, rows, customize, chips, empty, resetTick, editor, back, note } = input;
+  const scrollKey = input.scrollKey ?? "";
   const searchKey = input.search?.key;
   const searchHint = input.search?.hint;
   const searchText = input.search?.text;
@@ -779,7 +833,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
     }
     published.current = { hero: heroMetas, cw: cwItems, rows: map };
     return {
-      top: resetTick ?? 0,
+      top: ((resetTick ?? 0) + hashKey(scrollKey)) | 0,
       labels: { ...nativeLabels(t, customizeLabel ?? t("Customize page")), ...editLabels(t) },
       header: header ?? null,
       hero: heroMetas.map((m) => cards.hero(m, hero?.rank ?? null)),
@@ -801,7 +855,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       calendar: calendarModel ?? null,
       downloads: downloadsModel ?? null,
     };
- }, [searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
