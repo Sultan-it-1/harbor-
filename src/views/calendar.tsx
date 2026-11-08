@@ -23,13 +23,14 @@ import { DayModal } from "./calendar/day-modal";
 import { EmptyState, ErrorState, NoKeyState, NotSignedInState, emptyStateText } from "./calendar/empty-states";
 import { MonthGrid } from "./calendar/month-grid";
 import { SourceSwitcher, calendarSources } from "./calendar/source-switcher";
-import { useNativeBrowsePage } from "@/views/native/native-screens";
+import { useNativeBrowsePage, useNativeSheet } from "@/views/native/native-screens";
 import {
   buildLibraryNameSet,
   buildMonthCells,
   calendarEpisodeHint,
   calendarToMeta,
   FILTERS,
+  formatDateLong,
   MONTH_NAMES,
   normalizeName,
   orderedWeekdayNames,
@@ -212,10 +213,30 @@ export function CalendarView() {
     }
     return null;
   }, [t, source, authKey, settings.tmdbKey, error, loading, filtered.length, filter, watchlistOnly, openSettings]);
+  // A day's titles: the screen's own menu, sliding up from the bottom (the date and the count on
+  // top, then each title with what it is; a tap opens it).
+  const daySheet = useNativeSheet(
+    dayModal && dayModalItems.length > 0 ? `day:${dayModal}` : null,
+    [
+      {
+        id: "hdr",
+        label: `${formatDateLong(dayModal ?? "")}  ·  ${dayModalItems.length === 1 ? t("{n} title", { n: 1 }) : t("{n} titles", { n: dayModalItems.length })}`,
+        icon: "calendar",
+        stay: true,
+      },
+      { id: "-", label: "", divider: true },
+      ...dayModalItems.map((it, i) => ({
+        id: `it:${i}`,
+        label: `${it.name}  ·  ${it.isAnime ? t("Anime") : it.type === "movie" ? t("Movie") : t("TV")}`,
+        onSelect: () => openItem(it),
+      })),
+    ],
+    () => setDayModal(null),
+  );
   const native = useNativeBrowsePage("calendar", {
     active: topKind === "calendar",
     blocked: source === "custom",
-    hidden: !!dayModal || showAuth,
+    hidden: (!!dayModal && !daySheet) || showAuth,
     t,
     header: { kicker: t("Releases"), title: t("Calendar"), size: 32 },
     chips: nativeChips,
@@ -247,7 +268,7 @@ export function CalendarView() {
   if (native) {
     return (
       <main className="flex h-full flex-col overflow-hidden">
-        {dayModal && dayModalItems.length > 0 && (
+        {dayModal && dayModalItems.length > 0 && !daySheet && (
           <DayModal
             dateISO={dayModal}
             items={dayModalItems}

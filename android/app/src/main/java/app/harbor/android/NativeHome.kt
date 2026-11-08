@@ -2114,6 +2114,7 @@ class NativeHome(
                 "list-plus" -> R.drawable.ic_list_plus
                 "users" -> R.drawable.ic_users
                 "pencil" -> R.drawable.ic_pencil
+                "calendar" -> R.drawable.ic_calendar
                 "plus" -> R.drawable.ic_plus
                 "eye" -> R.drawable.ic_eye
                 "eye-off" -> R.drawable.ic_eye_off
