@@ -55,6 +55,8 @@ class HomeModel(
     val sheet: HomeSheet? = null,
     /** A game's scoreboard (the match page's top). */
     val match: HomeMatch? = null,
+    /** Live TV's guide: the hours across, the channels down. */
+    val guide: HomeGuide? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -341,6 +343,30 @@ class HomeModel(
                                     )
                                 },
                             )
+                        },
+                    )
+                },
+                guide = o.optJSONObject("guide")?.let { g ->
+                    val l = g.optJSONObject("labels")
+                    HomeGuide(
+                        start = g.optLong("start"),
+                        end = g.optLong("end"),
+                        now = g.optLong("now"),
+                        day = g.str("day") ?: "",
+                        ticks = g.optJSONArray("ticks").objects().map { t -> GuideTick(t.optLong("at"), t.str("label") ?: "") },
+                        channels = g.optJSONArray("channels").objects().map { c ->
+                            GuideChannel(
+                                name = c.str("name") ?: "",
+                                number = c.str("number"),
+                                logo = c.str("logo"),
+                                programs = c.optJSONArray("programs").objects().map { p ->
+                                    GuideProgram(p.optLong("s"), p.optLong("e"), p.str("title") ?: "", p.str("from") ?: "", p.str("to") ?: "", p.optBoolean("replay", false))
+                                },
+                            )
+                        },
+                        more = g.optBoolean("more", false),
+                        labels = buildMap {
+                            if (l != null) for (k in l.keys()) l.optString(k).takeIf { it.isNotEmpty() }?.let { put(k, it) }
                         },
                     )
                 },
@@ -753,6 +779,32 @@ class HomeSheet(val key: String, val items: List<SheetItem>)
 class HomeMatch(val league: String, val live: Boolean, val status: String, val home: MatchSide, val away: MatchSide)
 
 class MatchSide(val name: String, val logo: String?, val score: String, val yellow: Int, val red: Int)
+
+/**
+ * Live TV's guide, as the page's: the window's hours ([start]..[end], ms) with the [ticks] to label,
+ * the channels (number, logo, name) and their programmes. Taps send {a:"guide", what}: "ch" (i =
+ * the channel), "pg" (i = the channel, text = the programme), "more" (near the end of the list).
+ */
+class HomeGuide(
+    val start: Long,
+    val end: Long,
+    val now: Long,
+    val day: String,
+    val ticks: List<GuideTick>,
+    val channels: List<GuideChannel>,
+    val more: Boolean,
+    /** live, replay, ended, none (no programme info). */
+    val labels: Map<String, String>,
+) {
+    fun label(k: String, fallback: String) = labels[k] ?: fallback
+}
+
+class GuideTick(val at: Long, val label: String)
+
+class GuideChannel(val name: String, val number: String?, val logo: String?, val programs: List<GuideProgram>)
+
+/** A programme: its start and end (ms), title and times; [replay]: it has ended and can be watched again. */
+class GuideProgram(val s: Long, val e: Long, val title: String, val from: String, val to: String, val replay: Boolean)
 
 class SheetItem(
     val id: String,

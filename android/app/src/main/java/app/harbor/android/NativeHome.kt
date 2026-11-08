@@ -396,6 +396,10 @@ class NativeHome(
             if (m.header != null) out.add(Section(T_HEADER, -6))
             if (m.calendar != null) out.add(Section(T_CALBAR, -13))
             if (m.match != null) out.add(Section(T_MATCH, -16))
+            m.guide?.let { g ->
+                out.add(Section(T_GUIDE_RULER, -17))
+                g.channels.forEachIndexed { i, _ -> out.add(Section(T_GUIDE_ROW, (-1000L - i), start = i)) }
+            }
             if (m.search != null) out.add(Section(T_SEARCH, -8))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
             if (m.showCustomize || m.edit) out.add(Section(T_TOOLS, -2))
@@ -531,6 +535,8 @@ class NativeHome(
             T_MATCH -> MatchHolder()
             T_VERSUS -> VersusHolder()
             T_PITCH -> PitchHolder()
+            T_GUIDE_RULER -> GuideRulerHolder()
+            T_GUIDE_ROW -> GuideRowHolder()
             T_CALBAR -> CalendarBarHolder()
             T_CALENDAR -> CalendarHolder()
             T_DL_TOP -> DownloadsTopHolder()
@@ -568,6 +574,8 @@ class NativeHome(
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is MatchHolder -> m.match?.let { holder.bind(it) }
+                is GuideRulerHolder -> m.guide?.let { holder.bind(it) }
+                is GuideRowHolder -> m.guide?.let { g -> g.channels.getOrNull(items[position].start)?.let { holder.bind(g, items[position].start, it) } }
                 is VersusHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is PitchHolder -> items[position].row?.let { holder.bind(it) }
                 is SourceHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
@@ -1368,6 +1376,289 @@ class NativeHome(
             play.background = focusable(GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(colors.accent) })
             play.contentDescription = model?.label("play", "Play")
             play.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
+        }
+    }
+
+    // ---- Live TV's guide ------------------------------------------------------------------------
+
+    /** How far the guide's hours are scrolled (px), shared by its ruler and every row. */
+    private var guideX = -1f
+    private var guideKey = 0L
+    private val guideStrips = java.util.Collections.newSetFromMap(java.util.WeakHashMap<View, Boolean>())
+    private val guidePxPerMs get() = dp(5) / 60_000f
+    private val guideCol get() = dp(124)
+    private val guideRowH get() = dp(76)
+    private var guideAskedMore = -1
+
+    private fun guideScrollBy(g: HomeGuide, dx: Float, viewW: Int) {
+        val total = (g.end - g.start) * guidePxPerMs
+        val max = (total - viewW).coerceAtLeast(0f)
+        val next = (guideX + dx).coerceIn(0f, max)
+        if (next != guideX) {
+            guideX = next
+            guideStrips.forEach { it.invalidate() }
+        }
+    }
+
+    /** The programmes' area of a row (or the ruler's): drawn here, scrolled sideways together. */
+    private inner class GuideStrip(private val ruler: Boolean) : View(ctx) {
+        var guide: HomeGuide? = null
+        var row = -1
+        private fun dpf(v: Float) = v * ctx.resources.displayMetrics.density
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val text = android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val rect = android.graphics.RectF()
+        private val scroller = android.widget.OverScroller(ctx)
+        private var lastFlingX = 0
+        private val detector = android.view.GestureDetector(ctx, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: android.view.MotionEvent): Boolean {
+                scroller.forceFinished(true)
+                return true
+            }
+
+            override fun onScroll(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, dx: Float, dy: Float): Boolean {
+                if (kotlin.math.abs(dx) < kotlin.math.abs(dy)) return false
+                parent?.requestDisallowInterceptTouchEvent(true)
+                guide?.let { guideScrollBy(it, if (layoutDirection == LAYOUT_DIRECTION_RTL) -dx else dx, width) }
+                return true
+            }
+
+            override fun onFling(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, vx: Float, vy: Float): Boolean {
+                if (kotlin.math.abs(vx) < kotlin.math.abs(vy)) return false
+                lastFlingX = 0
+                scroller.fling(0, 0, (if (layoutDirection == LAYOUT_DIRECTION_RTL) vx else -vx).toInt(), 0, Int.MIN_VALUE, Int.MAX_VALUE, 0, 0)
+                postInvalidateOnAnimation()
+                return true
+            }
+
+            override fun onSingleTapUp(e: android.view.MotionEvent): Boolean {
+                val g = guide ?: return false
+                if (ruler || row < 0) return false
+                val ch = g.channels.getOrNull(row) ?: return false
+                val x = guideX + (if (layoutDirection == LAYOUT_DIRECTION_RTL) width - e.x else e.x)
+                val at = g.start + (x / guidePxPerMs).toLong()
+                val pi = ch.programs.indexOfFirst { at >= it.s && at < it.e }
+                if (pi >= 0) act("guide", what = "pg", i = row, text = pi.toString()) else act("guide", what = "ch", i = row)
+                return true
+            }
+        })
+
+        init {
+            guideStrips.add(this)
+        }
+
+        @android.annotation.SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            return detector.onTouchEvent(event) || super.onTouchEvent(event)
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            val g = guide ?: return
+            if (scroller.computeScrollOffset()) {
+                val cx = scroller.currX
+                guideScrollBy(g, (cx - lastFlingX).toFloat(), width)
+                lastFlingX = cx
+                postInvalidateOnAnimation()
+            }
+            val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
+            fun sx(ms: Long): Float {
+                val x = (ms - g.start) * guidePxPerMs - guideX
+                return if (rtl) width - x else x
+            }
+            if (ruler) {
+                text.textSize = dp(11).toFloat()
+                text.color = colors.subtle
+                text.typeface = Typeface.DEFAULT_BOLD
+                for (t in g.ticks) {
+                    val x = sx(t.at)
+                    if (x < -dp(80) || x > width + dp(80)) continue
+                    paint.color = withAlpha(colors.ink, 0.12f)
+                    canvas.drawRect(x, height - dp(10).toFloat(), x + dp(1), height.toFloat(), paint)
+                    canvas.drawText(t.label, if (rtl) x - dp(6) - text.measureText(t.label) else x + dp(6), height / 2f + dp(4), text)
+                }
+            } else {
+                val ch = g.channels.getOrNull(row) ?: return
+                paint.color = withAlpha(colors.ink, 0.05f)
+                canvas.drawRect(0f, height - dp(1).toFloat(), width.toFloat(), height.toFloat(), paint)
+                if (ch.programs.isEmpty()) {
+                    text.textSize = dpf(11.5f)
+                    text.color = colors.subtle
+                    text.typeface = Typeface.DEFAULT
+                    val s = g.label("none", "No program info")
+                    canvas.drawText(s, if (rtl) width - dp(12) - text.measureText(s) else dp(12).toFloat(), height / 2f + dp(4), text)
+                }
+                for (p in ch.programs) {
+                    val a = sx(p.s)
+                    val b = sx(p.e)
+                    val l = minOf(a, b) + dp(3)
+                    val r = maxOf(a, b) - dp(3)
+                    if (r < 0 || l > width || r - l < dp(4)) continue
+                    val past = p.e <= g.now
+                    val live = !past && p.s <= g.now
+                    rect.set(l, dp(4).toFloat(), r, height - dp(4).toFloat())
+                    val red = liveRed
+                    paint.style = android.graphics.Paint.Style.FILL
+                    paint.color = when {
+                        live -> withAlpha(red, 0.15f)
+                        p.replay -> withAlpha(colors.surface, 0.7f)
+                        past -> withAlpha(colors.surface, 0.18f)
+                        else -> withAlpha(colors.surface, 0.85f)
+                    }
+                    canvas.drawRoundRect(rect, dp(8).toFloat(), dp(8).toFloat(), paint)
+                    paint.style = android.graphics.Paint.Style.STROKE
+                    paint.strokeWidth = dp(1).toFloat()
+                    paint.color = when {
+                        live -> withAlpha(red, 0.45f)
+                        p.replay -> withAlpha(colors.accent, 0.35f)
+                        past -> withAlpha(colors.ink, 0.04f)
+                        else -> withAlpha(colors.ink, 0.1f)
+                    }
+                    canvas.drawRoundRect(rect, dp(8).toFloat(), dp(8).toFloat(), paint)
+                    paint.style = android.graphics.Paint.Style.FILL
+                    val w = r - l
+                    val pad = dp(10)
+                    val inner = (w - 2 * pad).coerceAtLeast(0f)
+                    canvas.save()
+                    canvas.clipRect(rect)
+                    text.typeface = Typeface.DEFAULT_BOLD
+                    text.textSize = (if (w < dp(40)) dp(11) else dpf(12.5f)).toFloat()
+                    text.color = if (past && !p.replay) withAlpha(colors.muted, 0.6f) else if (past) colors.muted else colors.ink
+                    val title = TextUtils.ellipsize(p.title, text, inner, TextUtils.TruncateAt.END).toString()
+                    val tx = if (rtl) r - pad - text.measureText(title) else l + pad
+                    canvas.drawText(title, tx, dp(24).toFloat(), text)
+                    if (w >= dp(70)) {
+                        text.typeface = Typeface.DEFAULT
+                        text.textSize = dpf(10.5f)
+                        text.color = colors.subtle
+                        val times = "${p.from}  ${p.to}"
+                        val ttx = if (rtl) r - pad - text.measureText(times) else l + pad
+                        canvas.drawText(times, ttx, height - dp(16).toFloat(), text)
+                        val badge = when {
+                            live -> g.label("live", "Live")
+                            p.replay -> g.label("replay", "Replay")
+                            past -> g.label("ended", "Ended")
+                            else -> null
+                        }
+                        if (badge != null && w >= dp(140)) {
+                            text.typeface = Typeface.DEFAULT_BOLD
+                            text.textSize = dpf(8.5f)
+                            val bw = text.measureText(badge.uppercase()) + dp(10)
+                            val br = if (rtl) l + pad + bw else r - pad
+                            val bl = br - bw
+                            rect.set(bl, height - dp(28).toFloat(), br, height - dp(14).toFloat())
+                            paint.color = when {
+                                live -> withAlpha(red, 0.8f)
+                                p.replay -> withAlpha(colors.accent, 0.2f)
+                                else -> withAlpha(colors.canvas, 0.55f)
+                            }
+                            canvas.drawRoundRect(rect, dp(7).toFloat(), dp(7).toFloat(), paint)
+                            text.color = when {
+                                live -> colors.canvas
+                                p.replay -> colors.accent
+                                else -> colors.subtle
+                            }
+                            canvas.drawText(badge.uppercase(), bl + dp(5), height - dp(18).toFloat(), text)
+                        }
+                    }
+                    canvas.restore()
+                }
+            }
+            // Now.
+            if (g.now in g.start until g.end) {
+                val x = sx(g.now)
+                paint.color = liveRed
+                canvas.drawRect(x, 0f, x + dp(1), height.toFloat(), paint)
+            }
+        }
+    }
+
+    /** The guide's top: the day, then the hours. */
+    private inner class GuideRulerHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val line = itemView as LinearLayout
+        private val day = label("", 11f, bold = true, lines = 1)
+        private val strip = GuideStrip(true)
+
+        init {
+            line.orientation = LinearLayout.HORIZONTAL
+            line.layoutParams = RecyclerView.LayoutParams(MATCH, dp(52))
+            day.gravity = Gravity.CENTER_VERTICAL
+            day.setPaddingRelative(dp(12), 0, dp(8), 0)
+            line.addView(day, LinearLayout.LayoutParams(guideCol, MATCH))
+            line.addView(strip, LinearLayout.LayoutParams(0, MATCH, 1f))
+        }
+
+        fun bind(g: HomeGuide) {
+            val rtl = model?.rtl == true
+            line.setBackgroundColor(colors.surface)
+            day.text = if (rtl) g.day else g.day.uppercase()
+            day.letterSpacing = if (rtl) 0f else 0.2f
+            day.setTextColor(colors.subtle)
+            day.background = GradientDrawable().also { it.setColor(colors.surface); it.setStroke(0, 0) }
+            // A new window (or the first): "now" a little in from the start.
+            if (guideX < 0f || guideKey != g.start) {
+                guideKey = g.start
+                guideX = ((g.now - g.start) * guidePxPerMs - (width() - guideCol) / 4f).coerceAtLeast(0f)
+            }
+            strip.guide = g
+            strip.invalidate()
+        }
+    }
+
+    /** A channel's line: its number, logo and name (a tap plays it), then its programmes. */
+    private inner class GuideRowHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val line = itemView as LinearLayout
+        private val cell = LinearLayout(ctx)
+        private val logo = NetImage(ctx)
+        private val number = label("", 10.5f, bold = true, lines = 1)
+        private val name = label("", 12f, bold = true, lines = 2)
+        private val strip = GuideStrip(false)
+        private var index = -1
+
+        init {
+            line.orientation = LinearLayout.HORIZONTAL
+            line.layoutParams = RecyclerView.LayoutParams(MATCH, guideRowH)
+            cell.orientation = LinearLayout.HORIZONTAL
+            cell.gravity = Gravity.CENTER_VERTICAL
+            cell.setPaddingRelative(dp(10), 0, dp(8), 0)
+            cell.isClickable = true
+            cell.isFocusable = true
+            cell.setOnClickListener { if (index >= 0) act("guide", what = "ch", i = index) }
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            logo.scaleType = ImageView.ScaleType.FIT_START
+            texts.addView(logo, LinearLayout.LayoutParams(dp(56), dp(22)))
+            texts.addView(name, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            cell.addView(number, LinearLayout.LayoutParams(dp(26), ViewGroup.LayoutParams.WRAP_CONTENT))
+            cell.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            line.addView(cell, LinearLayout.LayoutParams(guideCol, MATCH))
+            line.addView(strip, LinearLayout.LayoutParams(0, MATCH, 1f))
+        }
+
+        fun bind(g: HomeGuide, i: Int, ch: GuideChannel) {
+            index = i
+            cell.background = focusable(GradientDrawable().also { it.setColor(colors.surface) })
+            cell.contentDescription = ch.name
+            number.text = ch.number ?: ""
+            number.setTextColor(colors.subtle)
+            name.text = ch.name
+            name.setTextColor(colors.ink)
+            if (ch.logo != null) {
+                logo.visibility = View.VISIBLE
+                images.load(logo, listOf(ch.logo), dp(56), dp(22), alpha = true) { ok -> logo.visibility = if (ok) View.VISIBLE else View.GONE }
+            } else {
+                images.clear(logo)
+                logo.visibility = View.GONE
+            }
+            strip.guide = g
+            strip.row = i
+            strip.invalidate()
+            // Near the end of the list: the next channels.
+            if (g.more && i >= g.channels.size - 8 && guideAskedMore != g.channels.size) {
+                guideAskedMore = g.channels.size
+                act("guide", what = "more")
+            }
         }
     }
 
@@ -4913,6 +5204,8 @@ class NativeHome(
         private const val T_MATCH = 29
         private const val T_VERSUS = 30
         private const val T_PITCH = 31
+        private const val T_GUIDE_RULER = 32
+        private const val T_GUIDE_ROW = 33
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

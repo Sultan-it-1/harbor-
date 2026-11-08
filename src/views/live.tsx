@@ -396,6 +396,7 @@ export function LiveView({ active }: { active: boolean }) {
     onPlay: handlePlay,
     onInfo: (meta) => openMeta(meta, { liveContext: true }),
     onCustomizeSports: () => setSportsOpen(true),
+    onPlayCatchup: handlePlayCatchup,
     sportsOpen: sportsOpen && !sportsNative,
   });
   if (native) {

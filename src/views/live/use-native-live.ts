@@ -29,6 +29,9 @@ import { channelNumber, fmtClock, fmtLeft } from "./live-home/now-format";
 import { buildNowItem, hydrationKey, useLiveHome, type NowItem } from "./live-home/use-live-home";
 import { useSports } from "./live-home/use-sports";
 import type { ViewMode } from "./view-mode-toggle";
+import type { EpgProgram } from "@/lib/iptv/types";
+import { channelHasCatchup } from "@/lib/iptv/catchup";
+import { formatDayLabel, formatTimeLabel, startOfWindow, WINDOW_HOURS } from "./guide/guide-utils";
 
 type T = ReturnType<typeof useT>;
 
@@ -122,6 +125,7 @@ export function useNativeLive(p: {
   onInfo: (meta: Meta) => void;
   onCustomizeSports: () => void;
   sportsOpen: boolean;
+  onPlayCatchup?: (ch: IptvChannel, program: EpgProgram) => void;
 }): boolean {
   const t = useT();
   const { settings } = useSettings();
@@ -129,6 +133,7 @@ export function useNativeLive(p: {
   const nativeOn = useNativeScreensEnabled();
   const home = nativeOn && p.mode === "home";
   const grid = nativeOn && p.mode === "grid";
+  const guideOn = nativeOn && p.mode === "guide";
 
   // ---- Home ------------------------------------------------------------------------------------
   const { spotlight, guide, rails, categoryRails, countries } = useLiveHome({
@@ -140,7 +145,10 @@ export function useNativeLive(p: {
     favorites: p.favorites,
   });
   const countryPrefs = useCountryPrefs(p.sourceId);
-  const tvgCounts = useMemo(() => computeTvgIdCounts(home ? p.shownChannels : grid ? p.visible : EMPTY), [home, grid, p.shownChannels, p.visible]);
+  const tvgCounts = useMemo(
+    () => computeTvgIdCounts(home ? p.shownChannels : grid || guideOn ? p.visible : EMPTY),
+    [home, grid, guideOn, p.shownChannels, p.visible],
+  );
   const userLeagues = settings.sportsLeagues?.length ? settings.sportsLeagues : DEFAULT_SPORTS_LEAGUES;
   const [league, setLeague] = useState<string>(() => {
     try {
@@ -180,6 +188,47 @@ export function useNativeLive(p: {
     () => (grid && p.showTopRows ? p.topRows.map((row) => ({ row, resolved: resolveNetworks(p.regionChannels, row.networks) })).filter((r) => r.resolved.length > 0) : []),
     [grid, p.showTopRows, p.topRows, p.regionChannels],
   );
+
+  // ---- Guide: the hours across (from an hour ago, 8 hours), the channels down ------------------
+  const [guideLimit, setGuideLimit] = useState(40);
+  useEffect(() => setGuideLimit(40), [p.sourceId, p.group, p.query]);
+  const quarter = Math.floor(p.nowMs / (15 * 60_000));
+  const guideModel = useMemo(() => {
+    if (!guideOn) return null;
+    const start = startOfWindow(p.nowMs, 60);
+    const end = start + WINDOW_HOURS * 60 * 60_000;
+    const ticks: Array<{ at: number; label: string }> = [];
+    for (let at = start; at < end; at += 30 * 60_000) ticks.push({ at, label: formatTimeLabel(at) });
+    const chans = p.visible.slice(0, guideLimit);
+    return {
+      start,
+      end,
+      now: p.nowMs,
+      day: formatDayLabel(start, p.nowMs),
+      ticks,
+      more: chans.length < p.visible.length,
+      labels: { live: t("Live"), replay: t("Replay"), ended: t("Ended"), none: t("No program info") },
+      channels: chans.map((ch) => {
+        const catchup = !!p.onPlayCatchup && channelHasCatchup(ch);
+        return {
+          name: ch.name,
+          number: channelNumber(ch.attrs),
+          logo: ch.logo ?? null,
+          programs: (epgProgramsForChannel(ch, p.epg, tvgCounts) ?? [])
+            .filter((pr) => pr.endMs > start && pr.startMs < end)
+            .map((pr) => ({
+              s: pr.startMs,
+              e: pr.endMs,
+              title: pr.title,
+              from: formatTimeLabel(pr.startMs),
+              to: formatTimeLabel(pr.endMs),
+              replay: catchup && pr.endMs <= p.nowMs,
+            })),
+        };
+      }),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideOn, p.visible, guideLimit, p.epg, tvgCounts, quarter, t, p.onPlayCatchup]);
 
   // ---- Pictures for what's on (TMDB, cached) ----------------------------------------------------
   const hydrateKeys = useMemo(() => {
@@ -398,7 +447,22 @@ export function useNativeLive(p: {
 
   return useNativeBrowsePage("live", {
     active: p.active,
-    blocked: !p.hasSources || p.mode === "guide" || p.mode === "multiview",
+    blocked: !p.hasSources || p.mode === "multiview",
+    guide: guideModel,
+    onGuide: (what, i, text) => {
+      if (what === "more") return setGuideLimit((n) => n + 40);
+      const ch = p.visible[i];
+      if (!ch) return;
+      if (what === "pg") {
+        const progs = (epgProgramsForChannel(ch, p.epg, tvgCounts) ?? []).filter((pr) => {
+          const g = guideModel;
+          return !!g && pr.endMs > g.start && pr.startMs < g.end;
+        });
+        const pr = progs[Number(text)];
+        if (pr && pr.endMs <= p.nowMs && p.onPlayCatchup && channelHasCatchup(ch)) return p.onPlayCatchup(ch, pr);
+      }
+      p.onPlay(ch);
+    },
     hidden: p.pickerOpen || p.catsOpen || p.sportsOpen,
     t,
     header: p.mode === "home" && p.hasPlaylist && p.stateKind !== "error" ? { title: t("Your TV"), count: t("at {time}", { time: fmtClock(p.nowMs) }), size: 30 } : null,
@@ -425,7 +489,7 @@ export function useNativeLive(p: {
         ? { text: p.errorMessage ?? t("Something went wrong."), action: t("Try again"), onAction: p.onRetry }
         : p.stateKind === "loading" && !p.hasPlaylist
           ? { text: t("Loading…") }
-          : p.mode === "grid" && p.hasPlaylist && p.visible.length === 0
+          : (p.mode === "grid" || p.mode === "guide") && p.hasPlaylist && p.visible.length === 0
             ? {
                 title: t("No channels match"),
                 text: t("Try a different category or clear your filters."),

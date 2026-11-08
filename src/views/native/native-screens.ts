@@ -912,6 +912,9 @@ export type NativePageInput = {
    *  closing it sends "" (see HomeSheet in HomeModel.kt). */
   sheet?: { key: string; items: Array<{ id: string; label: string; icon?: string; active?: boolean; danger?: boolean; indent?: boolean; group?: boolean; open?: boolean; divider?: boolean }> } | null;
   onSheet?: (id: string) => void;
+  /** Live TV's guide (see HomeGuide in HomeModel.kt); its taps. */
+  guide?: Record<string, unknown> | null;
+  onGuide?: (what: string, i: number, text: string) => void;
   /** A game's scoreboard (see HomeMatch in HomeModel.kt). */
   match?: Record<string, unknown> | null;
   /** The downloads page's list (see HomeDownloads in HomeModel.kt); its taps. */
@@ -972,6 +975,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const calendarModel = input.calendar;
   const downloadsModel = input.downloads;
   const matchModel = input.match;
+  const guideModel = input.guide;
   const sheetJson = input.sheet
     ? JSON.stringify({
         key: input.sheet.key,
@@ -1048,9 +1052,10 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       calendar: calendarModel ?? null,
       downloads: downloadsModel ?? null,
       match: matchModel ?? null,
+      guide: guideModel ?? null,
       sheet: sheetJson ? JSON.parse(sheetJson) : null,
     };
- }, [matchModel, sheetJson, scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [guideModel, matchModel, sheetJson, scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -1142,6 +1147,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "sheet":
           cur.onSheet?.(a.what ?? "");
+          return;
+        case "guide":
+          if (a.what) cur.onGuide?.(a.what, i, a.text ?? "");
           return;
         case "cal":
           if (a.what) cur.onCalendar?.(a.what, i, a.text ?? "");
