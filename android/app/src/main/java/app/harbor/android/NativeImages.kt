@@ -130,6 +130,22 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
         }
     }
 
+    /** Some picture shown in [root] is still on its way (a screen about to fade in waits a moment). */
+    fun pendingIn(root: android.view.View): Boolean {
+        val stack = ArrayDeque<android.view.View>()
+        stack.add(root)
+        while (stack.isNotEmpty()) {
+            val v = stack.removeLast()
+            if (v.visibility != android.view.View.VISIBLE) continue
+            if (v is NetImage) {
+                if (v.again != null && v.drawable == null) return true
+            } else if (v is android.view.ViewGroup) {
+                for (i in 0 until v.childCount) stack.add(v.getChildAt(i))
+            }
+        }
+        return false
+    }
+
     /** A screen came back: its pictures that never arrived are asked for again. */
     fun resume(root: android.view.ViewGroup) {
         val stack = ArrayDeque<android.view.View>()

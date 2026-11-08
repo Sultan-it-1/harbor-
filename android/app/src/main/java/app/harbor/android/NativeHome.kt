@@ -339,12 +339,37 @@ class NativeHome(
         if (!(wanted && model != null)) root.visibility = View.GONE
     }
 
+    /** Told once this screen, coming in, is fully on screen (the one it replaced can go). */
+    var onRevealed: (() -> Unit)? = null
+
+    /** A screen leaving under another: it goes now (the other is fully in). */
+    fun dropLinger() {
+        if (!lingering) return
+        root.removeCallbacks(hideLater)
+        hideLater.run()
+    }
+
+    private var revealFrom = 0L
+    /** Coming in: it fades in once its first pictures are in (0.4 s at most), so the screen it
+     *  replaces stays until then instead of an empty one (dark, then its picture) flashing. */
+    private val revealTick = object : Runnable {
+        override fun run() {
+            val waited = android.os.SystemClock.uptimeMillis() - revealFrom
+            if (waited < 400 && (list.childCount == 0 || images.pendingIn(root))) {
+                root.postDelayed(this, 40)
+                return
+            }
+            root.animate().alpha(1f).setDuration(140).withEndAction { onRevealed?.invoke() }.start()
+        }
+    }
+
     private fun applyVisibility(linger: Boolean = false) {
         val want = wanted && model != null
         if (lingering) {
             if (!want) return // on its way out already
             // Back before it left (a quick Back): on top again.
             root.removeCallbacks(hideLater)
+            root.removeCallbacks(revealTick)
             lingering = false
             root.animate().cancel()
             root.alpha = 1f
@@ -355,16 +380,19 @@ class NativeHome(
         }
         if (want == isShowing) return
         root.animate().cancel()
+        root.removeCallbacks(revealTick)
         if (want) {
-            // Over the screen it replaces (which waits under it), fading in.
+            // Over the screen it replaces (which waits under it), fading in when its first
+            // pictures are in.
             root.bringToFront()
             root.alpha = 0f
             root.visibility = View.VISIBLE
             root.live = true
-            root.animate().alpha(1f).setDuration(140).start()
             bindSheet(model?.sheet)
             // Pictures it was still waiting for when it stepped aside.
             root.post { images.resume(root) }
+            revealFrom = android.os.SystemClock.uptimeMillis()
+            root.postDelayed(revealTick, 16)
         } else {
             // Its pictures still to come wait (the screen on show goes first).
             root.live = false
@@ -373,8 +401,9 @@ class NativeHome(
             sheetDialog?.dismiss()
             promptDialog?.dismiss()
             if (linger) {
+                // Until the screen coming in is fully in (it says so), at most a moment.
                 lingering = true
-                root.postDelayed(hideLater, 200)
+                root.postDelayed(hideLater, 900)
             } else {
                 root.visibility = View.GONE
             }

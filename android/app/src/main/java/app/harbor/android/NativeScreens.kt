@@ -24,6 +24,8 @@ class NativeScreens(private val ctx: Context, private val images: NativeImages, 
     private fun screen(page: String): NativeHome = screens.getOrPut(page) {
         NativeHome(ctx, images, page, onAction).also {
             root.addView(it.root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            // Fully in: the screens it replaced (waiting under it) go.
+            it.onRevealed = { for ((p, s) in screens) if (p != current) s.dropLinger() }
         }
     }
 
