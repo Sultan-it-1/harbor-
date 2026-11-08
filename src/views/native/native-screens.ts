@@ -629,7 +629,7 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action" | "live" | "guide" | "channel" | "livehero" | "sports" | "sources";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action" | "live" | "guide" | "channel" | "livehero" | "sports" | "sources" | "versus" | "pitch";
   /** Choices under the title (a series' seasons) and what picking one does. */
   chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
   onRowChip?: (id: string) => void;
@@ -912,6 +912,8 @@ export type NativePageInput = {
    *  closing it sends "" (see HomeSheet in HomeModel.kt). */
   sheet?: { key: string; items: Array<{ id: string; label: string; icon?: string; active?: boolean; danger?: boolean; indent?: boolean; group?: boolean; open?: boolean; divider?: boolean }> } | null;
   onSheet?: (id: string) => void;
+  /** A game's scoreboard (see HomeMatch in HomeModel.kt). */
+  match?: Record<string, unknown> | null;
   /** The downloads page's list (see HomeDownloads in HomeModel.kt); its taps. */
   downloads?: Record<string, unknown> | null;
   onDownloads?: (what: string, text: string) => void;
@@ -969,6 +971,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const queueModel = input.queue;
   const calendarModel = input.calendar;
   const downloadsModel = input.downloads;
+  const matchModel = input.match;
   const sheetJson = input.sheet
     ? JSON.stringify({
         key: input.sheet.key,
@@ -1044,9 +1047,10 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       queue: queueModel ?? null,
       calendar: calendarModel ?? null,
       downloads: downloadsModel ?? null,
+      match: matchModel ?? null,
       sheet: sheetJson ? JSON.parse(sheetJson) : null,
     };
- }, [sheetJson, scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [matchModel, sheetJson, scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;

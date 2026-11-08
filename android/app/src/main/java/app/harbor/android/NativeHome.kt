@@ -395,6 +395,7 @@ class NativeHome(
             if (m.detail != null) out.add(Section(T_DETAIL, -11))
             if (m.header != null) out.add(Section(T_HEADER, -6))
             if (m.calendar != null) out.add(Section(T_CALBAR, -13))
+            if (m.match != null) out.add(Section(T_MATCH, -16))
             if (m.search != null) out.add(Section(T_SEARCH, -8))
             if (m.hero.isNotEmpty()) out.add(Section(T_HERO, -1))
             if (m.showCustomize || m.edit) out.add(Section(T_TOOLS, -2))
@@ -403,6 +404,17 @@ class NativeHome(
             if (m.note != null) out.add(Section(T_NOTE, -9))
             if (m.cwEmpty != null) out.add(Section(T_CW_EMPTY, -3))
             for (r in m.rows) {
+                if (r.kind == HomeRow.Kind.VERSUS) {
+                    // Two sides' figures, a line each, in a card (the match's stats).
+                    val base = stableId(r.key) shl 20
+                    if (r.title.isNotBlank()) out.add(Section(T_ROW, stableId(r.key), r))
+                    r.items.forEachIndexed { i, _ -> out.add(Section(T_VERSUS, base + i, r, start = i)) }
+                    continue
+                }
+                if (r.kind == HomeRow.Kind.PITCH) {
+                    if (r.items.isNotEmpty()) out.add(Section(T_PITCH, stableId(r.key), r))
+                    continue
+                }
                 if (r.kind == HomeRow.Kind.SOURCES) {
                     // A title's sources to play: a card each, down the page.
                     val base = stableId(r.key) shl 20
@@ -516,6 +528,9 @@ class NativeHome(
             T_WINNER -> WinnerHolder()
             T_ACTION -> ActionHolder()
             T_SOURCE -> SourceHolder()
+            T_MATCH -> MatchHolder()
+            T_VERSUS -> VersusHolder()
+            T_PITCH -> PitchHolder()
             T_CALBAR -> CalendarBarHolder()
             T_CALENDAR -> CalendarHolder()
             T_DL_TOP -> DownloadsTopHolder()
@@ -552,6 +567,9 @@ class NativeHome(
                 is DownloadGroupHolder -> m.downloads?.groups?.getOrNull(items[position].start)?.let { holder.bind(it) }
                 is EpisodeHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ListItemHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
+                is MatchHolder -> m.match?.let { holder.bind(it) }
+                is VersusHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
+                is PitchHolder -> items[position].row?.let { holder.bind(it) }
                 is SourceHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ActionHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is WinnerHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
@@ -1350,6 +1368,225 @@ class NativeHome(
             play.background = focusable(GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(colors.accent) })
             play.contentDescription = model?.label("play", "Play")
             play.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
+        }
+    }
+
+    // ---- a game ----------------------------------------------------------------------------------
+
+    /** The match page's top: the league, each side's logo, name and cards, the score, the state. */
+    private inner class MatchHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER_HORIZONTAL
+            col.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            col.setPadding(dp(16), dp(72), dp(16), dp(24))
+        }
+
+        fun bind(mt: HomeMatch) {
+            col.removeAllViews()
+            col.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(withAlpha(colors.accent, 0.1f), withAlpha(colors.accent, 0.04f), Color.TRANSPARENT))
+            val pill = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPaddingRelative(dp(16), dp(6), dp(16), dp(6))
+                background = rounded(withAlpha(colors.accent, 0.1f), dp(16).toFloat(), dp(1), withAlpha(colors.accent, 0.2f))
+            }
+            if (mt.live) {
+                pill.addView(View(ctx).apply { background = GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(colors.accent) } },
+                    LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginEnd = dp(8) })
+            }
+            pill.addView(label(mt.league.uppercase(), 12f, bold = true, lines = 1).apply { setTextColor(colors.accent); letterSpacing = 0.2f })
+            col.addView(pill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            val line = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutDirection = View.LAYOUT_DIRECTION_LTR
+            }
+            line.addView(side(mt.home), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val mid = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+            val score = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(20), dp(12), dp(20), dp(12))
+                background = rounded(withAlpha(colors.surface, 0.5f), dp(28).toFloat(), dp(1), withAlpha(colors.ink, 0.06f))
+            }
+            score.addView(label(mt.home.score, 44f, bold = true, lines = 1).apply { setTextColor(colors.ink); fontFeatureSettings = "tnum" })
+            score.addView(label("-", 28f, bold = true, lines = 1).apply { setTextColor(colors.subtle); setPadding(dp(12), 0, dp(12), 0) })
+            score.addView(label(mt.away.score, 44f, bold = true, lines = 1).apply { setTextColor(colors.ink); fontFeatureSettings = "tnum" })
+            mid.addView(score)
+            mid.addView(label(mt.status, 13f, bold = true, lines = 1).apply {
+                setTextColor(colors.canvas)
+                setPaddingRelative(dp(16), dp(6), dp(16), dp(6))
+                background = rounded(colors.ink, dp(16).toFloat())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
+            line.addView(mid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8); marginEnd = dp(8) })
+            line.addView(side(mt.away), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            col.addView(line, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(28) })
+        }
+
+        private fun side(s: MatchSide): View = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            val box = FrameLayout(ctx).apply {
+                background = rounded(withAlpha(colors.surface, 0.4f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.06f))
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+            }
+            val img = NetImage(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+            box.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+            s.logo?.let { images.load(img, listOf(it), dp(72), dp(72), alpha = true) }
+            addView(box, LinearLayout.LayoutParams(dp(88), dp(88)))
+            addView(label(s.name, 17f, bold = true, lines = 2).apply {
+                setTextColor(colors.ink)
+                gravity = Gravity.CENTER
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
+            if (s.yellow > 0 || s.red > 0) {
+                val cards = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                repeat(s.yellow) { cards.addView(View(ctx).apply { background = rounded(0xFFFACC15.toInt(), dp(2).toFloat()) }, LinearLayout.LayoutParams(dp(10), dp(14)).apply { marginEnd = dp(4) }) }
+                repeat(s.red) { cards.addView(View(ctx).apply { background = rounded(0xFFEF4444.toInt(), dp(2).toFloat()) }, LinearLayout.LayoutParams(dp(10), dp(14)).apply { marginEnd = dp(4) }) }
+                addView(cards, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            }
+        }
+    }
+
+    /**
+     * Two sides' figures on a line (a match's stats, a fight's tale of the tape): the home side's
+     * figure, the label, the away side's; the larger one bold (green with tone "accent").
+     * Card: title = label, sub = home, desc = away, rank 1 = home larger, 2 = away larger.
+     */
+    private inner class VersusHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val line = itemView as LinearLayout
+        private val home = label("", 14f, bold = true, lines = 1)
+        private val what = label("", 12f, lines = 2)
+        private val away = label("", 14f, bold = true, lines = 1)
+
+        init {
+            line.orientation = LinearLayout.HORIZONTAL
+            line.gravity = Gravity.CENTER_VERTICAL
+            line.layoutDirection = View.LAYOUT_DIRECTION_LTR
+            line.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(16)
+                marginEnd = dp(16)
+            }
+            line.setPadding(dp(16), dp(12), dp(16), dp(12))
+            home.fontFeatureSettings = "tnum"
+            away.fontFeatureSettings = "tnum"
+            away.textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+            what.gravity = Gravity.CENTER
+            what.textAlignment = View.TEXT_ALIGNMENT_CENTER
+            line.addView(home, LinearLayout.LayoutParams(dp(64), ViewGroup.LayoutParams.WRAP_CONTENT))
+            line.addView(what, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            line.addView(away, LinearLayout.LayoutParams(dp(64), ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+
+        fun bind(r: HomeRow, i: Int, c: HomeCard) {
+            val first = i == 0
+            val last = i == r.items.size - 1
+            val rad = dp(16).toFloat()
+            line.background = GradientDrawable().also {
+                it.setColor(withAlpha(colors.surface, 0.2f))
+                it.cornerRadii = floatArrayOf(if (first) rad else 0f, if (first) rad else 0f, if (first) rad else 0f, if (first) rad else 0f, if (last) rad else 0f, if (last) rad else 0f, if (last) rad else 0f, if (last) rad else 0f)
+            }
+            val green = c.tone == "accent"
+            val win = 0xFF22C55E.toInt()
+            home.text = c.sub ?: "-"
+            away.text = c.desc ?: "-"
+            what.text = c.title
+            what.setTextColor(colors.subtle)
+            home.setTextColor(if (c.rank == 1) (if (green) win else colors.ink) else if (green) colors.ink else colors.subtle)
+            away.setTextColor(if (c.rank == 2) (if (green) win else colors.ink) else if (green) colors.ink else colors.subtle)
+            home.setTypeface(null, if (c.rank == 1 || green) Typeface.BOLD else Typeface.NORMAL)
+            away.setTypeface(null, if (c.rank == 2 || green) Typeface.BOLD else Typeface.NORMAL)
+        }
+    }
+
+    /**
+     * A team's starting eleven on a half pitch, as the page draws it: the forwards at the top, the
+     * keeper at the bottom, each player's photo or shirt number in a circle with their surname
+     * under it, the team's short name in the corner. Row: title = team, sub = short name; cards:
+     * title = surname, sub = number, images = photo, rank = the line, tint = the team's colour.
+     */
+    private inner class PitchHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val wrap = itemView as FrameLayout
+
+        init {
+            wrap.layoutParams = RecyclerView.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            wrap.setPadding(dp(16), 0, dp(16), dp(24))
+        }
+
+        fun bind(r: HomeRow) {
+            wrap.removeAllViews()
+            val w = min(width() - dp(32), dp(384))
+            val h = w * 4 / 3
+            val pitch = FrameLayout(ctx).apply {
+                background = rounded(0xFF2B4C30.toInt(), dp(24).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+                clipToOutline = true
+                outlineProvider = roundOutline(dp(24).toFloat())
+            }
+            val lines = 0x33FFFFFF
+            // The pitch's lines: its edge, the box at the top, the box and goal at the bottom.
+            pitch.addView(View(ctx).apply { background = rounded(Color.TRANSPARENT, dp(12).toFloat(), dp(2), lines) },
+                FrameLayout.LayoutParams(MATCH, MATCH).apply { setMargins(dp(16), dp(16), dp(16), dp(16)) })
+            pitch.addView(View(ctx).apply { background = rounded(Color.TRANSPARENT, dp(12).toFloat(), dp(2), lines) },
+                FrameLayout.LayoutParams(dp(192), dp(96), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(4) })
+            pitch.addView(View(ctx).apply { background = rounded(Color.TRANSPARENT, dp(12).toFloat(), dp(2), lines) },
+                FrameLayout.LayoutParams(min(dp(256), w - dp(64)), dp(128), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(4) })
+            pitch.addView(View(ctx).apply { background = rounded(Color.TRANSPARENT, dp(8).toFloat(), dp(2), lines) },
+                FrameLayout.LayoutParams(dp(96), dp(48), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(4) })
+            pitch.addView(label((r.sub ?: "").uppercase(), 10f, bold = true, lines = 1).apply {
+                setTextColor(withAlpha(Color.WHITE, 0.8f))
+                setPaddingRelative(dp(8), dp(4), dp(8), dp(4))
+                background = rounded(0x66000000, dp(4).toFloat())
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+                marginStart = dp(8)
+                topMargin = dp(8)
+            })
+            val rows = r.items.groupBy { it.rank }.toSortedMap()
+            val col = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(8), dp(28), dp(8), dp(28))
+            }
+            rows.values.forEachIndexed { i, players ->
+                val line = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                }
+                for (p in players) line.addView(player(p, p.tint), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                col.addView(line, LinearLayout.LayoutParams(MATCH, 0, 1f))
+                if (i < rows.size - 1) col.addView(View(ctx), LinearLayout.LayoutParams(MATCH, dp(4)))
+            }
+            pitch.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
+            wrap.addView(pitch, FrameLayout.LayoutParams(w, h, Gravity.CENTER_HORIZONTAL))
+        }
+
+        private fun player(p: HomeCard, tint: Int?): View = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            val dot = FrameLayout(ctx).apply {
+                clipToOutline = true
+                outlineProvider = roundOutline(dp(18).toFloat())
+                background = GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(tint ?: colors.accent); it.setStroke(dp(2), withAlpha(colors.canvas, 0.8f)) }
+            }
+            dot.addView(label(p.sub ?: "-", 12f, bold = true, lines = 1).apply {
+                setTextColor(if (tint == Color.WHITE) Color.BLACK else colors.canvas)
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            if (p.images.isNotEmpty()) {
+                val img = NetImage(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+                dot.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                images.load(img, p.images, dp(36), dp(36))
+            }
+            addView(dot, LinearLayout.LayoutParams(dp(36), dp(36)))
+            addView(label(p.title, 10f, bold = true, lines = 1).apply {
+                setTextColor(Color.WHITE)
+                setPaddingRelative(dp(6), dp(2), dp(6), dp(2))
+                background = rounded(0x66000000, dp(4).toFloat())
+                maxWidth = dp(72)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         }
     }
 
@@ -4673,6 +4910,9 @@ class NativeHome(
         private const val T_GRID_CHANNEL = 26
         private const val T_LIVEHERO = 27
         private const val T_SOURCE = 28
+        private const val T_MATCH = 29
+        private const val T_VERSUS = 30
+        private const val T_PITCH = 31
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

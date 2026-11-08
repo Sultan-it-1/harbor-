@@ -3,10 +3,11 @@ import { ArrowLeft } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useView } from "@/lib/view";
 import { fetchMatchSummary, type SportsGame, type SportsMatchDetail } from "@/lib/sports/espn";
+import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
 
 export function MatchDetailView({ game }: { game: SportsGame }) {
   const t = useT();
-  const { goBack } = useView();
+  const { goBack, topKind } = useView();
   const [detail, setDetail] = useState<SportsMatchDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"summary" | "lineups" | "stats" | "profile">("summary");
@@ -27,6 +28,165 @@ export function MatchDetailView({ game }: { game: SportsGame }) {
   const hRed = parseInt(detail?.homeStats?.redCards || "0", 10);
   const aYellow = parseInt(detail?.awayStats?.yellowCards || "0", 10);
   const aRed = parseInt(detail?.awayStats?.redCards || "0", 10);
+
+  // Android: drawn natively (see @/views/native/native-screens) like the page: the scoreboard,
+  // the tabs, then the events (minute, what happened, who), the line-ups (each side's eleven on a
+  // half pitch, then the full rosters), the stats or the fighters' tale of the tape.
+  const tabs = isCombat ? (["summary", "profile", "stats"] as const) : (["summary", "lineups", "stats"] as const);
+  const nativeRows = useMemo<NativeRowInput[]>(() => {
+    if (!detail) return [];
+    const out: NativeRowInput[] = [];
+    const num = (v?: string) => parseFloat((v || "0").replace(/[^0-9.-]/g, ""));
+    const versus = (key: string, title: string, list: Array<{ label: string; h?: string; a?: string }>, green: boolean) =>
+      out.push({
+        key,
+        title,
+        kind: "versus",
+        metas: [],
+        cards: list
+          .filter((x) => x.h || x.a)
+          .map((x) => ({
+            title: t(x.label),
+            sub: x.h || (green ? "0" : "-"),
+            desc: x.a || (green ? "0" : "-"),
+            rank: num(x.h) > num(x.a) ? 1 : num(x.a) > num(x.h) ? 2 : 0,
+            tone: green ? ("accent" as const) : undefined,
+          })),
+      });
+    if (tab === "summary") {
+      const icon = (type: string) => (type === "goal" ? "⚽ " : type === "yellow_card" ? "🟨 " : type === "red_card" ? "🟥 " : type === "substitution" ? "🔄 " : "");
+      out.push({
+        key: "events",
+        title: "",
+        kind: "winners",
+        metas: [],
+        cards: detail.events.map((e) => ({ title: `${icon(e.type)}${e.text}`, sub: e.time, desc: e.participantName ?? null, tint: "#9CA3AF" })),
+      });
+    } else if (tab === "stats") {
+      versus("stats", "", detail.allStats.map((s) => ({ label: s.label, h: s.homeValue, a: s.awayValue })), true);
+    } else if (tab === "profile" && detail.homeProfile && detail.awayProfile) {
+      const hP = detail.homeProfile;
+      const aP = detail.awayProfile;
+      out.push({
+        key: "fighters",
+        title: "",
+        kind: "poster",
+        metas: [],
+        cards: [
+          { title: detail.home.name, img: hP.fullImage ? [hP.fullImage] : [] },
+          { title: detail.away.name, img: aP.fullImage ? [aP.fullImage] : [] },
+        ],
+      });
+      versus(
+        "tape",
+        "",
+        [
+          { label: "Height", h: hP.height, a: aP.height },
+          { label: "Weight", h: hP.weight, a: aP.weight },
+          { label: "Age", h: hP.age, a: aP.age },
+          { label: "Reach", h: hP.reach, a: aP.reach },
+          { label: t(hP.stance) && "Stance", h: t(hP.stance), a: t(aP.stance) },
+        ],
+        false,
+      );
+    } else if (tab === "lineups") {
+      const soccer = ["EPL", "UCL", "LALIGA", "SERIEA", "BUNDESLIGA", "LIGUE1", "MLS", "ROSHN", "UEL", "UECL", "WC", "AFC"].includes(detail.league);
+      const pitch = (key: string, side: SportsMatchDetail["home"], roster: SportsMatchDetail["homeRoster"], formation: string, home: boolean) => {
+        const starters = roster.filter((p) => p.starter).slice(0, 11);
+        const keeper = starters.find((p) => p.position && p.position.toUpperCase().includes("G")) || starters[0];
+        const field = starters.filter((p) => p.id !== keeper?.id);
+        const counts = formation ? formation.split("-").map(Number).filter((n) => !isNaN(n)) : [];
+        const lines: (typeof starters)[] = [];
+        if (counts.length > 0) {
+          let offset = 0;
+          for (const c of counts) {
+            lines.push(field.slice(offset, offset + c));
+            offset += c;
+          }
+          lines.reverse();
+        } else {
+          const has = (p: (typeof starters)[number], k: string) => !!p.position && p.position.toUpperCase().includes(k);
+          const fwd = field.filter((p) => has(p, "F") || has(p, "A") || has(p, "S"));
+          const mid = field.filter((p) => has(p, "M") && !fwd.includes(p));
+          const def = field.filter((p) => has(p, "D") && !fwd.includes(p) && !mid.includes(p));
+          const rest = field.filter((p) => !fwd.includes(p) && !mid.includes(p) && !def.includes(p));
+          lines.push(fwd, [...mid, ...rest], def);
+        }
+        if (keeper) lines.push([keeper]);
+        out.push({
+          key: `${key}Head`,
+          title: side.name,
+          note: formation ? t(formation) : null,
+          metas: [],
+          cards: [],
+          head: true,
+        });
+        out.push({
+          key,
+          title: "",
+          sub: side.abbr || (home ? "HOME" : "AWAY"),
+          kind: "pitch",
+          metas: [],
+          cards: lines.flatMap((line, li) =>
+            line.filter(Boolean).map((p) => ({
+              title: p.name.split(" ").pop() ?? p.name,
+              sub: p.jersey || "-",
+              img: p.image ? [p.image] : [],
+              rank: li,
+              tint: home ? "#E8AA6C" : "#FFFFFF",
+            })),
+          ),
+        });
+      };
+      if (soccer && detail.homeRoster.length > 0) {
+        pitch("homePitch", detail.home, detail.homeRoster, detail.homeFormation || "", true);
+        pitch("awayPitch", detail.away, detail.awayRoster, detail.awayFormation || "", false);
+      }
+      const roster = (key: string, name: string, list: SportsMatchDetail["homeRoster"]) =>
+        out.push({
+          key,
+          title: `${name} - ${t("Full Roster")}`,
+          kind: "winners",
+          metas: [],
+          cards: list.map((p) => ({ title: p.name, sub: p.jersey || "-", desc: p.position || null, tint: p.starter ? "#E8AA6C" : "#9CA3AF" })),
+        });
+      roster("homeRoster", detail.home.name, detail.homeRoster);
+      roster("awayRoster", detail.away.name, detail.awayRoster);
+    }
+    return out;
+  }, [detail, tab, t]);
+  const emptyText =
+    !detail
+      ? null
+      : tab === "summary" && detail.events.length === 0
+        ? t("No events available yet.")
+        : tab === "stats" && (!detail.allStats || detail.allStats.length === 0)
+          ? t("Statistics not available yet.")
+          : tab === "lineups" && !detail.homeRoster.length && !detail.awayRoster.length
+            ? t("Lineups not available yet.")
+            : tab === "profile" && (!detail.homeProfile || !detail.awayProfile)
+              ? t("Profile details not available.")
+              : null;
+  const native = useNativeBrowsePage("match", {
+    scrollKey: game.id,
+    active: topKind === "match-detail",
+    t,
+    back: true,
+    match: {
+      league: game.league,
+      live: game.state === "in",
+      status: game.detail || (game.state === "in" ? t("Live") : game.state === "post" ? t("Final") : t("Upcoming")),
+      home: { name: game.home.name, logo: game.home.logo || null, score: game.home.score || "0", yellow: detail ? hYellow : 0, red: detail ? hRed : 0 },
+      away: { name: game.away.name, logo: game.away.logo || null, score: game.away.score || "0", yellow: detail ? aYellow : 0, red: detail ? aRed : 0 },
+    },
+    chips: [{ key: "tab", items: tabs.map((id) => ({ id, label: t(id), on: tab === id })) }],
+    onChip: (group, id) => {
+      if (group === "tab") setTab(id as typeof tab);
+    },
+    rows: nativeRows,
+    message: loading ? { text: t("Loading…") } : !detail ? { text: t("Failed to load match details.") } : emptyText ? { text: emptyText } : null,
+  });
+  if (native) return <div className="flex h-full flex-col bg-canvas" />;
 
   return (
     <div className="flex h-full flex-col bg-canvas pb-8">

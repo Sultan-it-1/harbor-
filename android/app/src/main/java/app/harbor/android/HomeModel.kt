@@ -53,6 +53,8 @@ class HomeModel(
     val downloads: HomeDownloads? = null,
     /** A menu sliding up from the bottom (a title's "…"), while it's open. */
     val sheet: HomeSheet? = null,
+    /** A game's scoreboard (the match page's top). */
+    val match: HomeMatch? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -150,6 +152,8 @@ class HomeModel(
                             "livehero" -> HomeRow.Kind.LIVEHERO
                             "sports" -> HomeRow.Kind.SPORTS
                             "sources" -> HomeRow.Kind.SOURCES
+                            "versus" -> HomeRow.Kind.VERSUS
+                            "pitch" -> HomeRow.Kind.PITCH
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -340,6 +344,12 @@ class HomeModel(
                         },
                     )
                 },
+                match = o.optJSONObject("match")?.let { mt ->
+                    fun side(k: String) = mt.optJSONObject(k)?.let { s ->
+                        MatchSide(name = s.str("name") ?: "", logo = s.str("logo"), score = s.str("score") ?: "0", yellow = s.optInt("yellow", 0), red = s.optInt("red", 0))
+                    } ?: MatchSide("", null, "0", 0, 0)
+                    HomeMatch(league = mt.str("league") ?: "", live = mt.optBoolean("live", false), status = mt.str("status") ?: "", home = side("home"), away = side("away"))
+                },
                 sheet = o.optJSONObject("sheet")?.let { sh ->
                     HomeSheet(
                         key = sh.str("key") ?: "",
@@ -468,7 +478,7 @@ class HomeRow(
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS, SOURCES }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS, SOURCES, VERSUS, PITCH }
 }
 
 /** Critics' Pick, as the page's own card shows it. */
@@ -738,6 +748,11 @@ class DlButton(val id: String, val label: String)
  * (outside, Back) sends {a:"sheet", what:""}. Another [key] is another menu.
  */
 class HomeSheet(val key: String, val items: List<SheetItem>)
+
+/** A game's scoreboard: the league (pulsing while [live]), each side's logo, name, cards and score, the state. */
+class HomeMatch(val league: String, val live: Boolean, val status: String, val home: MatchSide, val away: MatchSide)
+
+class MatchSide(val name: String, val logo: String?, val score: String, val yellow: Int, val red: Int)
 
 class SheetItem(
     val id: String,
