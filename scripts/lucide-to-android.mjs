@@ -13,7 +13,7 @@ const OUT = join(root, "android/app/src/main/res/drawable");
 const ICONS = [
   "x", "captions", "audio-lines", "layers", "lock", "lock-open", "scan", "sun", "volume-2",
   "volume-x", "rewind", "fast-forward", "skip-forward", "gauge", "check", "refresh-cw", "type",
-  "arrow-left", "languages", "chevron-right", "play", "pause", "download", "plus", "users", "pencil", "arrow-up", "arrow-down", "eye", "eye-off", "list-ordered", "sparkles", "trash-2", "rotate-ccw", "quote", "external-link", "chevron-left", "search", "chevron-down", "tag", "calendar", "clock", "globe", "building-2", "tv", "ellipsis", "shuffle", "info", "bookmark", "bookmark-check", "thumbs-down", "rotate-cw", "wifi", "battery-charging", "magnet", "link-2", "circle-alert", "star", "list-checks", "list-plus",
+  "arrow-left", "languages", "chevron-right", "play", "pause", "download", "plus", "users", "pencil", "arrow-up", "arrow-down", "eye", "eye-off", "list-ordered", "sparkles", "trash-2", "rotate-ccw", "quote", "external-link", "chevron-left", "search", "chevron-down", "tag", "calendar", "clock", "globe", "building-2", "tv", "ellipsis", "shuffle", "info", "bookmark", "bookmark-check", "thumbs-down", "rotate-cw", "wifi", "battery-charging", "magnet", "link-2", "circle-alert", "star", "list-checks", "list-plus", "zap", "radio", "crown", "copy", "arrow-right", "settings-2", "grip-vertical", "archive-restore", "history", "trending-up", "library", "link", "chevrons-up", "arrow-up-down",
 ];
 
 const n = (v) => Number(v);

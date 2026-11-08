@@ -56,6 +56,21 @@ import { useNativeBrowsePage, useAssetDataUrls, type NativeRowInput } from "@/vi
 import { pendingAddons, useStremioSources } from "./play-picker/stremio-layout";
 import { condenseDescription } from "./play-picker/stremio-row";
 import { qualityTier } from "./play-picker/quality-filter";
+import { useCloseOnAndroidBack } from "@/lib/use-android-back";
+import { abbreviateLanguages, addonInstanceKey, buildAddonOptions } from "./play-picker/picker-utils";
+import { stillInTheatres } from "./play-picker/picker-empty-ladder";
+import {
+  diagBlock,
+  drawerBlock,
+  hostCard,
+  ladderPanels,
+  loaderBlock,
+  pickBlock,
+  stages,
+  streamsBlock,
+  tiersBlock,
+  type PanelAction,
+} from "./play-picker/native-blocks";
 
 const TIER_ORDER: Tier[] = ["4K_DV", "4K_HDR", "4K", "1080p_HDR", "1080p", "720p", "SD", "ROUGH"];
 
@@ -75,7 +90,7 @@ export function PlayPicker({
   resume?: boolean;
 }) {
   const isDownload = intent === "download";
-  const { openPlayer, openSettings, exitPickerToDetail, topKind } = useView();
+  const { openPlayer, openSettings, exitPickerToDetail, topKind, goBack, setView } = useView();
   const backToDetail = () => {
     void exitWindowFullscreen();
     exitPickerToDetail(meta);
@@ -485,12 +500,14 @@ export function PlayPicker({
   const noSourcesConfigured =
     addons !== null && addons.length === 0 && debrids.length === 0;
 
-  // Android: the sources drawn natively (see @/views/native/native-screens) as the page's
-  // Stremio-style list: the title (the episode's line, its name and overview), the addons and the
-  // qualities to pick (with their counts) and Refresh, then each source (the addon's logo, name,
-  // description, labels, Play); "Searching streams" and the addons still answering as on the page.
-  // The other layout, the empty ladder and the page's full-screen steps (auto-play, P2P,
-  // debrid down…) keep the page.
+  // Android: the picker drawn natively (see @/views/native/native-screens), in either layout:
+  // - Stremio style: the title, the addons and qualities to pick (with their counts) and Refresh,
+  //   then each source (the addon's logo, name, description, labels, Play), the addons still
+  //   answering;
+  // - the other layout: what was found, the big card of the picked source, "Switch quality" and
+  //   every source in the drawer (native-blocks.ts);
+  // - in both, the search's breathing logo, the empty ladder's messages, and the full-screen steps
+  //   (connecting, peer-to-peer, debrid down, nothing played, saving offline, no sources yet).
   const tt = useT();
   const stremioNative = settings.pickerLayout === "stremio" || isDownload;
   const listed = stremioNative && filteredPicker ? displayStreams : [];
@@ -500,71 +517,253 @@ export function PlayPicker({
     src.addonLogoMap.get(s.addonUrl ?? "") ?? src.addonLogoMap.get(s.addonId) ?? addonLogoSrc(s.addonId, s.addonName ?? "") ?? null;
   const toData = useAssetDataUrls(src.visibleStreams.map(logoOf));
   const waiting = pendingAddons(addons, listed);
-  const pickerNativeBlocked =
-    !stremioNative ||
-    noSourcesConfigured ||
-    !!p2pConfirm ||
-    showAutoTransition ||
-    debridDown ||
-    autoExhausted ||
-    !!downloadConfirm ||
-    (addonsSettled && (!filteredPicker || filteredPicker.all.length === 0));
+  const [drawerAddon, setDrawerAddon] = useState("all");
+  const [diagOpen, setDiagOpen] = useState(false);
+  const [p2pRemember, setP2pRemember] = useState(false);
+  const drawerOptions = useMemo(() => buildAddonOptions(displayStreams), [displayStreams]);
+  useEffect(() => {
+    if (drawerAddon !== "all" && !drawerOptions.some((o) => o.id === drawerAddon)) setDrawerAddon("all");
+  }, [drawerOptions, drawerAddon]);
+  const drawerShown = useMemo(
+    () => (drawerAddon === "all" ? displayStreams : displayStreams.filter((s) => addonInstanceKey(s) === drawerAddon)).slice(0, 80),
+    [displayStreams, drawerAddon],
+  );
+  const panelAct = (a: PanelAction | null) => {
+    if (a === "library") openSettings("library");
+    else if (a === "streaming") openSettings("streaming");
+    else if (a === "showAll") setForceShowAll(true);
+    else if (a === "wider") {
+      if (strictMode) setStrictMode(false);
+      else setForceShowAll(true);
+    }
+  };
+  const pick = useMemo(() => !stremioNative && !loading && currentPick
+    ? pickBlock({
+        meta,
+        episode,
+        stream: currentPick,
+        debrids,
+        addonLogo: lookupLogo(currentPick.addonId),
+        resolving: resolving?.stream === currentPick,
+        queued: currentPick.infoHash != null && queuedHash === currentPick.infoHash,
+        inSession,
+        isPreviouslyPlayed: previousMatch === currentPick,
+        match: matchFor(currentPick),
+        showFilename: !!settings.pickerShowFilename,
+        showBadges: !!settings.showQualityBadge,
+      })
+    : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stremioNative, loading, currentPick, meta, episode, debrids, resolving, queuedHash, inSession, previousMatch, matchFor, settings.pickerShowFilename, settings.showQualityBadge, addonLogoMap]);
   const pickerRows = useMemo<NativeRowInput[]>(() => {
     const out: NativeRowInput[] = [];
-    const card = (key: string, c: { title: string; sub?: string | null; tone?: "plain" | "danger"; busy?: boolean; icon?: string }) =>
-      out.push({ key, title: "", kind: "action", metas: [], cards: [{ title: c.title, sub: c.sub ?? null, tone: c.tone ?? "plain", busy: c.busy, icon: c.icon }] });
+    const card = (key: string, c: { title: string; sub?: string | null; kicker?: string; tone?: "plain" | "danger" | "accent"; busy?: boolean; icon?: string }) =>
+      out.push({ key, title: "", kind: "action", metas: [], cards: [{ title: c.title, sub: c.sub ?? null, kicker: c.kicker, tone: c.tone ?? "plain", busy: c.busy, icon: c.icon }] });
+    const block = (key: string, pk: Record<string, unknown>, onPk?: (what: string, i: number) => void) =>
+      out.push({ key, title: "", kind: "pk", metas: [], pk, onPk });
+    if (hostSourceForMedia) {
+      const h = hostCard(hostSourceForMedia);
+      card("host", { kicker: h.kicker, title: h.title, sub: h.sub, tone: "accent", icon: "crown" });
+    }
     if (isDownload) card("download", { title: tt("Choose a source to save offline. You can track progress on the Downloads page."), icon: "download" });
     if (stubBanner) card("stub", { title: stubBanner, icon: "alert" });
-    if (!addonsSettled && (!filteredPicker || filteredPicker.all.length === 0)) card("searching", { title: tt("Searching streams"), busy: true });
-    if (src.visibleStreams.length > 0) {
-      out.push({
-        key: "sources",
-        title: "",
-        kind: "sources",
-        metas: [],
-        cards: src.visibleStreams.map((s) => {
-          const raw = s.title?.trim() || s.description?.trim() || "";
-          const failed = failedStreams.has(s);
-          return {
-            title: s.name?.trim() || s.addonName || "Source",
-            desc: (settings.fullStreamDescription ? raw : condenseDescription(raw)) || null,
-            img: [toData(logoOf(s))].filter((u): u is string => !!u),
-            kicker: s.addonName ?? null,
-            tags: settings.showQualityBadge ? streamBadges(s).map(shortBadge) : [],
-            tone: failed ? ("danger" as const) : undefined,
-            sub: failed ? tt("Unavailable, try another.") : null,
-          };
-        }),
-        onOpen: (i) => {
-          const s = src.visibleStreams[i];
-          if (s) playManually(s);
-        },
-      });
+    if (!addonsSettled && (!filteredPicker || filteredPicker.all.length === 0)) block("pk-loader", loaderBlock(meta));
+    for (const p of ladderPanels({
+      meta,
+      result,
+      addonsSettled,
+      pipelineDone,
+      streamIds,
+      debridCount: debrids.length,
+      addonCount: addons?.length ?? 0,
+      allCount,
+      rawCount,
+      strictMode,
+      forceShowAll,
+      theatres: stillInTheatres(meta, result, allCount, rawCount),
+    })) {
+      block(p.key, p.pk, () => panelAct(p.action));
     }
-    if (!pipelineDone && listed.length > 0) {
-      const n = Math.max(waiting.length, Math.max(0, (addons?.length ?? 0) - addonCount));
-      card("pending", {
-        title: waiting[0]
-          ? `${tt("Waiting for")} ${waiting[0].manifest?.name ?? waiting[0].manifest?.id ?? ""}`
-          : n === 1
-            ? tt("1 addon loading")
-            : n > 1
-              ? tt("{n} addons loading", { n })
-              : tt("Loading more sources"),
-        busy: true,
-      });
+    if (stremioNative) {
+      if (src.visibleStreams.length > 0) {
+        out.push({
+          key: "sources",
+          title: "",
+          kind: "sources",
+          metas: [],
+          cards: src.visibleStreams.map((s) => {
+            const raw = s.title?.trim() || s.description?.trim() || "";
+            const failed = failedStreams.has(s);
+            return {
+              title: s.name?.trim() || s.addonName || "Source",
+              desc: (settings.fullStreamDescription ? raw : condenseDescription(raw)) || null,
+              img: [toData(logoOf(s))].filter((u): u is string => !!u),
+              kicker: s.addonName ?? null,
+              tags: settings.showQualityBadge ? streamBadges(s).map(shortBadge) : [],
+              tone: failed ? ("danger" as const) : undefined,
+              sub: failed ? tt("Unavailable, try another.") : null,
+            };
+          }),
+          onOpen: (i) => {
+            const s = src.visibleStreams[i];
+            if (s) playManually(s);
+          },
+        });
+      }
+      if (!pipelineDone && listed.length > 0) {
+        const n = Math.max(waiting.length, Math.max(0, (addons?.length ?? 0) - addonCount));
+        card("pending", {
+          title: waiting[0]
+            ? `${tt("Waiting for")} ${waiting[0].manifest?.name ?? waiting[0].manifest?.id ?? ""}`
+            : n === 1
+              ? tt("1 addon loading")
+              : n > 1
+                ? tt("{n} addons loading", { n })
+                : tt("Loading more sources"),
+          busy: true,
+        });
+      }
+    } else {
+      if (!loading && result) block("pk-diag", diagBlock(result, debrids, diagOpen), () => setDiagOpen((v) => !v));
+      if (pick && currentPick) {
+        block("pk-pick", pick.pk, () => {
+          if (pick.action === "cache") onCache(currentPick);
+          else if (pick.action === "play") playManually(currentPick);
+        });
+      }
+      if (!loading && populatedTiers.length > 1 && filteredPicker) {
+        block(
+          "pk-tiers",
+          tiersBlock({
+            tiers: populatedTiers,
+            selected: selectedTier,
+            byTier: filteredPicker.byTier,
+            debrids,
+            cachedPill: uncachedHiddenCount > 0 ? { on: cachedOnly, hidden: uncachedHiddenCount } : null,
+            langPill:
+              preferredLangs.length > 0 && langHiddenCount > 0
+                ? {
+                    on: langFilter,
+                    hidden: langHiddenCount,
+                    label: abbreviateLanguages(isAnimeRequest ? preferredLangs : preferredLangs.filter((l) => normalizeLangCode(l) !== "ja")),
+                  }
+                : null,
+          }),
+          (what, i) => {
+            if (what === "tier") {
+              const tier = populatedTiers[i];
+              if (tier) setSelectedTier(tier);
+            } else if (what === "pill:cached") setCachedOnly((v) => !v);
+            else if (what === "pill:lang") setLangFilter((v) => !v);
+          },
+        );
+      }
+      if (!loading && allCount > 0 && filteredPicker) {
+        block(
+          "pk-drawer",
+          drawerBlock({
+            open: drawerOpen,
+            count: allCount,
+            addonCount,
+            usedAddons,
+            filter: drawerAddon,
+            total: displayStreams.length,
+            options: drawerOptions,
+          }),
+          (what) => {
+            if (what === "drawer") setDrawerOpen((o) => !o);
+            else if (what.startsWith("filter:")) setDrawerAddon(what.slice(7));
+          },
+        );
+        if (drawerOpen && drawerShown.length > 0) {
+          block(
+            "pk-streams",
+            streamsBlock({
+              streams: drawerShown,
+              debrids,
+              logoOf: lookupLogo,
+              matchFor: hostMatch ? matchFor : undefined,
+              resolvingId: resolving?.stream.infoHash ?? null,
+              showName: meta.name,
+              episode,
+              showFilename: !!settings.pickerShowFilename,
+            }),
+            (what, i) => {
+              const s = drawerShown[i];
+              if (what === "stream" && s) playManually(s);
+            },
+          );
+        }
+      }
     }
     if (resolveError) card("error", { title: resolveError, tone: engineWarming ? "plain" : "danger", busy: engineWarming });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tt, isDownload, stubBanner, addonsSettled, filteredPicker, src.visibleStreams, failedStreams, settings.fullStreamDescription, settings.showQualityBadge, pipelineDone, listed.length, waiting.length, addons, addonCount, resolveError, engineWarming, toData]);
+  }, [tt, isDownload, stubBanner, addonsSettled, filteredPicker, src.visibleStreams, failedStreams, settings.fullStreamDescription, settings.showQualityBadge, settings.pickerShowFilename, pipelineDone, listed.length, waiting.length, addons, addonCount, resolveError, engineWarming, toData, stremioNative, hostSourceForMedia, result, streamIds, debrids, allCount, rawCount, strictMode, forceShowAll, loading, diagOpen, pick, currentPick, populatedTiers, selectedTier, uncachedHiddenCount, cachedOnly, preferredLangs, langHiddenCount, langFilter, isAnimeRequest, drawerOpen, usedAddons, drawerAddon, displayStreams, drawerOptions, drawerShown, hostMatch, resolving, meta, episode]);
+
+  // The full-screen steps, in the page's order, and what their buttons (and Back) do.
+  const stage: { model: Record<string, unknown>; onTap: (what: string) => void; back: (() => void) | null } | null = noSourcesConfigured
+    ? {
+        model: stages.noSources(meta),
+        onTap: (w) => (w === "addons" ? setView("addons") : w === "settings" ? openSettings("streaming") : goBack()),
+        back: null,
+      }
+    : p2pConfirm
+      ? {
+          model: stages.p2p(meta, p2pConfirm.stream, p2pRemember),
+          onTap: (w) => {
+            if (w === "toggle") setP2pRemember((v) => !v);
+            else if (w === "p2p") {
+              if (p2pRemember) update({ p2pAutoConsent: true });
+              confirmP2p();
+            } else cancelP2p();
+          },
+          back: cancelP2p,
+        }
+      : showAutoTransition
+        ? {
+            model: stages.connecting(meta, episode, autoAttemptIdx, !!stubBanner),
+            onTap: () => {
+              abortResolve();
+              setResolving(null);
+              setAutoCancelled(true);
+            },
+            back: null,
+          }
+        : debridDown
+          ? { model: stages.debridDown(meta), onTap: (w) => (w === "retry" ? resetDebridDown() : backToDetail()), back: backToDetail }
+          : autoExhausted
+            ? {
+                model: stages.exhausted(meta, episode),
+                onTap: (w) => {
+                  if (w === "exit") exitPickerToDetail(meta);
+                  else {
+                    setAutoCancelled(true);
+                    setAutoExhausted(false);
+                  }
+                },
+                back: () => {
+                  setAutoCancelled(true);
+                  setAutoExhausted(false);
+                },
+              }
+            : downloadConfirm
+              ? { model: stages.saving(meta, episode, downloadConfirm.label), onTap: () => backToDetail(), back: backToDetail }
+              : null;
+  const stageModel = stage?.model ?? null;
+  const stageJson = stageModel ? JSON.stringify(stageModel) : null;
+  const stableStage = useMemo(() => (stageJson ? (JSON.parse(stageJson) as Record<string, unknown>) : null), [stageJson]);
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
   const pickerNative = useNativeBrowsePage("picker", {
     active: topKind === "picker",
-    blocked: pickerNativeBlocked,
+    blocked: false,
     t: tt,
-    back: true,
+    back: !stableStage,
     onBack: backToDetail,
     noTogether: true,
+    stage: stableStage,
+    onStage: (what) => stageRef.current?.onTap(what),
     header: {
       kicker: episode
         ? `${meta.name} ${tt("· Season")} ${episode.imdbSeason ?? episode.season} ${tt("· Episode")} ${String(episode.imdbEpisode ?? episode.episode).padStart(2, "0")}`
@@ -605,7 +804,18 @@ export function PlayPicker({
     },
     rows: pickerRows,
   });
+  // The steps' Back, as their pop-ups on the page do it (they aren't mounted while it's native).
+  useCloseOnAndroidBack(pickerNative && !!stage?.back, () => stageRef.current?.back?.());
+  // "Saving to Downloads" goes back to the title by itself, as on the page.
+  useEffect(() => {
+    if (!pickerNative || !downloadConfirm) return;
+    const id = window.setTimeout(() => backToDetail(), 1500);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickerNative, downloadConfirm]);
   void qualityTier;
+
+  if (pickerNative) return <main className="absolute inset-0 z-50 overflow-hidden bg-canvas" />;
 
   if (noSourcesConfigured) {
     return <NoSourcesConfiguredModal meta={meta} />;
@@ -674,8 +884,6 @@ export function PlayPicker({
       />
     );
   }
-
-  if (pickerNative) return <main className="absolute inset-0 z-50 overflow-hidden bg-canvas" />;
 
   return (
     <main className="absolute inset-0 z-50 overflow-y-auto bg-canvas">

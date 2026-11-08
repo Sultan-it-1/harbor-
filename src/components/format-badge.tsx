@@ -314,6 +314,12 @@ const SCALE_UP: Partial<Record<BadgeKind, number>> = {
   repack: 1.5,
 };
 
+/** A badge's picture and how big the page draws it (the native screens draw it the same). */
+export function badgeImage(kind: BadgeKind, size: BadgeSize): { src: string; w: number; maxH: number; label: string } {
+  const scale = SCALE_UP[kind] ?? 1;
+  return { src: SRC[kind], w: Math.round(WIDTH[size] * scale), maxH: Math.round(MAX_HEIGHT[size] * scale), label: ALT[kind] ?? kind };
+}
+
 type QualityNote = { title: string; body: string; tone: "warn" | "info" };
 
 const QUALITY_NOTES: Partial<Record<BadgeKind, QualityNote>> = {

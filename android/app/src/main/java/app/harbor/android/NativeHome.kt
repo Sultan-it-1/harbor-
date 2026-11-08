@@ -54,6 +54,8 @@ class NativeHome(
     private val togetherButton = FrameLayout(ctx)
     /** A page opened over another: "Back" at the top (like the page's own pill). */
     private val backButton = LinearLayout(ctx)
+    /** A full-screen step over everything (the play picker's: connecting, peer-to-peer…). */
+    private val stageView = FrameLayout(ctx)
     private val backText = label("", 13.5f, lines = 1)
     private val backIcon = ImageView(ctx)
     /** The search field: under the heading, then held at the top while the page scrolls. */
@@ -171,6 +173,8 @@ class NativeHome(
         searchBar.setPadding(dp(16), dp(8), dp(16), dp(8))
         searchBar.addView(searchBox, FrameLayout.LayoutParams(MATCH, dp(44)))
         root.addView(searchBar, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        stageView.visibility = View.GONE
+        root.addView(stageView, FrameLayout.LayoutParams(MATCH, MATCH))
         list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) = placeSearch()
         })
@@ -218,6 +222,7 @@ class NativeHome(
             }
             bindSearch(m)
             bindSheet(m.sheet)
+            bindStage(m.stage)
             sections.submit(m)
             if (lastTop != Int.MIN_VALUE && m.top != lastTop) list.scrollToPosition(0)
             lastTop = m.top
@@ -419,6 +424,21 @@ class NativeHome(
                     if (r.items.isNotEmpty()) out.add(Section(T_PITCH, stableId(r.key), r))
                     continue
                 }
+                if (r.kind == HomeRow.Kind.PK) {
+                    // The play picker's blocks: one each, the sources' box a line per source.
+                    val base = stableId(r.key) shl 20
+                    when (val b = r.pk) {
+                        is PkStreams -> b.items.forEachIndexed { i, _ -> out.add(Section(T_PK_STREAM, base + i, r, start = i)) }
+                        is PkPick -> out.add(Section(T_PK_PICK, base, r))
+                        is PkTiers -> out.add(Section(T_PK_TIERS, base, r))
+                        is PkDrawer -> out.add(Section(T_PK_DRAWER, base, r))
+                        is PkDiag -> out.add(Section(T_PK_DIAG, base, r))
+                        is PkPanel -> out.add(Section(T_PK_PANEL, base, r))
+                        is PkLoader -> out.add(Section(T_PK_LOADER, base, r))
+                        null -> {}
+                    }
+                    continue
+                }
                 if (r.kind == HomeRow.Kind.SOURCES) {
                     // A title's sources to play: a card each, down the page.
                     val base = stableId(r.key) shl 20
@@ -541,6 +561,13 @@ class NativeHome(
             T_CALENDAR -> CalendarHolder()
             T_DL_TOP -> DownloadsTopHolder()
             T_DL_GROUP -> DownloadGroupHolder()
+            T_PK_PICK -> PkPickHolder()
+            T_PK_TIERS -> PkTiersHolder()
+            T_PK_STREAM -> PkStreamHolder()
+            T_PK_DRAWER -> PkDrawerHolder()
+            T_PK_DIAG -> PkDiagHolder()
+            T_PK_PANEL -> PkPanelHolder()
+            T_PK_LOADER -> PkLoaderHolder()
             else -> SpacerHolder(dp(28))
         }
 
@@ -581,6 +608,16 @@ class NativeHome(
                 is SourceHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is ActionHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
                 is WinnerHolder -> items[position].row?.let { r -> r.items.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, it) } }
+                is PkPickHolder -> items[position].row?.let { r -> (r.pk as? PkPick)?.let { holder.bind(r, it) } }
+                is PkTiersHolder -> items[position].row?.let { r -> (r.pk as? PkTiers)?.let { holder.bind(r, it) } }
+                is PkDrawerHolder -> items[position].row?.let { r -> (r.pk as? PkDrawer)?.let { holder.bind(r, it) } }
+                is PkDiagHolder -> items[position].row?.let { r -> (r.pk as? PkDiag)?.let { holder.bind(r, it) } }
+                is PkPanelHolder -> items[position].row?.let { r -> (r.pk as? PkPanel)?.let { holder.bind(r, it) } }
+                is PkLoaderHolder -> items[position].row?.let { r -> (r.pk as? PkLoader)?.let { holder.bind(it) } }
+                is PkStreamHolder -> items[position].row?.let { r ->
+                    val list = (r.pk as? PkStreams)?.items ?: return@let
+                    list.getOrNull(items[position].start)?.let { holder.bind(r, items[position].start, list.size, it) }
+                }
             }
         }
 
@@ -1244,6 +1281,8 @@ class NativeHome(
                 "sparkles" -> R.drawable.ic_sparkles
                 "calendar" -> R.drawable.ic_calendar
                 "tag" -> R.drawable.ic_tag
+                "crown" -> R.drawable.ic_crown
+                "download" -> R.drawable.ic_download
                 else -> 0
             }
             iconBox.visibility = if (res != 0) View.VISIBLE else View.GONE
@@ -1376,6 +1415,1185 @@ class NativeHome(
             play.background = focusable(GradientDrawable().also { it.shape = GradientDrawable.OVAL; it.setColor(colors.accent) })
             play.contentDescription = model?.label("play", "Play")
             play.findViewWithTag<ImageView>("ic")?.setImageDrawable(icon(R.drawable.ic_play, colors.canvas))
+        }
+    }
+
+    // ---- The play picker's other layout (its big card, qualities, every source, messages) -----
+
+    private val pkGreen = 0xFF6EE7B7.toInt()
+    private val pkDanger = 0xFFE5484D.toInt()
+    private val pkAmber100 = 0xFFFEF3C7.toInt()
+    private val pkAmber200 = 0xFFFDE68A.toInt()
+    private val pkAmber300 = 0xFFFCD34D.toInt()
+    private val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+
+    private fun pkTone(tone: String): Int = when (tone) {
+        "accent" -> colors.accent
+        "green" -> pkGreen
+        "subtle" -> colors.subtle
+        "danger" -> pkDanger
+        "ink" -> colors.ink
+        else -> colors.muted
+    }
+
+    private fun pkIconRes(name: String?): Int = when (name) {
+        "zap", "zap-line" -> R.drawable.ic_zap
+        "check" -> R.drawable.ic_check
+        "download" -> R.drawable.ic_download
+        "external" -> R.drawable.ic_external_link
+        "play" -> R.drawable.ic_play
+        "radio" -> R.drawable.ic_radio
+        "x" -> R.drawable.ic_x
+        "arrow" -> R.drawable.ic_arrow_right
+        "lang" -> R.drawable.ic_languages
+        "users" -> R.drawable.ic_users
+        "crown" -> R.drawable.ic_crown
+        "copy" -> R.drawable.ic_copy
+        "info" -> R.drawable.ic_info
+        else -> 0
+    }
+
+    /** The page's small capitals with their letter spacing (Arabic has neither). */
+    private fun caps(t: TextView, text: String, spacing: Float) {
+        val rtl = model?.rtl == true
+        t.text = if (rtl) text else text.uppercase()
+        t.letterSpacing = if (rtl) 0f else spacing
+    }
+
+    private fun mono(t: TextView) {
+        t.typeface = Typeface.MONOSPACE
+    }
+
+    /** A format badge: its picture [b.w] dp wide (as tall as its shape, at most [maxH] dp), or its name. */
+    private fun pkBadge(b: PkBadge, maxH: Float): View {
+        val box = FrameLayout(ctx)
+        val d = ctx.resources.displayMetrics.density
+        val w = (b.w * d).toInt()
+        // The page's badges are at most about as tall as they are wide (the size's height scales with it).
+        val maxPx = (max(maxH, b.w * 0.94f) * d).toInt()
+        val text = label(b.label, 10.5f, bold = true, lines = 1).apply {
+            setTextColor(colors.ink)
+            setPaddingRelative(dp(6), dp(2), dp(6), dp(2))
+            background = rounded(withAlpha(colors.canvas, 0.6f), dp(5).toFloat(), dp(1), withAlpha(colors.ink, 0.14f))
+        }
+        box.addView(text, FrameLayout.LayoutParams(wrap, wrap, Gravity.CENTER_VERTICAL))
+        val src = b.src ?: return box
+        val img = NetImage(ctx)
+        img.scaleType = ImageView.ScaleType.FIT_CENTER
+        img.visibility = View.INVISIBLE
+        box.addView(img, FrameLayout.LayoutParams(w, min(maxPx, w)))
+        images.load(img, listOf(src), w, maxPx, alpha = true) { ok ->
+            if (!ok) {
+                box.removeView(img)
+                return@load
+            }
+            val dr = img.drawable
+            val h = if (dr != null && dr.intrinsicWidth > 0) min(maxPx, (w * dr.intrinsicHeight.toFloat() / dr.intrinsicWidth).toInt()) else maxPx
+            img.layoutParams = FrameLayout.LayoutParams(w, max(h, dp(8)))
+            img.visibility = View.VISIBLE
+            text.visibility = View.GONE
+        }
+        return box
+    }
+
+    /** An audio language: its flag (an emoji) and, when [named], its name; "Multi" as a pill. */
+    private fun pkFlag(f: PkFlag, big: Boolean, named: Boolean): View {
+        if (f.emoji == null) {
+            val multi = f.multi
+            return label(if (named || multi) f.label else f.label.take(2), if (big) 11f else 9.5f, bold = true, lines = 1).apply {
+                if (!model!!.rtl) {
+                    text = text.toString().uppercase()
+                    letterSpacing = 0.16f
+                }
+                setTextColor(if (multi) colors.accent else colors.subtle)
+                setPaddingRelative(dp(5), dp(1), dp(5), dp(1))
+                background = if (multi) rounded(withAlpha(colors.accent, 0.15f), dp(3).toFloat(), dp(1), withAlpha(colors.accent, 0.35f))
+                else if (named) null else rounded(withAlpha(colors.canvas, 0.7f), dp(3).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            }
+        }
+        val line = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        line.addView(label(f.emoji, if (big) 19f else 14f, lines = 1).apply { includeFontPadding = false })
+        if (named) {
+            line.addView(label(f.label, if (big) 15f else 13f, bold = true, lines = 1).apply { setTextColor(colors.muted) },
+                LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(6) })
+        }
+        return line
+    }
+
+    /** A coloured line with its icon (cached, queued, in your library…). */
+    private fun pkStatusView(s: PkStatus, size: Float, spacing: Float): View {
+        val c = pkTone(s.tone)
+        val line = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val res = pkIconRes(s.icon)
+        if (res != 0) line.addView(ImageView(ctx).apply { setImageDrawable(icon(res, c)) }, LinearLayout.LayoutParams(dp(12), dp(12)).apply { marginEnd = dp(5) })
+        line.addView(label("", size, bold = true, lines = 1).apply {
+            if (s.upper) caps(this, s.text, spacing) else {
+                text = s.text
+                letterSpacing = if (model?.rtl == true) 0f else spacing
+            }
+            setTextColor(c)
+        })
+        return line
+    }
+
+    /** A small pill: REMUX, a release group, an edition, "Same file as host". */
+    private fun pkTagView(t: PkTag): View = label("", 10.5f, bold = true, lines = 1).apply {
+        caps(this, t.text, 0.14f)
+        setPaddingRelative(dp(9), dp(4), dp(9), dp(4))
+        when (t.style) {
+            "remux" -> {
+                setTextColor(colors.ink)
+                background = rounded(withAlpha(colors.canvas, 0.95f), dp(13).toFloat(), dp(1), withAlpha(colors.ink, 0.16f))
+            }
+            "group" -> {
+                setTextColor(colors.muted)
+                background = rounded(withAlpha(colors.canvas, 0.45f), dp(13).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            }
+            "accent" -> {
+                setTextColor(colors.accent)
+                background = rounded(withAlpha(colors.accent, 0.15f), dp(6).toFloat(), dp(1), withAlpha(colors.accent, 0.3f))
+            }
+            "danger" -> {
+                setTextColor(pkDanger)
+                background = rounded(withAlpha(pkDanger, 0.2f), dp(13).toFloat(), dp(1), withAlpha(pkDanger, 0.4f))
+            }
+            else -> {
+                setTextColor(colors.muted)
+                background = rounded(withAlpha(colors.surface, 0.9f), dp(6).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            }
+        }
+    }
+
+    /** A round-ended button in one of the page's looks; [onTap] does what it says. */
+    private fun pkButtonView(b: PkButton, height: Int, radius: Float, onTap: () -> Unit): View {
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPaddingRelative(dp(24), 0, dp(26), 0)
+            minimumHeight = height
+        }
+        val (bg, fg) = when (b.style) {
+            "accent" -> Pair(rounded(colors.accent, radius), colors.canvas)
+            "outline" -> Pair(rounded(withAlpha(colors.ink, 0.04f), radius, dp(1), withAlpha(colors.ink, 0.3f)), colors.ink)
+            "green" -> Pair(rounded(withAlpha(pkGreen, 0.15f), radius, dp(1), withAlpha(pkGreen, 0.4f)), pkGreen)
+            "cache" -> Pair(rounded(withAlpha(colors.accent, 0.12f), radius, dp(1), withAlpha(colors.accent, 0.55f)), colors.accent)
+            "off" -> Pair(rounded(withAlpha(colors.canvas, 0.6f), radius, dp(1), withAlpha(colors.ink, 0.08f)), colors.subtle)
+            "white" -> Pair(rounded(Color.WHITE, radius), Color.BLACK)
+            "glass" -> Pair(rounded(withAlpha(Color.WHITE, 0.05f), radius, dp(1), withAlpha(Color.WHITE, 0.15f)), withAlpha(Color.WHITE, 0.75f))
+            "secondary" -> Pair(rounded(colors.surface, radius, dp(1), withAlpha(colors.ink, 0.08f)), colors.ink)
+            "amber" -> Pair(rounded(withAlpha(pkAmber300, 0.1f), radius, dp(1), withAlpha(pkAmber300, 0.4f)), pkAmber100)
+            "link" -> Pair(null, colors.subtle)
+            else -> Pair(rounded(colors.ink, radius), colors.canvas)
+        }
+        box.background = if (bg != null) focusable(bg) else null
+        val res = pkIconRes(b.icon)
+        if (b.busy) {
+            box.addView(android.widget.ProgressBar(ctx).apply {
+                isIndeterminate = true
+                indeterminateTintList = android.content.res.ColorStateList.valueOf(fg)
+            }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) })
+        } else if (res != 0 && b.icon != "arrow") {
+            box.addView(ImageView(ctx).apply { setImageDrawable(icon(res, fg)) }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) })
+        }
+        box.addView(label(b.label, if (b.style == "link") 13f else 14.5f, bold = b.style != "link", lines = 1).apply { setTextColor(fg) })
+        if (b.icon == "arrow") {
+            box.addView(ImageView(ctx).apply {
+                setImageDrawable(icon(res, fg))
+                scaleX = if (model?.rtl == true) -1f else 1f
+            }, LinearLayout.LayoutParams(dp(14), dp(14)).apply { marginStart = dp(6) })
+        }
+        val enabled = b.style != "off" && b.style != "green" && !b.busy
+        box.isClickable = enabled
+        box.isFocusable = enabled
+        box.alpha = if (b.busy) 0.6f else 1f
+        if (enabled) box.setOnClickListener { onTap() }
+        box.contentDescription = b.label
+        return box
+    }
+
+    /** An addon's round logo (or its initial on a plate), [size] dp across. */
+    private fun pkLogoView(l: PkLogo, size: Int, ring: Int = 0): View {
+        val box = FrameLayout(ctx)
+        box.clipToOutline = true
+        box.outlineProvider = roundOutline(dp(size).toFloat() / 2f)
+        box.background = rounded(colors.surface, dp(size).toFloat() / 2f, ring, colors.canvas)
+        box.addView(label(l.initial.take(1).uppercase(), size * 0.45f, bold = true, lines = 1).apply { setTextColor(colors.muted) },
+            FrameLayout.LayoutParams(wrap, wrap, Gravity.CENTER))
+        if (l.images.isNotEmpty()) {
+            val img = NetImage(ctx)
+            img.scaleType = ImageView.ScaleType.CENTER_CROP
+            box.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+            images.load(img, l.images, dp(size), dp(size), alpha = true) { ok -> img.visibility = if (ok) View.VISIBLE else View.GONE }
+        }
+        return box
+    }
+
+    private fun copyLink(url: String) {
+        try {
+            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("link", url))
+            android.widget.Toast.makeText(ctx, model?.label("copied", "Link copied") ?: "Link copied", android.widget.Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun pkCopyButton(url: String, size: Int): View = FrameLayout(ctx).apply {
+        background = focusable(rounded(withAlpha(colors.canvas, 0.6f), dp(size).toFloat() / 2f, dp(1), withAlpha(colors.ink, 0.1f)))
+        isClickable = true
+        isFocusable = true
+        contentDescription = model?.label("copyLink", "Copy link")
+        setOnClickListener { copyLink(url) }
+        addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_copy, colors.muted)) }, FrameLayout.LayoutParams(dp(15), dp(15), Gravity.CENTER))
+    }
+
+    private fun pkCard(card: View, bottom: Int = 20) {
+        card.layoutParams = RecyclerView.LayoutParams(MATCH, wrap).apply {
+            marginStart = dp(16)
+            marginEnd = dp(16)
+            bottomMargin = dp(bottom)
+        }
+    }
+
+    /** The source the page picked, as its big card (see [PkPick]). Its button sends {a:"pk", what:"primary"}. */
+    private inner class PkPickHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val card = itemView as LinearLayout
+        private val art = FrameLayout(ctx)
+        private val pic = NetImage(ctx)
+        private val logoShade = View(ctx)
+        private val logo = NetImage(ctx)
+        private val badgeShade = View(ctx)
+        private val badges = LinearLayout(ctx)
+        private val flags = FlowRow(ctx, dp(12), dp(8))
+        private val confirm = label("", 12f, bold = true, lines = 2)
+        private val match = FrameLayout(ctx)
+        private val title = label("", 15.5f)
+        private val file = label("", 12.5f)
+        private val summary = label("", 13f, bold = true)
+        private val chips = FlowRow(ctx, dp(10), dp(8))
+        private val actions = FlowRow(ctx, dp(18), dp(14))
+        private var rowKey = ""
+
+        init {
+            card.orientation = LinearLayout.VERTICAL
+            pkCard(card)
+            card.setPadding(dp(18), dp(18), dp(18), dp(20))
+            art.clipToOutline = true
+            art.outlineProvider = roundOutline(dp(16).toFloat())
+            pic.scaleType = ImageView.ScaleType.CENTER_CROP
+            art.addView(pic, FrameLayout.LayoutParams(MATCH, MATCH))
+            logoShade.background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(withAlpha(Color.BLACK, 0.75f), withAlpha(Color.BLACK, 0.3f), Color.TRANSPARENT))
+            art.addView(logoShade, FrameLayout.LayoutParams(MATCH, MATCH))
+            logo.scaleType = ImageView.ScaleType.FIT_START
+            logo.alpha = 0.7f
+            art.addView(logo, FrameLayout.LayoutParams(MATCH, MATCH))
+            badgeShade.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(withAlpha(Color.BLACK, 0.65f), withAlpha(Color.BLACK, 0.2f), Color.TRANSPARENT))
+            art.addView(badgeShade, FrameLayout.LayoutParams(MATCH, MATCH))
+            badges.orientation = LinearLayout.VERTICAL
+            badges.gravity = Gravity.END
+            art.addView(badges, FrameLayout.LayoutParams(wrap, wrap, Gravity.TOP or Gravity.END).apply {
+                topMargin = dp(8)
+                marginEnd = dp(8)
+            })
+            card.addView(art)
+            card.addView(flags, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(18) })
+            card.addView(confirm, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(14) })
+            card.addView(match, LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(12) })
+            mono(title)
+            title.setLineSpacing(0f, 1.3f)
+            card.addView(title, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(14) })
+            mono(file)
+            file.setLineSpacing(0f, 1.3f)
+            card.addView(file, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+            summary.setLineSpacing(0f, 1.3f)
+            card.addView(summary, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(14) })
+            chips.middle = true
+            card.addView(chips, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(14) })
+            actions.middle = true
+            card.addView(actions, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(22) })
+        }
+
+        fun bind(r: HomeRow, p: PkPick) {
+            rowKey = r.key
+            card.background = rounded(withAlpha(colors.canvas, 0.85f), dp(24).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            val inner = width() - dp(32) - dp(36)
+            val aw = if (p.wide) inner else min(inner, dp(170))
+            val ah = if (p.wide) aw * 9 / 16 else aw * 3 / 2
+            art.layoutParams = LinearLayout.LayoutParams(aw, ah)
+            art.background = rounded(withAlpha(colors.canvas, 0.5f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            if (p.images.isNotEmpty()) images.load(pic, p.images, aw, ah) else images.clear(pic)
+            val showLogo = p.wide && p.logo != null
+            logoShade.visibility = if (showLogo) View.VISIBLE else View.GONE
+            logo.visibility = if (showLogo) View.VISIBLE else View.GONE
+            if (showLogo) {
+                val lw = (aw * 0.58f).toInt()
+                val lh = (ah * 0.26f).toInt()
+                logo.layoutParams = FrameLayout.LayoutParams(lw, lh, Gravity.BOTTOM or Gravity.START).apply {
+                    marginStart = dp(14)
+                    bottomMargin = dp(12)
+                }
+                logo.scaleType = ImageView.ScaleType.FIT_END
+                images.load(logo, listOf(p.logo!!), lw, lh, alpha = true)
+            } else {
+                images.clear(logo)
+            }
+            badges.removeAllViews()
+            for (b in p.badges) badges.addView(pkBadge(b, 28f), LinearLayout.LayoutParams(wrap, wrap).apply { bottomMargin = dp(4) })
+            badgeShade.visibility = if (p.badges.isEmpty()) View.GONE else View.VISIBLE
+            badgeShade.layoutParams = FrameLayout.LayoutParams(MATCH, ah / 3)
+
+            flags.removeAllViews()
+            flags.middle = true
+            if (p.flags.isNotEmpty()) {
+                for (f in p.flags) flags.addView(pkFlag(f, big = true, named = true))
+                p.moreFlags?.let { flags.addView(label(it, 13f, bold = true, lines = 1).apply { setTextColor(colors.subtle) }) }
+            } else if (p.noAudio != null) {
+                flags.addView(label("", 11f, bold = true, lines = 1).apply {
+                    caps(this, p.noAudio, 0.18f)
+                    setTextColor(colors.subtle)
+                    setPaddingRelative(dp(10), dp(4), dp(10), dp(4))
+                    background = rounded(withAlpha(colors.canvas, 0.6f), dp(13).toFloat(), dp(1), withAlpha(colors.ink, 0.1f))
+                })
+            }
+            flags.visibility = if (flags.childCount == 0) View.GONE else View.VISIBLE
+            confirm.visibility = if (p.confirm == null) View.GONE else View.VISIBLE
+            p.confirm?.let { caps(confirm, it, 0.28f) }
+            confirm.setTextColor(colors.subtle)
+            match.removeAllViews()
+            p.match?.let { match.addView(pkTagView(it)) }
+            match.visibility = if (p.match == null) View.GONE else View.VISIBLE
+            title.text = p.title
+            title.setTextColor(colors.ink)
+            file.text = p.file ?: ""
+            file.visibility = if (p.file == null) View.GONE else View.VISIBLE
+            file.setTextColor(withAlpha(colors.subtle, 0.8f))
+            caps(summary, p.summary.joinToString("  ·  "), 0.16f)
+            summary.visibility = if (p.summary.isEmpty()) View.GONE else View.VISIBLE
+            summary.setTextColor(colors.muted)
+
+            chips.removeAllViews()
+            p.status?.let { chips.addView(pkStatusView(it, 12.5f, 0.04f)) }
+            for (c in p.chips) chips.addView(pkTagView(c))
+            chips.visibility = if (chips.childCount == 0) View.GONE else View.VISIBLE
+
+            actions.removeAllViews()
+            actions.addView(pkButtonView(p.button, dp(52), dp(26).toFloat()) { act("pk", row = rowKey, what = "primary") })
+            p.via?.let { actions.addView(viaView(it)) }
+            p.copy?.let { url -> actions.addView(pkCopyButton(url, 36), ViewGroup.LayoutParams(dp(36), dp(36))) }
+        }
+
+        private fun viaView(v: PkVia): View {
+            val box = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            fun addonLine(prefix: String, size: Float, color: Int, spacing: Float): View {
+                val line = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                if (prefix.isNotEmpty()) line.addView(label("", size, bold = true, lines = 1).apply {
+                    caps(this, prefix, spacing)
+                    setTextColor(color)
+                }, LinearLayout.LayoutParams(wrap, wrap).apply { marginEnd = dp(6) })
+                line.addView(pkLogoView(PkLogo(v.logo, v.addon), 16), LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(6) })
+                line.addView(label("", size, bold = true, lines = 1).apply {
+                    caps(this, v.addon, spacing)
+                    setTextColor(color)
+                })
+                return line
+            }
+            if (v.top == null) {
+                box.addView(addonLine(v.by, 11f, colors.subtle, 0.28f))
+                return box
+            }
+            val top = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val c = if (v.tone == "danger") withAlpha(pkDanger, 0.8f) else colors.muted
+            if (v.zap) top.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_zap, colors.accent)) }, LinearLayout.LayoutParams(dp(11), dp(11)).apply { marginEnd = dp(5) })
+            top.addView(label("", 11f, bold = true, lines = 1).apply {
+                caps(this, v.top, 0.28f)
+                setTextColor(c)
+            })
+            box.addView(top)
+            box.addView(addonLine(v.by, 10f, withAlpha(colors.subtle, 0.7f), 0.18f), LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(4) })
+            return box
+        }
+    }
+
+    /** "Switch quality", its note, the Cached / language pills and a button per quality. */
+    private inner class PkTiersHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val box = itemView as LinearLayout
+        private val head = LinearLayout(ctx)
+        private val title = label("", 12f, bold = true, lines = 1)
+        private val info = ImageView(ctx)
+        private val pills = LinearLayout(ctx)
+        private val note = LinearLayout(ctx)
+        private val noteTitle = label("", 10.5f, bold = true)
+        private val noteBody = label("", 12.5f)
+        private val tiers = FlowRow(ctx, dp(10), dp(10))
+        private var rowKey = ""
+
+        init {
+            box.orientation = LinearLayout.VERTICAL
+            pkCard(box, 24)
+            head.orientation = LinearLayout.HORIZONTAL
+            head.gravity = Gravity.CENTER_VERTICAL
+            head.addView(title)
+            info.setPadding(dp(6), dp(6), dp(6), dp(6))
+            info.isClickable = true
+            info.isFocusable = true
+            info.setOnClickListener {
+                pkInfoOpen = !pkInfoOpen
+                note.visibility = if (pkInfoOpen) View.VISIBLE else View.GONE
+            }
+            head.addView(info, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginStart = dp(2) })
+            pills.orientation = LinearLayout.HORIZONTAL
+            pills.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            head.addView(pills, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = dp(8) })
+            box.addView(head)
+            note.orientation = LinearLayout.VERTICAL
+            note.setPadding(dp(16), dp(14), dp(16), dp(14))
+            note.addView(noteTitle)
+            noteBody.setLineSpacing(0f, 1.25f)
+            note.addView(noteBody, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+            box.addView(note, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(10) })
+            box.addView(tiers, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(14) })
+        }
+
+        fun bind(r: HomeRow, t: PkTiers) {
+            rowKey = r.key
+            caps(title, t.title, 0.32f)
+            title.setTextColor(colors.subtle)
+            info.setImageDrawable(icon(R.drawable.ic_info, withAlpha(colors.subtle, 0.7f)))
+            info.contentDescription = t.infoTitle
+            note.background = rounded(colors.surface, dp(12).toFloat(), dp(1), withAlpha(colors.ink, 0.1f))
+            caps(noteTitle, t.infoTitle, 0.18f)
+            noteTitle.setTextColor(colors.accent)
+            noteBody.text = t.infoBody
+            noteBody.setTextColor(colors.muted)
+            note.visibility = if (pkInfoOpen) View.VISIBLE else View.GONE
+            pills.removeAllViews()
+            for (p in t.pills) {
+                val on = p.on
+                val c = if (on) (if (p.icon == "zap") colors.accent else colors.muted) else withAlpha(colors.subtle, 0.8f)
+                val pill = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPaddingRelative(dp(10), dp(5), dp(10), dp(5))
+                    background = focusable(rounded(if (on) withAlpha(if (p.icon == "zap") colors.accent else colors.ink, if (p.icon == "zap") 0.15f else 0.08f) else Color.TRANSPARENT, dp(14).toFloat()))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { act("pk", row = rowKey, what = "pill:" + p.id) }
+                }
+                val res = pkIconRes(p.icon)
+                if (res != 0) pill.addView(ImageView(ctx).apply { setImageDrawable(icon(res, c)) }, LinearLayout.LayoutParams(dp(11), dp(11)).apply { marginEnd = dp(5) })
+                pill.addView(label("", 10.5f, bold = true, lines = 1).apply {
+                    caps(this, p.label, 0.18f)
+                    setTextColor(c)
+                })
+                pills.addView(pill, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(4) })
+            }
+            tiers.removeAllViews()
+            t.tiers.forEachIndexed { i, tier -> tiers.addView(tierView(tier, i)) }
+        }
+
+        private fun tierView(t: PkTier, i: Int): View {
+            val b = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(56)
+                setPaddingRelative(dp(14), dp(9), dp(16), dp(9))
+                background = focusable(
+                    if (t.on) rounded(withAlpha(colors.ink, 0.05f), dp(14).toFloat(), dp(1), withAlpha(colors.ink, 0.35f))
+                    else rounded(Color.TRANSPARENT, dp(14).toFloat(), dp(1), withAlpha(colors.ink, 0.08f)),
+                )
+                alpha = if (t.dim) 0.65f else 1f
+                isClickable = true
+                isFocusable = true
+                contentDescription = t.label
+                setOnClickListener { act("pk", row = rowKey, what = "tier", i = i) }
+            }
+            b.addView(pkBadge(t.badge, 56f))
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(label("", 12.5f, bold = true, lines = 1).apply {
+                caps(this, t.label, 0.16f)
+                setTextColor(if (t.on) colors.ink else colors.muted)
+            })
+            val st = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            if (t.zap != null) st.addView(ImageView(ctx).apply {
+                setImageDrawable(icon(R.drawable.ic_zap, if (t.zap == "fill") withAlpha(colors.accent, 0.8f) else withAlpha(colors.muted, 0.7f)))
+            }, LinearLayout.LayoutParams(dp(10), dp(10)).apply { marginEnd = dp(5) })
+            st.addView(label(t.status, 12f, bold = true, lines = 1).apply { setTextColor(colors.subtle) })
+            texts.addView(st, LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(2) })
+            b.addView(texts, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(12) })
+            return b
+        }
+    }
+
+    /** The quality note under "Switch quality" is open. */
+    private var pkInfoOpen = false
+
+    /** The drawer's button ("All sources 42", logos, "3 addons") and, open, the addon pills. */
+    private inner class PkDrawerHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val box = itemView as LinearLayout
+        private val toggle = LinearLayout(ctx)
+        private val chevron = ImageView(ctx)
+        private val text = label("", 11.5f, bold = true, lines = 1)
+        private val count = label("", 11.5f, bold = true, lines = 1)
+        private val logos = FrameLayout(ctx)
+        private val addons = label("", 11.5f, bold = true, lines = 1)
+        private val pills = FlowRow(ctx, dp(6), dp(6))
+        private var rowKey = ""
+
+        init {
+            box.orientation = LinearLayout.VERTICAL
+            pkCard(box, 16)
+            toggle.orientation = LinearLayout.HORIZONTAL
+            toggle.gravity = Gravity.CENTER_VERTICAL
+            toggle.setPaddingRelative(dp(16), dp(9), dp(16), dp(9))
+            toggle.isClickable = true
+            toggle.isFocusable = true
+            toggle.setOnClickListener { act("pk", row = rowKey, what = "drawer") }
+            toggle.addView(chevron, LinearLayout.LayoutParams(dp(14), dp(14)).apply { marginEnd = dp(10) })
+            toggle.addView(text)
+            toggle.addView(count, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(10) })
+            toggle.addView(logos, LinearLayout.LayoutParams(wrap, dp(20)).apply { marginStart = dp(10) })
+            toggle.addView(addons, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(8) })
+            box.addView(toggle, LinearLayout.LayoutParams(wrap, wrap))
+            box.addView(pills, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(14) })
+        }
+
+        fun bind(r: HomeRow, d: PkDrawer) {
+            rowKey = r.key
+            toggle.background = focusable(rounded(withAlpha(colors.canvas, 0.7f), dp(20).toFloat(), dp(1), withAlpha(colors.ink, 0.1f)))
+            chevron.setImageDrawable(icon(R.drawable.ic_chevron_down, colors.muted))
+            chevron.rotation = if (d.open) 180f else 0f
+            caps(text, d.label, 0.22f)
+            text.setTextColor(colors.muted)
+            count.text = d.count
+            count.setTextColor(withAlpha(colors.subtle, 0.8f))
+            toggle.contentDescription = d.label + " " + d.count
+            logos.removeAllViews()
+            d.logos.take(5).forEachIndexed { i, l ->
+                logos.addView(pkLogoView(l, 20, dp(2)), FrameLayout.LayoutParams(dp(20), dp(20)).apply { marginStart = i * dp(13) })
+            }
+            logos.visibility = if (d.logos.isEmpty()) View.GONE else View.VISIBLE
+            addons.text = d.addons ?: ""
+            addons.visibility = if (d.addons == null) View.GONE else View.VISIBLE
+            addons.setTextColor(withAlpha(colors.subtle, 0.8f))
+            pills.removeAllViews()
+            for (p in d.pills) {
+                val pill = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPaddingRelative(dp(12), dp(6), dp(12), dp(6))
+                    background = focusable(
+                        if (p.on) rounded(colors.ink, dp(16).toFloat())
+                        else rounded(withAlpha(colors.surface, 0.5f), dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f)),
+                    )
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { act("pk", row = rowKey, what = "filter:" + p.id) }
+                }
+                pill.addView(label(p.label, 12f, bold = true, lines = 1).apply {
+                    setTextColor(if (p.on) colors.canvas else colors.muted)
+                    maxWidth = dp(180)
+                })
+                p.count?.let {
+                    pill.addView(label(it, 12f, bold = true, lines = 1).apply { setTextColor(if (p.on) withAlpha(colors.canvas, 0.7f) else withAlpha(colors.subtle, 0.8f)) },
+                        LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(6) })
+                }
+                pills.addView(pill)
+            }
+            pills.visibility = if (d.open && d.pills.size > 1) View.VISIBLE else View.GONE
+        }
+    }
+
+    /** One source in the drawer's box: badges, its name, file, addon and facts, languages, cached, Play. */
+    private inner class PkStreamHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val outer = itemView as LinearLayout
+        private val divider = View(ctx)
+        private val line = LinearLayout(ctx)
+        private val badges = LinearLayout(ctx)
+        private val title = label("", 14f, lines = 2)
+        private val edition = FrameLayout(ctx)
+        private val file = label("", 11f, lines = 2)
+        private val addonLine = LinearLayout(ctx)
+        private val addonLogo = FrameLayout(ctx)
+        private val addon = label("", 12f, bold = true, lines = 2)
+        private val meta = FlowRow(ctx, dp(10), dp(6))
+        private val end = FrameLayout(ctx)
+        private val endIcon = ImageView(ctx)
+        private val spinner = android.widget.ProgressBar(ctx).apply { isIndeterminate = true }
+        private val copyBox = FrameLayout(ctx)
+        private var rowKey = ""
+        private var index = -1
+
+        init {
+            outer.orientation = LinearLayout.VERTICAL
+            outer.layoutParams = RecyclerView.LayoutParams(MATCH, wrap).apply {
+                marginStart = dp(16)
+                marginEnd = dp(16)
+            }
+            outer.addView(divider, LinearLayout.LayoutParams(MATCH, max(1, dp(1) / 2 + 1)))
+            line.orientation = LinearLayout.HORIZONTAL
+            line.setPaddingRelative(dp(16), dp(14), dp(12), dp(14))
+            line.isClickable = true
+            line.isFocusable = true
+            line.setOnClickListener { act("pk", row = rowKey, what = "stream", i = index) }
+            badges.orientation = LinearLayout.VERTICAL
+            line.addView(badges, LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(2) })
+            val mid = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            mono(title)
+            mid.addView(title)
+            mid.addView(edition, LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(4) })
+            mono(file)
+            mid.addView(file, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(4) })
+            addonLine.orientation = LinearLayout.HORIZONTAL
+            addonLine.gravity = Gravity.CENTER_VERTICAL
+            addonLine.addView(addonLogo, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(8) })
+            addonLine.addView(addon, LinearLayout.LayoutParams(0, wrap, 1f))
+            mid.addView(addonLine, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(6) })
+            meta.middle = true
+            mid.addView(meta, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+            line.addView(mid, LinearLayout.LayoutParams(0, wrap, 1f).apply {
+                marginStart = dp(12)
+                marginEnd = dp(8)
+            })
+            val side = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+            end.addView(endIcon, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
+            end.addView(spinner, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
+            side.addView(end, LinearLayout.LayoutParams(dp(32), dp(32)))
+            side.addView(copyBox, LinearLayout.LayoutParams(dp(32), dp(32)).apply { topMargin = dp(6) })
+            line.addView(side, LinearLayout.LayoutParams(wrap, wrap))
+            outer.addView(line, LinearLayout.LayoutParams(MATCH, wrap))
+        }
+
+        fun bind(r: HomeRow, i: Int, count: Int, s: PkStream) {
+            rowKey = r.key
+            index = i
+            val first = i == 0
+            val last = i == count - 1
+            (outer.layoutParams as RecyclerView.LayoutParams).bottomMargin = if (last) dp(20) else 0
+            outer.background = segment(first, last)
+            divider.visibility = if (first) View.GONE else View.VISIBLE
+            divider.setBackgroundColor(withAlpha(colors.ink, 0.05f))
+            line.background = focusable(rounded(Color.TRANSPARENT, dp(16).toFloat()))
+            line.contentDescription = s.title
+            badges.removeAllViews()
+            for (b in s.badges) badges.addView(pkBadge(b, 40f), LinearLayout.LayoutParams(wrap, wrap).apply { bottomMargin = dp(4) })
+            badges.visibility = if (s.badges.isEmpty()) View.GONE else View.VISIBLE
+            title.text = s.title
+            title.setTextColor(colors.ink)
+            edition.removeAllViews()
+            s.edition?.let { edition.addView(pkTagView(PkTag(it, "accent"))) }
+            edition.visibility = if (s.edition == null) View.GONE else View.VISIBLE
+            file.text = s.file ?: ""
+            file.visibility = if (s.file == null) View.GONE else View.VISIBLE
+            file.setTextColor(withAlpha(colors.subtle, 0.75f))
+            addonLogo.removeAllViews()
+            addonLogo.addView(pkLogoView(s.logo, 18), FrameLayout.LayoutParams(MATCH, MATCH))
+            caps(addon, s.addon + (s.summary?.let { "  ·  $it" } ?: ""), 0.14f)
+            addon.setTextColor(colors.subtle)
+            meta.removeAllViews()
+            s.match?.let { meta.addView(pkTagView(it)) }
+            if (s.flags.isNotEmpty()) {
+                val fl = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                for (f in s.flags) fl.addView(pkFlag(f, big = false, named = false), LinearLayout.LayoutParams(wrap, wrap).apply { marginEnd = dp(4) })
+                if (s.moreFlags > 0) fl.addView(label("+${s.moreFlags}", 10f, bold = true, lines = 1).apply { setTextColor(colors.subtle) })
+                meta.addView(fl)
+            }
+            s.status?.let { meta.addView(pkStatusView(it, 12f, 0.14f)) }
+            meta.visibility = if (meta.childCount == 0) View.GONE else View.VISIBLE
+            val busy = s.end == "busy"
+            spinner.visibility = if (busy) View.VISIBLE else View.GONE
+            spinner.indeterminateTintList = android.content.res.ColorStateList.valueOf(colors.muted)
+            endIcon.visibility = if (busy) View.GONE else View.VISIBLE
+            endIcon.setImageDrawable(icon(if (s.end == "external") R.drawable.ic_external_link else R.drawable.ic_play, withAlpha(colors.muted, 0.6f)))
+            endIcon.scaleX = if (model?.rtl == true && s.end != "external") -1f else 1f
+            line.isEnabled = !busy
+            line.alpha = if (busy) 0.6f else 1f
+            copyBox.removeAllViews()
+            s.copy?.let { url -> copyBox.addView(pkCopyButton(url, 30), FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER)) }
+            copyBox.visibility = if (s.copy == null) View.GONE else View.VISIBLE
+        }
+
+        /** This line's part of the box around them all: rounded at its ends, edged at the sides. */
+        private fun segment(first: Boolean, last: Boolean): Drawable {
+            val r = dp(16).toFloat()
+            val stroke = max(1, dp(1))
+            val fill = withAlpha(colors.canvas, 0.8f)
+            val edge = withAlpha(colors.ink, 0.08f)
+            val shape = GradientDrawable().apply {
+                setColor(fill)
+                setStroke(stroke, edge)
+                cornerRadii = floatArrayOf(
+                    if (first) r else 0f, if (first) r else 0f, if (first) r else 0f, if (first) r else 0f,
+                    if (last) r else 0f, if (last) r else 0f, if (last) r else 0f, if (last) r else 0f,
+                )
+            }
+            // The edge between two lines is drawn by neither (the divider shows there).
+            return android.graphics.drawable.InsetDrawable(shape, 0, if (first) 0 else -stroke, 0, if (last) 0 else -stroke)
+        }
+    }
+
+    /** "12 cached · 40 found across 3 sources" and, open, each source's count. */
+    private inner class PkDiagHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val box = itemView as LinearLayout
+        private val head = LinearLayout(ctx)
+        private val lead = label("", 12f, bold = true, lines = 1)
+        private val text = label("", 12f, lines = 2)
+        private val chevron = ImageView(ctx)
+        private val more = label("", 11f)
+        private var rowKey = ""
+
+        init {
+            box.orientation = LinearLayout.VERTICAL
+            pkCard(box, 18)
+            head.orientation = LinearLayout.HORIZONTAL
+            head.gravity = Gravity.CENTER_VERTICAL
+            head.isClickable = true
+            head.isFocusable = true
+            head.setPadding(0, dp(4), 0, dp(4))
+            head.setOnClickListener { act("pk", row = rowKey, what = "diag") }
+            head.addView(lead)
+            head.addView(text, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = dp(8) })
+            head.addView(chevron, LinearLayout.LayoutParams(dp(13), dp(13)).apply { marginStart = dp(8) })
+            box.addView(head, LinearLayout.LayoutParams(MATCH, wrap))
+            more.setLineSpacing(0f, 1.3f)
+            box.addView(more, LinearLayout.LayoutParams(MATCH, wrap).apply {
+                topMargin = dp(6)
+                marginStart = dp(4)
+            })
+        }
+
+        fun bind(r: HomeRow, d: PkDiag) {
+            rowKey = r.key
+            head.background = focusable(rounded(Color.TRANSPARENT, dp(8).toFloat()))
+            lead.text = d.lead
+            lead.setTextColor(colors.muted)
+            text.text = "·  " + d.text
+            text.setTextColor(withAlpha(colors.subtle, 0.8f))
+            chevron.setImageDrawable(icon(R.drawable.ic_chevron_down, withAlpha(colors.subtle, 0.8f)))
+            chevron.rotation = if (d.open) 180f else 0f
+            more.text = d.more.joinToString("  ·  ")
+            more.setTextColor(withAlpha(colors.subtle, 0.7f))
+            more.visibility = if (d.open && d.more.isNotEmpty()) View.VISIBLE else View.GONE
+        }
+    }
+
+    /** A message in a box (see [PkPanel]); its button sends {a:"pk", what:"panel"}. */
+    private inner class PkPanelHolder : RecyclerView.ViewHolder(FrameLayout(ctx)) {
+        private val frame = itemView as FrameLayout
+        private val art = NetImage(ctx)
+        private val shade = View(ctx)
+        private val col = LinearLayout(ctx)
+        private val kicker = label("", 10.5f, bold = true)
+        private val title = label("", 28f)
+        private val body = label("", 14f)
+        private val pills = FlowRow(ctx, dp(8), dp(8))
+        private val mono = label("", 10.5f)
+        private val button = FrameLayout(ctx)
+        private val note = label("", 11f, bold = true)
+        private var rowKey = ""
+
+        init {
+            pkCard(frame, 20)
+            frame.clipToOutline = true
+            art.scaleType = ImageView.ScaleType.CENTER_CROP
+            art.alpha = 0.25f
+            art.colorFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix().apply { setSaturation(0f) })
+            frame.addView(art, FrameLayout.LayoutParams(MATCH, MATCH))
+            frame.addView(shade, FrameLayout.LayoutParams(MATCH, MATCH))
+            col.orientation = LinearLayout.VERTICAL
+            frame.addView(col, FrameLayout.LayoutParams(MATCH, wrap))
+            col.addView(kicker)
+            title.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            title.setLineSpacing(0f, 1.05f)
+            col.addView(title, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(16) })
+            body.setLineSpacing(0f, 1.35f)
+            col.addView(body, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(16) })
+            col.addView(pills, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(16) })
+            mono(mono)
+            col.addView(mono, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(16) })
+            col.addView(button, LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(20) })
+            col.addView(note, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(18) })
+        }
+
+        fun bind(r: HomeRow, p: PkPanel) {
+            rowKey = r.key
+            val warn = p.look == "warn"
+            val dashed = p.look == "dashed"
+            val center = !warn
+            val radius = dp(if (warn || dashed) 16 else 24).toFloat()
+            frame.outlineProvider = roundOutline(radius)
+            frame.background = when {
+                warn -> rounded(withAlpha(pkAmber300, 0.06f), radius, dp(1), withAlpha(pkAmber300, 0.3f))
+                dashed -> {
+                    val fill = withAlpha(colors.canvas, 0.7f)
+                    val edge = withAlpha(colors.ink, 0.16f)
+                    GradientDrawable().apply {
+                        cornerRadius = radius
+                        setColor(fill)
+                        setStroke(dp(1), edge, dp(6).toFloat(), dp(4).toFloat())
+                    }
+                }
+                else -> rounded(withAlpha(colors.canvas, if (p.look == "art") 0.6f else 0.8f), radius, dp(1), withAlpha(colors.ink, 0.08f))
+            }
+            val showArt = p.look == "art" && p.art.isNotEmpty()
+            art.visibility = if (showArt) View.VISIBLE else View.GONE
+            shade.visibility = if (showArt) View.VISIBLE else View.GONE
+            if (showArt) {
+                images.load(art, p.art, width() - dp(32), dp(360))
+                shade.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(withAlpha(colors.canvas, 0.6f), withAlpha(colors.canvas, 0.8f), colors.canvas))
+            } else {
+                images.clear(art)
+            }
+            when {
+                warn -> col.setPadding(dp(20), dp(14), dp(20), dp(16))
+                dashed -> col.setPadding(dp(24), dp(44), dp(24), dp(44))
+                p.look == "art" -> col.setPadding(dp(28), dp(52), dp(28), dp(52))
+                else -> col.setPadding(dp(26), dp(40), dp(26), dp(40))
+            }
+            val g = if (center) Gravity.CENTER_HORIZONTAL else Gravity.START
+            col.gravity = g
+            for (v in listOf(kicker, title, body, mono, note)) {
+                v.gravity = if (center) Gravity.CENTER_HORIZONTAL else Gravity.START
+                v.textAlignment = if (center) View.TEXT_ALIGNMENT_CENTER else View.TEXT_ALIGNMENT_VIEW_START
+            }
+            (button.layoutParams as LinearLayout.LayoutParams).gravity = g
+            kicker.visibility = if (p.kicker == null) View.GONE else View.VISIBLE
+            p.kicker?.let { caps(kicker, it, 0.42f) }
+            kicker.setTextColor(colors.subtle)
+            title.visibility = if (p.title == null) View.GONE else View.VISIBLE
+            title.text = p.title ?: ""
+            if (warn) {
+                title.typeface = Typeface.DEFAULT_BOLD
+                title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                title.setTextColor(pkAmber200)
+                (title.layoutParams as LinearLayout.LayoutParams).topMargin = 0
+            } else {
+                title.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                title.setTextSize(TypedValue.COMPLEX_UNIT_SP, p.titleSize)
+                title.setTextColor(colors.ink)
+                (title.layoutParams as LinearLayout.LayoutParams).topMargin = if (p.kicker == null) 0 else dp(16)
+            }
+            body.visibility = if (p.body == null) View.GONE else View.VISIBLE
+            body.text = p.body ?: ""
+            body.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (warn) 12.5f else if (dashed) 14f else 13.5f)
+            body.setTextColor(colors.muted)
+            (body.layoutParams as LinearLayout.LayoutParams).topMargin = if (p.title == null && p.kicker == null) 0 else dp(if (warn) 2 else 16)
+            pills.center = center
+            pills.removeAllViews()
+            for (t in p.pills) pills.addView(label(t, 12f, bold = true, lines = 1).apply {
+                setTextColor(colors.muted)
+                setPaddingRelative(dp(12), dp(4), dp(12), dp(4))
+                background = rounded(withAlpha(colors.canvas, 0.6f), dp(14).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            })
+            pills.visibility = if (p.pills.isEmpty()) View.GONE else View.VISIBLE
+            mono.visibility = if (p.mono == null) View.GONE else View.VISIBLE
+            p.mono?.let { caps(mono, it, 0.18f) }
+            mono.setTextColor(withAlpha(colors.subtle, 0.7f))
+            button.removeAllViews()
+            p.button?.let { b ->
+                val h = when (b.style) {
+                    "amber" -> dp(36)
+                    "outline" -> dp(44)
+                    else -> if (dashed) dp(40) else dp(48)
+                }
+                button.addView(pkButtonView(b, h, if (dashed) dp(12).toFloat() else h / 2f) { act("pk", row = rowKey, what = "panel") })
+            }
+            button.visibility = if (p.button == null) View.GONE else View.VISIBLE
+            (button.layoutParams as LinearLayout.LayoutParams).topMargin = dp(if (warn) 12 else 20)
+            note.visibility = if (p.note == null) View.GONE else View.VISIBLE
+            p.note?.let { caps(note, it, 0.32f) }
+            note.setTextColor(colors.subtle)
+        }
+    }
+
+    /** Searching: the title's logo (or name) breathing, and the caption under it. */
+    private inner class PkLoaderHolder : RecyclerView.ViewHolder(LinearLayout(ctx)) {
+        private val col = itemView as LinearLayout
+        private val logo = NetImage(ctx)
+        private val name = label("", 40f, lines = 3)
+        private val caption = label("", 11f, bold = true, lines = 2)
+        private var pulse: android.animation.ObjectAnimator? = null
+
+        init {
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER_HORIZONTAL
+            pkCard(col, 0)
+            col.setPadding(0, dp(72), 0, dp(80))
+            logo.scaleType = ImageView.ScaleType.FIT_CENTER
+            col.addView(logo)
+            name.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            name.gravity = Gravity.CENTER_HORIZONTAL
+            name.textAlignment = View.TEXT_ALIGNMENT_CENTER
+            col.addView(name, LinearLayout.LayoutParams(MATCH, wrap))
+            caption.gravity = Gravity.CENTER_HORIZONTAL
+            caption.textAlignment = View.TEXT_ALIGNMENT_CENTER
+            col.addView(caption, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(32) })
+            col.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    if (pulse?.isStarted != true) pulse?.start()
+                }
+                override fun onViewDetachedFromWindow(v: View) {
+                    pulse?.cancel()
+                }
+            })
+        }
+
+        fun bind(l: PkLoader) {
+            val lw = (width() * 0.7f).toInt()
+            val lh = dp(150)
+            logo.layoutParams = LinearLayout.LayoutParams(lw, lh)
+            name.text = l.text
+            name.setTextColor(colors.ink)
+            if (l.logo.isNotEmpty()) {
+                logo.visibility = View.VISIBLE
+                name.visibility = View.GONE
+                images.load(logo, l.logo, lw, lh, alpha = true) { ok ->
+                    logo.visibility = if (ok) View.VISIBLE else View.GONE
+                    name.visibility = if (ok) View.GONE else View.VISIBLE
+                }
+            } else {
+                images.clear(logo)
+                logo.visibility = View.GONE
+                name.visibility = View.VISIBLE
+            }
+            caps(caption, l.caption, 0.42f)
+            caption.setTextColor(colors.subtle)
+            if (pulse == null) {
+                pulse = android.animation.ObjectAnimator.ofFloat(col, View.ALPHA, 1f, 0.55f).apply {
+                    duration = 1100
+                    repeatMode = android.animation.ValueAnimator.REVERSE
+                    repeatCount = android.animation.ValueAnimator.INFINITE
+                }
+            }
+            if (col.isAttachedToWindow && pulse?.isStarted != true) pulse?.start()
+        }
+    }
+
+    // ---- A full-screen step over everything (the picker's: connecting, peer-to-peer…) -----------
+
+    private var stageKey: String? = null
+    private var stagePulse: android.animation.ObjectAnimator? = null
+
+    private fun bindStage(s: PkStage?) {
+        stagePulse?.cancel()
+        stagePulse = null
+        if (s == null) {
+            stageView.visibility = View.GONE
+            stageView.removeAllViews()
+            stageKey = null
+            return
+        }
+        val focusWas = stageView.findFocus()?.tag as? String
+        stageView.removeAllViews()
+        stageView.visibility = View.VISIBLE
+        stageView.isClickable = true
+        stageView.setBackgroundColor(Color.BLACK)
+        val art = s.look == "art"
+        if (art && s.backdrop.isNotEmpty()) {
+            // Small and stretched: the page's blur, on any Android.
+            val bg = NetImage(ctx)
+            bg.scaleType = ImageView.ScaleType.CENTER_CROP
+            bg.alpha = 0.35f
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                bg.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(dp(28).toFloat(), dp(28).toFloat(), android.graphics.Shader.TileMode.CLAMP))
+            }
+            stageView.addView(bg, FrameLayout.LayoutParams(MATCH, MATCH))
+            images.load(bg, s.backdrop, dp(48), dp(27))
+            stageView.addView(View(ctx).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(withAlpha(Color.BLACK, 0.68f), withAlpha(Color.BLACK, 0.58f), withAlpha(Color.BLACK, 0.85f)))
+            }, FrameLayout.LayoutParams(MATCH, MATCH))
+        }
+        val scroll = android.widget.ScrollView(ctx).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val holder = FrameLayout(ctx)
+        scroll.addView(holder, FrameLayout.LayoutParams(MATCH, wrap))
+        stageView.addView(scroll, FrameLayout.LayoutParams(MATCH, MATCH))
+        val col = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (art) Gravity.CENTER_HORIZONTAL else Gravity.START
+        }
+        val white = Color.WHITE
+        fun text(t: String, size: Float, color: Int, bold: Boolean = false, center: Boolean = art): TextView = label(t, size, bold = bold).apply {
+            setTextColor(color)
+            if (center) {
+                gravity = Gravity.CENTER_HORIZONTAL
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+            }
+            setLineSpacing(0f, 1.3f)
+        }
+        fun add(v: View, top: Int, w: Int = MATCH) = col.addView(v, LinearLayout.LayoutParams(w, wrap).apply {
+            topMargin = if (col.childCount == 0) 0 else top
+            if (art) gravity = Gravity.CENTER_HORIZONTAL
+        })
+        if (art) {
+            s.pill?.let { p ->
+                add(label("", 11f, bold = true, lines = 1).apply {
+                    caps(this, p.text, 0.24f)
+                    setTextColor(pkDanger)
+                    setPaddingRelative(dp(12), dp(4), dp(12), dp(4))
+                    background = rounded(withAlpha(pkDanger, 0.2f), dp(13).toFloat(), dp(1), withAlpha(pkDanger, 0.4f))
+                }, dp(28), wrap)
+            }
+            if (s.check) {
+                val ring = FrameLayout(ctx).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(withAlpha(pkGreen, 0.12f)); setStroke(dp(1), withAlpha(pkGreen, 0.35f)) } }
+                val disc = FrameLayout(ctx).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(withAlpha(0xFF34D399.toInt(), 0.9f)) } }
+                disc.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_check, Color.BLACK)) }, FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER))
+                ring.addView(disc, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER))
+                col.addView(ring, LinearLayout.LayoutParams(dp(80), dp(80)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            }
+            if (s.logo.isNotEmpty() || s.logoText != null) {
+                val lw = (width() * 0.72f).toInt()
+                val lh = dp(150)
+                val wrapBox = FrameLayout(ctx)
+                val name = text(s.logoText ?: "", 36f, white).apply { typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL) }
+                wrapBox.addView(name, FrameLayout.LayoutParams(MATCH, wrap, Gravity.CENTER))
+                if (s.logo.isNotEmpty()) {
+                    val img = NetImage(ctx)
+                    img.scaleType = ImageView.ScaleType.FIT_CENTER
+                    wrapBox.addView(img, FrameLayout.LayoutParams(lw, lh, Gravity.CENTER))
+                    name.visibility = View.INVISIBLE
+                    images.load(img, s.logo, lw, lh, alpha = true) { ok ->
+                        img.visibility = if (ok) View.VISIBLE else View.GONE
+                        name.visibility = if (ok) View.GONE else View.VISIBLE
+                    }
+                }
+                add(wrapBox, dp(28))
+                stagePulse = android.animation.ObjectAnimator.ofFloat(wrapBox, View.ALPHA, 1f, 0.55f).apply {
+                    duration = 1100
+                    repeatMode = android.animation.ValueAnimator.REVERSE
+                    repeatCount = android.animation.ValueAnimator.INFINITE
+                    start()
+                }
+            }
+            s.line?.let { add(text("", 12.5f, withAlpha(white, 0.7f), bold = true).apply { caps(this, it, 0.32f) }, dp(24)) }
+            s.title?.let { add(text(it, s.titleSize, white).apply { typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL); setLineSpacing(0f, 1.06f) }, dp(24)) }
+            s.body?.let { add(text(it, 14.5f, withAlpha(white, 0.75f)), dp(20)) }
+            s.box?.let { b ->
+                val box = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    setPadding(dp(18), dp(14), dp(18), dp(14))
+                    background = rounded(withAlpha(white, 0.06f), dp(16).toFloat(), dp(1), withAlpha(white, 0.1f))
+                }
+                box.addView(text(b.title, 13f, withAlpha(white, 0.9f)).apply {
+                    mono(this)
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(MATCH, wrap))
+                val meta = FlowRow(ctx, dp(12), dp(4)).apply {
+                    center = true
+                    middle = true
+                }
+                b.seeders?.let { sd ->
+                    val l = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    l.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_users, withAlpha(white, 0.8f))) }, LinearLayout.LayoutParams(dp(12), dp(12)).apply { marginEnd = dp(5) })
+                    l.addView(label(sd, 12f, lines = 1).apply { setTextColor(withAlpha(white, 0.8f)) })
+                    meta.addView(l)
+                }
+                for (m in b.meta) meta.addView(label(m, 12f, lines = 1).apply { setTextColor(withAlpha(white, 0.6f)) })
+                if (meta.childCount > 0) box.addView(meta, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = dp(8) })
+                add(box, dp(24))
+            }
+            s.toggle?.let { tg ->
+                val l = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    isClickable = true
+                    isFocusable = true
+                    tag = "toggle"
+                    setPadding(dp(8), dp(6), dp(10), dp(6))
+                    background = focusable(rounded(Color.TRANSPARENT, dp(10).toFloat()))
+                    setOnClickListener { act("stage", what = "toggle") }
+                }
+                val box = FrameLayout(ctx).apply {
+                    background = if (tg.on) rounded(colors.accent, dp(4).toFloat()) else rounded(Color.TRANSPARENT, dp(4).toFloat(), dp(2), withAlpha(white, 0.5f))
+                }
+                if (tg.on) box.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_check, colors.canvas)) }, FrameLayout.LayoutParams(dp(12), dp(12), Gravity.CENTER))
+                l.addView(box, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(10) })
+                l.addView(label(tg.label, 13f).apply { setTextColor(withAlpha(white, 0.7f)) })
+                l.contentDescription = tg.label
+                add(l, dp(20), wrap)
+            }
+            s.spinner?.let { cap ->
+                add(android.widget.ProgressBar(ctx).apply {
+                    isIndeterminate = true
+                    indeterminateTintList = android.content.res.ColorStateList.valueOf(withAlpha(white, 0.85f))
+                }, dp(28), dp(40))
+                add(text("", 12.5f, withAlpha(white, 0.7f), bold = true).apply { caps(this, cap, 0.18f) }, dp(10))
+            }
+            s.notice?.let { add(text(it, 13f, withAlpha(pkAmber200, 0.8f)), dp(20)) }
+            s.sub?.let { add(text(it, 14f, withAlpha(white, 0.75f)), dp(10)) }
+            s.label?.let { add(text("", 12f, withAlpha(white, 0.45f), bold = true).apply { caps(this, it, 0.2f) }, dp(8)) }
+            s.foot?.let { add(text(it, 13f, withAlpha(white, 0.55f)), dp(24)) }
+            if (s.buttons.isNotEmpty()) {
+                val row = FlowRow(ctx, dp(12), dp(12)).apply {
+                    center = true
+                    middle = true
+                }
+                for (b in s.buttons) row.addView(pkButtonView(b, dp(48), dp(12).toFloat()) { act("stage", what = b.id) }.apply { tag = b.id })
+                add(row, dp(28))
+            }
+            col.setPadding(dp(28), dp(56), dp(28), if (s.cancel != null) dp(120) else dp(56))
+            holder.addView(col, FrameLayout.LayoutParams(min(width(), dp(640)), wrap, Gravity.CENTER))
+            s.cancel?.let { c ->
+                val b = pkButtonView(PkButton(c.id, c.label, "glass", "x"), dp(44), dp(22).toFloat()) { act("stage", what = c.id) }
+                b.tag = c.id
+                b.background = focusable(rounded(withAlpha(Color.BLACK, 0.45f), dp(22).toFloat(), dp(1), withAlpha(white, 0.15f)))
+                stageView.addView(b, FrameLayout.LayoutParams(wrap, wrap, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(40) })
+            }
+        } else {
+            // A card on black: "Harbor", the heading, the text, the reasons, then the buttons.
+            val card = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(28), dp(28), dp(28), dp(24))
+                background = rounded(colors.surface, dp(16).toFloat(), dp(1), withAlpha(colors.ink, 0.08f))
+            }
+            fun cadd(v: View, top: Int) = card.addView(v, LinearLayout.LayoutParams(MATCH, wrap).apply { topMargin = if (card.childCount == 0) 0 else top })
+            s.kicker?.let { cadd(label("", 11f, bold = true, lines = 1).apply { caps(this, it, 0.28f); setTextColor(colors.subtle) }, 0) }
+            s.title?.let { cadd(label(it, s.titleSize, bold = true).apply { setTextColor(colors.ink); setLineSpacing(0f, 1.15f) }, dp(12)) }
+            s.body?.let { cadd(label(it, 14f).apply { setTextColor(colors.muted); setLineSpacing(0f, 1.35f) }, dp(12)) }
+            s.bullets.forEachIndexed { i, b -> cadd(label(b, 13.5f).apply { setTextColor(colors.muted); setLineSpacing(0f, 1.3f) }, if (i == 0) dp(12) else dp(6)) }
+            s.buttons.forEachIndexed { i, b ->
+                val v = pkButtonView(b, dp(if (b.style == "link") 40 else 44), dp(22).toFloat()) { act("stage", what = b.id) }
+                v.tag = b.id
+                cadd(v, if (i == 0) dp(28) else if (b.style == "link") dp(4) else dp(10))
+            }
+            holder.addView(card, FrameLayout.LayoutParams(min(width() - dp(48), dp(448)), wrap, Gravity.CENTER).apply {
+                topMargin = dp(32)
+                bottomMargin = dp(32)
+            })
+        }
+        // The D-pad starts on the first button (or where it was, when the step only changed).
+        val key = (s.title ?: "") + "|" + (s.spinner ?: "")
+        val again = key == stageKey
+        stageKey = key
+        stageView.post {
+            val target = (if (again && focusWas != null) stageView.findViewWithTag<View>(focusWas) else null)
+                ?: s.buttons.firstOrNull()?.let { stageView.findViewWithTag<View>(it.id) }
+                ?: s.cancel?.let { stageView.findViewWithTag<View>(it.id) }
+            if (isShowing) target?.requestFocus()
         }
     }
 
@@ -3620,26 +4838,47 @@ class NativeHome(
             setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), y + lineH + paddingTop + paddingBottom)
         }
 
+        /** Each line centred (a message's pills) instead of starting at the side. */
+        var center = false
+        /** Each child centred on its line's height (a badge beside a text). */
+        var middle = false
+
         override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
             val maxW = r - l - paddingLeft - paddingRight
             val rtl = layoutDirection == View.LAYOUT_DIRECTION_RTL
+            // The lines first (which children, how wide, how tall), then each laid out.
+            val lines = ArrayList<IntArray>()
             var x = 0
-            var y = paddingTop
             var lineH = 0
+            var from = 0
             for (i in 0 until childCount) {
                 val c = getChildAt(i)
                 if (c.visibility == View.GONE) continue
                 val w = c.measuredWidth
-                val h = c.measuredHeight
                 if (x > 0 && x + w > maxW) {
+                    lines.add(intArrayOf(from, i, x - gapX, lineH))
+                    from = i
                     x = 0
-                    y += lineH + gapY
                     lineH = 0
                 }
-                val left = if (rtl) r - l - paddingRight - x - w else paddingLeft + x
-                c.layout(left, y, left + w, y + h)
                 x += w + gapX
-                lineH = max(lineH, h)
+                lineH = max(lineH, c.measuredHeight)
+            }
+            lines.add(intArrayOf(from, childCount, (x - gapX).coerceAtLeast(0), lineH))
+            var y = paddingTop
+            for (ln in lines) {
+                var cx = if (center) ((maxW - ln[2]) / 2).coerceAtLeast(0) else 0
+                for (i in ln[0] until ln[1]) {
+                    val c = getChildAt(i)
+                    if (c.visibility == View.GONE) continue
+                    val w = c.measuredWidth
+                    val h = c.measuredHeight
+                    val top = if (middle) y + (ln[3] - h) / 2 else y
+                    val left = if (rtl) r - l - paddingRight - cx - w else paddingLeft + cx
+                    c.layout(left, top, left + w, top + h)
+                    cx += w + gapX
+                }
+                y += ln[3] + gapY
             }
         }
     }
@@ -5206,6 +6445,13 @@ class NativeHome(
         private const val T_PITCH = 31
         private const val T_GUIDE_RULER = 32
         private const val T_GUIDE_ROW = 33
+        private const val T_PK_PICK = 34
+        private const val T_PK_TIERS = 35
+        private const val T_PK_STREAM = 36
+        private const val T_PK_DRAWER = 37
+        private const val T_PK_DIAG = 38
+        private const val T_PK_PANEL = 39
+        private const val T_PK_LOADER = 40
         // Card kinds: shared by every row's strip (one RecycledViewPool), so they must differ from
         // the outer list's.
         private const val C_POSTER = 101

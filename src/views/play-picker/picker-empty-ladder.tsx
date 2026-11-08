@@ -39,33 +39,7 @@ export function PickerEmptyLadder({
   onShowAll: () => void;
   onSearchWider: () => void;
 }) {
-  const isStillInTheatres = useMemo(() => {
-    if (!result || meta.type !== "movie") return false;
-    if (allCount > 0) return false;
-    if (rawCount === 0) return false;
-    const recentRelease = (() => {
-      if (meta.releaseDate) {
-        const d = new Date(meta.releaseDate);
-        if (!Number.isNaN(d.getTime())) {
-          const days = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
-          return days >= -30 && days < 90;
-        }
-      }
-      return meta.inTheaters === true;
-    })();
-    if (!recentRelease) return false;
-    const rejected = result.rejected;
-    const trashRejections = rejected.filter(
-      (r) =>
-        r.reason.startsWith("cinema-window-") ||
-        r.reason.startsWith("scam-score-") ||
-        r.reason.startsWith("size-too-small-") ||
-        r.reason === "dead-torrent-zero-seeders" ||
-        r.reason.startsWith("suspicious-extension:"),
-    ).length;
-    return trashRejections >= Math.max(3, Math.floor(rawCount * 0.5));
-  }, [result, meta.type, meta.inTheaters, meta.releaseDate, allCount, rawCount]);
-
+  const isStillInTheatres = useMemo(() => stillInTheatres(meta, result, allCount, rawCount), [result, meta, allCount, rawCount]);
   return (
     <>
       {addonsSettled && (!streamIds || streamIds.length === 0) && (
@@ -130,4 +104,32 @@ export function PickerEmptyLadder({
       )}
     </>
   );
+}
+
+/** A movie out lately whose results were mostly dropped as theatre rips and junk: "Not out yet". */
+export function stillInTheatres(meta: Meta, result: PipelineResult, allCount: number, rawCount: number): boolean {
+  if (!result || meta.type !== "movie") return false;
+  if (allCount > 0) return false;
+  if (rawCount === 0) return false;
+  const recentRelease = (() => {
+    if (meta.releaseDate) {
+      const d = new Date(meta.releaseDate);
+      if (!Number.isNaN(d.getTime())) {
+        const days = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
+        return days >= -30 && days < 90;
+      }
+    }
+    return meta.inTheaters === true;
+  })();
+  if (!recentRelease) return false;
+  const rejected = result.rejected;
+  const trashRejections = rejected.filter(
+    (r) =>
+      r.reason.startsWith("cinema-window-") ||
+      r.reason.startsWith("scam-score-") ||
+      r.reason.startsWith("size-too-small-") ||
+      r.reason === "dead-torrent-zero-seeders" ||
+      r.reason.startsWith("suspicious-extension:"),
+  ).length;
+  return trashRejections >= Math.max(3, Math.floor(rawCount * 0.5));
 }

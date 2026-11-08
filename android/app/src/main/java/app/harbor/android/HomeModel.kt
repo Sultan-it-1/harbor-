@@ -57,6 +57,8 @@ class HomeModel(
     val match: HomeMatch? = null,
     /** Live TV's guide: the hours across, the channels down. */
     val guide: HomeGuide? = null,
+    /** A full-screen step over everything (the play picker's: connecting, peer-to-peer…). */
+    val stage: PkStage? = null,
 ) {
     fun label(key: String, fallback: String): String = labels[key]?.takeIf { it.isNotBlank() } ?: fallback
 
@@ -131,7 +133,8 @@ class HomeModel(
                     // A row of only choices or buttons (recent searches, Surprise me) shows too, and
                     // a heading over a grid ("head": an award's winning films and their count).
                     val onlyChoices = r.optJSONObject("chips") != null || (r.optJSONArray("tools")?.length() ?: 0) > 0 || r.optBoolean("head", false)
-                    if (items.isEmpty() && ed == null && !onlyChoices && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
+                    val pk = if (r.str("kind") == "pk") PkParse.block(r.optJSONObject("pk")) ?: return@mapNotNull null else null
+                    if (items.isEmpty() && ed == null && !onlyChoices && pk == null && r.optJSONObject("lead") == null && r.str("kind") != "credits" && r.str("kind") != "episodes") return@mapNotNull null
                     HomeRow(
                         key = key,
                         title = r.str("title") ?: "",
@@ -156,6 +159,7 @@ class HomeModel(
                             "sources" -> HomeRow.Kind.SOURCES
                             "versus" -> HomeRow.Kind.VERSUS
                             "pitch" -> HomeRow.Kind.PITCH
+                            "pk" -> HomeRow.Kind.PK
                             else -> HomeRow.Kind.POSTER
                         },
                         seeAll = r.optBoolean("all", false),
@@ -196,6 +200,7 @@ class HomeModel(
                         lead = r.optJSONObject("lead")?.let { l ->
                             HomeCard(title = l.str("title") ?: "", images = l.optJSONArray("img").strings(), rating = null, sub = l.str("sub"), progress = 0f, rank = 0)
                         },
+                        pk = pk,
                     )
                 },
                 cwEmpty = cw?.let { (it.str("title") ?: "") to (it.str("text") ?: "") },
@@ -370,6 +375,7 @@ class HomeModel(
                         },
                     )
                 },
+                stage = PkParse.stage(o.optJSONObject("stage")),
                 match = o.optJSONObject("match")?.let { mt ->
                     fun side(k: String) = mt.optJSONObject(k)?.let { s ->
                         MatchSide(name = s.str("name") ?: "", logo = s.str("logo"), score = s.str("score") ?: "0", yellow = s.optInt("yellow", 0), red = s.optInt("red", 0))
@@ -500,11 +506,13 @@ class HomeRow(
     val ratio: Float = 0f,
     /** A wide card before the others (a genre's spotlight on a person): sends {a:"lead"}. */
     val lead: HomeCard? = null,
+    /** PK: one of the play picker's blocks (its big card, qualities, sources, messages). */
+    val pk: PkBlock? = null,
 ) {
     /** POSTER and RANK: titles; CW: Continue Watching; TILE: a coloured card with its name on it
      *  (genres, languages, awards, collections); LOGO: a streaming service; FEATURE: one wide
      *  card (the discovery queue); CRITIC: Critics' Pick (a title, its reviews, stills and cast). */
-    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS, SOURCES, VERSUS, PITCH }
+    enum class Kind { POSTER, RANK, CW, TILE, LOGO, FEATURE, CRITIC, CREDITS, EPISODES, PEOPLE, LIST, WINNERS, ACTION, LIVE, GUIDE, CHANNEL, LIVEHERO, SPORTS, SOURCES, VERSUS, PITCH, PK }
 }
 
 /** Critics' Pick, as the page's own card shows it. */

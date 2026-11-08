@@ -468,6 +468,8 @@ export function nativeLabels(t: T, customize: string) {
     close: t("Close"),
     source: t("Open review source"),
     live: t("Live"),
+    copied: t("Copied to clipboard"),
+    copyLink: t("Copy link"),
   };
 }
 
@@ -629,7 +631,7 @@ export type NativeRowInput = {
   more?: () => void;
   /** Not titles: genre / language / award / collection tiles, service logos, one wide card,
    *  Critics' Pick. */
-  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action" | "live" | "guide" | "channel" | "livehero" | "sports" | "sources" | "versus" | "pitch";
+  kind?: "tile" | "logo" | "feature" | "critic" | "poster" | "credits" | "episodes" | "people" | "list" | "winners" | "action" | "live" | "guide" | "channel" | "livehero" | "sports" | "sources" | "versus" | "pitch" | "pk";
   /** Choices under the title (a series' seasons) and what picking one does. */
   chips?: { key: string; items: Array<{ id: string; label: string; on: boolean }> } | null;
   onRowChip?: (id: string) => void;
@@ -668,6 +670,9 @@ export type NativeRowInput = {
   onLead?: () => void;
   /** Only a heading (its title and [note]) over the next row, a grid (an award's winning films). */
   head?: boolean;
+  /** "pk": one of the play picker's blocks (see PickerModel.kt) and what its taps do. */
+  pk?: Record<string, unknown> | null;
+  onPk?: (what: string, i: number) => void;
 };
 
 /** A page's heading (see HomeHeader in HomeModel.kt). */
@@ -758,6 +763,7 @@ export function editLabels(t: T) {
 
 /** A row's JSON for the native screen. */
 export function nativeRowJson(r: NativeRowInput, cards: ReturnType<typeof useNativeCards>) {
+  if (r.kind === "pk") return { key: r.key, title: "", kind: "pk", items: [], pk: r.pk ?? null };
   if (r.kind === "credits") {
     return { key: r.key, title: r.title, kind: "credits", all: false, more: false, items: [], credits: r.credits ?? [] };
   }
@@ -917,6 +923,9 @@ export type NativePageInput = {
   onGuide?: (what: string, i: number, text: string) => void;
   /** A game's scoreboard (see HomeMatch in HomeModel.kt). */
   match?: Record<string, unknown> | null;
+  /** A full-screen step over everything (see PkStage in PickerModel.kt); its buttons. */
+  stage?: Record<string, unknown> | null;
+  onStage?: (what: string) => void;
   /** The downloads page's list (see HomeDownloads in HomeModel.kt); its taps. */
   downloads?: Record<string, unknown> | null;
   onDownloads?: (what: string, text: string) => void;
@@ -976,6 +985,7 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
   const downloadsModel = input.downloads;
   const matchModel = input.match;
   const guideModel = input.guide;
+  const stageModel = input.stage;
   const sheetJson = input.sheet
     ? JSON.stringify({
         key: input.sheet.key,
@@ -1012,7 +1022,9 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       const editable = editing && editCustom && editKeys?.includes(r.key);
       const choices = !!r.chips || (r.tools ?? []).length > 0 || !!r.head;
       const empty =
-        r.kind === "episodes" || choices
+        r.kind === "pk"
+          ? !r.pk
+          : r.kind === "episodes" || choices
           ? false
           : r.kind === "credits"
             ? (r.credits ?? []).length === 0
@@ -1053,9 +1065,10 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
       downloads: downloadsModel ?? null,
       match: matchModel ?? null,
       guide: guideModel ?? null,
+      stage: stageModel ?? null,
       sheet: sheetJson ? JSON.parse(sheetJson) : null,
     };
- }, [guideModel, matchModel, sheetJson, scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
+ }, [stageModel, guideModel, matchModel, sheetJson, scrollKey, searchBig, searchFocus, noTogether, detailModel, queueModel, calendarModel, downloadsModel, inUse, t, hero, header, cw, rows, customizeLabel, chips, empty, resetTick, cards, editing, editCustom, editKeys, back, note, searchKey, searchHint, searchText, searchBusy, hasMessage, msgTitle, msgText, msgAction]);
 
   const latest = useRef(input);
   latest.current = input;
@@ -1173,6 +1186,12 @@ export function useNativeBrowsePage(page: string, input: NativePageInput): boole
           return;
         case "link":
           if (a.text && /^https?:\/\//.test(a.text)) openUrl(a.text);
+          return;
+        case "pk":
+          p.rows.get(a.row ?? "")?.onPk?.(a.what ?? "", i);
+          return;
+        case "stage":
+          cur.onStage?.(a.what ?? "");
           return;
       }
     },

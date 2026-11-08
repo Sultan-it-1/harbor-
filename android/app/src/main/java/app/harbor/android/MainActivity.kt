@@ -161,6 +161,7 @@ class MainActivity : ComponentActivity() {
         val shortSide = minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         images = ImageCache(this, shortSide)
         nativeImages = NativeImages(images.store, shortSide)
+        nativeImages.appAssets = applicationContext.assets
         webView = buildWebView()
         // A process kept alive by the download service may still have WebView timers paused from
         // an earlier activity (pauseTimers is process-wide): a new page must start with them on.

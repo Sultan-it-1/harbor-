@@ -127,6 +127,43 @@ class HomeModelTest {
     }
 
     @Test
+    fun pickerBlocksAndStage() {
+        val m = HomeModel.parse(
+            """{"page":"picker","rows":[
+              {"key":"pk-pick","kind":"pk","items":[],"pk":{"type":"pick","img":["https://a/b.jpg"],"wide":true,"title":"Film.2160p",
+                "badges":[{"src":"https://appassets.androidplatform.net/assets/4k.webp","label":"4K UHD","w":30}],
+                "flags":[{"emoji":"🇺🇸","label":"English"},{"emoji":null,"label":"Multi","multi":true}],
+                "status":{"text":"Cached on TorBox","tone":"muted","icon":"zap","upper":false},
+                "button":{"id":"primary","label":"Play","style":"ink","icon":"play","busy":true},
+                "via":{"top":null,"by":"via","addon":"Torrentio","logo":[]},"copy":"https://x/y.mkv"}},
+              {"key":"pk-streams","kind":"pk","items":[],"pk":{"type":"streams","items":[{"title":"A","logo":{"img":[],"initial":"T"},"addon":"T","end":"busy"},{"title":"B","logo":null,"addon":"T"}]}},
+              {"key":"pk-odd","kind":"pk","items":[],"pk":{"type":"nope"}},
+              {"key":"pk-panel","kind":"pk","items":[],"pk":{"type":"panel","look":"warn","title":"Only 1 source","button":{"id":"panel","label":"Show","style":"amber"}}}],
+              "stage":{"look":"art","title":"Stream via P2P?","titleSize":40,"toggle":{"label":"Remember","on":true},
+                "buttons":[{"id":"p2p","label":"Stream","style":"accent","icon":"radio"}],"cancel":{"id":"cancel","label":"Cancel"}}}""",
+        )
+        // A block the screen doesn't know is left out.
+        assertEquals(listOf("pk-pick", "pk-streams", "pk-panel"), m.rows.map { it.key })
+        assertTrue(m.rows.all { it.kind == HomeRow.Kind.PK })
+        val pick = m.rows[0].pk as PkPick
+        assertTrue(pick.wide)
+        assertEquals(30f, pick.badges.single().w)
+        assertEquals(listOf(false, true), pick.flags.map { it.multi })
+        assertFalse(pick.status!!.upper)
+        assertTrue(pick.button.busy)
+        assertNull(pick.via!!.top)
+        val streams = m.rows[1].pk as PkStreams
+        assertEquals(listOf("busy", "play"), streams.items.map { it.end })
+        assertEquals("", streams.items[1].logo.initial)
+        assertEquals("warn", (m.rows[2].pk as PkPanel).look)
+        val st = m.stage!!
+        assertEquals(40f, st.titleSize)
+        assertTrue(st.toggle!!.on)
+        assertEquals("cancel", st.cancel?.id)
+        assertTrue(HomeModel.parse("{}").stage == null)
+    }
+
+    @Test
     fun hexColours() {
         assertEquals(0xFFE8A45E.toInt(), HomeColors.parseHex("#e8a45e"))
         assertEquals(0x80FFFFFF.toInt(), HomeColors.parseHex("#80ffffff"))

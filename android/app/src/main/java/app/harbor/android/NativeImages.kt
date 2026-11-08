@@ -27,6 +27,9 @@ class NetImage(context: Context) : ImageView(context) {
  */
 class NativeImages(private val store: ImageStore, private val screenShortSidePx: Int) {
     @Volatile var userAgent: String = "HarborAndroid"
+    /** The app's own files (the web build in assets/www): pictures the page ships with (format
+     *  badges, addon logos) are read from there by their https://appassets… address. */
+    @Volatile var appAssets: android.content.res.AssetManager? = null
 
     private val main = Handler(Looper.getMainLooper())
     private val pool = Executors.newFixedThreadPool(3) { r ->
@@ -116,6 +119,10 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
             if (url.startsWith("data:")) {
                 // A picture the page drew itself (a service logo): carried in the address.
                 android.util.Base64.decode(url.substringAfter(','), android.util.Base64.DEFAULT)
+            } else if (url.startsWith(APP_ORIGIN)) {
+                val path = url.removePrefix(APP_ORIGIN).substringBefore('?').substringBefore('#')
+                if (path.isEmpty() || path.contains("..")) return null
+                (appAssets ?: return null).open("www/$path").use { it.readBytes() }
             } else {
                 val hit = store.cached(target)
                 if (hit != null) {
@@ -188,6 +195,8 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
     private fun memKey(url: String, w: Int, h: Int, crop: Boolean = false) = "$url@${w / 64}x${h / 64}${if (crop) "c" else ""}"
 
     companion object {
+        private const val APP_ORIGIN = "https://${WebAssets.HOST}/"
+
         private fun cacheBytes(): Int {
             val max = Runtime.getRuntime().maxMemory()
             return (max / 6).coerceIn(16L * 1024 * 1024, 96L * 1024 * 1024).toInt()
