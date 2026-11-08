@@ -15,7 +15,7 @@ import { useVodSources } from "./playlist-vod/use-vod-sources";
 import { VodCard } from "./playlist-vod/vod-card";
 import { uiLocale } from "@/lib/i18n/locale";
 import { enrichVod } from "@/lib/iptv/vod-enrich";
-import { useNativeBrowsePage, type NativeRowInput } from "@/views/native/native-screens";
+import { useNativeBrowsePage, useNativeSheet, type NativeRowInput } from "@/views/native/native-screens";
 
 type Tab = "movies" | "series";
 
@@ -101,6 +101,23 @@ export function PlaylistVodView({ active }: { active: boolean }) {
   // episodes (a tap plays one). With no playlist yet the page's own setup shows.
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerRequest, setPickerRequest] = useState(0);
+  // The playlists as the screen's own menu: switch, refresh; adding, editing and the rest open
+  // the page's picker (its forms).
+  const [plSheet, setPlSheet] = useState(false);
+  const [addRequest, setAddRequest] = useState(0);
+  const [editRequest, setEditRequest] = useState<{ id: string; nonce: number } | null>(null);
+  useNativeSheet(
+    plSheet ? `vod-playlists:${activeId}` : null,
+    [
+      ...sources.map((src) => ({ id: `pl:${src.id}`, label: src.name, active: src.id === activeId, onSelect: () => selectId(src.id) })),
+      { id: "-", label: "", divider: true },
+      { id: "refresh", label: t("Refresh playlist"), icon: "retry", onSelect: refresh },
+      ...(activeId ? [{ id: "edit", label: t("Edit link & login"), icon: "pencil", onSelect: () => setEditRequest({ id: activeId, nonce: Date.now() }) }] : []),
+      { id: "add", label: t("Add another playlist"), icon: "plus", onSelect: () => setAddRequest((n) => n + 1) },
+      { id: "manage", label: `${t("Rename")} · ${t("Delete")}…`, icon: "list-checks", onSelect: () => setPickerRequest((n) => n + 1) },
+    ],
+    () => setPlSheet(false),
+  );
   const [limit, setLimit] = useState(60);
   useEffect(() => setLimit(60), [tab, q, activeId]);
   const [posters, setPosters] = useState<Record<string, string>>({});
@@ -250,7 +267,7 @@ export function PlaylistVodView({ active }: { active: boolean }) {
           },
         ],
     onChip: (group, id) => {
-      if (group === "source") setPickerRequest((n) => n + 1);
+      if (group === "source") setPlSheet(true);
       else if (group === "tab") chooseTab(id === "series" ? "series" : "movies");
     },
     search: selected
@@ -289,6 +306,8 @@ export function PlaylistVodView({ active }: { active: boolean }) {
             channelCount={null}
             loading={state.kind === "loading"}
             openRequest={pickerRequest}
+            addRequest={addRequest}
+            editRequest={editRequest}
             onOpenChange={setPickerOpen}
           />
         </header>

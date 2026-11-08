@@ -6,7 +6,7 @@
 //   page   -> HarborAndroid.homeSet(json)               a page's model (HomeModel in Kotlin)
 //   page   -> HarborAndroid.screenShow(page, bottom, w)  which page's native screen is up ("" = none)
 //   native -> window.__harborNativeHome(json)           taps: {p: page, a: …} (see NativeAction)
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { androidApi, visiblePopups } from "@/lib/android";
 import type { Meta } from "@/lib/cinemeta";
 import { formatRemaining } from "@/components/continue-card";
@@ -20,6 +20,7 @@ import { useTogether } from "@/lib/together/provider";
 import { useView, type PlayEpisode } from "@/lib/view";
 import { openUrl } from "@/lib/window";
 import { subscribeWatchlist, toggleWatchlist, watchlistHas } from "@/lib/watchlist";
+import { useMetaSheetItems } from "./meta-sheet";
 import { isTitleWatched, useWatchedMarksVersion } from "@/lib/watched-marks";
 import {
   movePageRow,
@@ -191,11 +192,113 @@ function startObserving() {
  * is on top ([active]) with nothing over it. [inUse] = the page is drawn natively right now (the page
  * then renders nothing of its own: it is underneath, out of sight).
  */
+// ---- a small menu a page opens over the screen (an episode's long-press…) ----
+
+type SheetRow = {
+  id: string;
+  label: string;
+  icon?: string;
+  active?: boolean;
+  danger?: boolean;
+  indent?: boolean;
+  group?: boolean;
+  open?: boolean;
+  divider?: boolean;
+  /** A tap doesn't close the menu (a choice among several, then Save). */
+  stay?: boolean;
+};
+type OverSheet = { key: string; rows: SheetRow[]; handlers: { select: (id: string) => void; close: () => void } };
+let overSheet: OverSheet | null = null;
+const overListeners = new Set<() => void>();
+function setOverSheet(s: OverSheet | null) {
+  overSheet = s;
+  overListeners.forEach((l) => l());
+}
+function subscribeOver(l: () => void) {
+  overListeners.add(l);
+  return () => {
+    overListeners.delete(l);
+  };
+}
+
+/**
+ * A menu a page shows over Android's native screen (it would otherwise make the screen step
+ * aside and show on an empty page): the screen on top draws it sliding up from the bottom.
+ * [rows] with each row's [onSelect]; [onClose] when it's closed (a row, a tap outside, Back).
+ * Returns true while the native screen draws it (the page then shows nothing of its own).
+ */
+export function useNativeSheet(
+  key: string | null,
+  rows: Array<SheetRow & { onSelect?: () => void }>,
+  onClose: () => void,
+): boolean {
+  const enabled = useNativeScreensEnabled();
+  const latest = useRef({ rows, onClose });
+  latest.current = { rows, onClose };
+  const rowsJson = JSON.stringify(rows.map(({ onSelect: _s, ...r }) => r));
+  useEffect(() => {
+    if (!enabled || !key) return;
+    const mine: OverSheet = {
+      key,
+      rows: JSON.parse(rowsJson) as SheetRow[],
+      handlers: {
+        select: (id) => latest.current.rows.find((r) => r.id === id)?.onSelect?.(),
+        close: () => latest.current.onClose(),
+      },
+    };
+    setOverSheet(mine);
+    return () => {
+      if (overSheet === mine) setOverSheet(null);
+    };
+  }, [enabled, key, rowsJson]);
+  return enabled && !!key;
+}
+
+// ---- a poster's long-press menu (any screen) ----
+
+let heldMeta: Meta | null = null;
+const heldListeners = new Set<() => void>();
+function setHeldMeta(m: Meta | null) {
+  heldMeta = m;
+  heldListeners.forEach((l) => l());
+}
+function subscribeHeld(l: () => void) {
+  heldListeners.add(l);
+  return () => {
+    heldListeners.delete(l);
+  };
+}
+
 export function useNativeScreen(
   page: string,
   o: { inUse: boolean; active: boolean; model: Record<string, unknown> | null; onAction: (a: NativeAction) => void },
 ): void {
   const { settings } = useSettings();
+  // A poster held on this screen: its menu (the page's own, as rows) slides up from the bottom.
+  const held = useSyncExternalStore(subscribeHeld, () => heldMeta);
+  const heldItems = useMetaSheetItems(o.active ? held : null);
+  const heldSheet =
+    o.active && held && heldItems.length > 0
+      ? {
+          key: `hold:${held.id}`,
+          items: heldItems.map((i) => ({
+            id: i.id,
+            label: i.label,
+            icon: i.icon ?? null,
+            active: !!i.active,
+            danger: !!i.danger,
+            indent: !!i.indent,
+            group: !!i.group,
+            open: !!i.open,
+            divider: !!i.divider,
+          })),
+        }
+      : null;
+  const heldRef = useRef(heldItems);
+  heldRef.current = heldItems;
+  // A page's own small menu over the screen (useNativeSheet) comes first.
+  const over = useSyncExternalStore(subscribeOver, () => overSheet);
+  const shownSheet = o.active && over ? { key: over.key, items: over.rows } : heldSheet;
   const { open: searchOpen } = useSearch();
   const { onboarded } = useOnboarding();
   const { openModal: openTogether } = useTogether();
@@ -224,9 +327,11 @@ export function useNativeScreen(
             badgesTop: settings.badgePlacement === "top",
             together: true,
             ...o.model,
+            ...(shownSheet ? { sheet: shownSheet } : {}),
           })
         : null,
-    [o.inUse, o.model, page, colors, settings.badgePlacement],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [o.inUse, o.model, page, colors, settings.badgePlacement, JSON.stringify(shownSheet)],
   );
 
   // Sent a moment after the last change: rows arrive one after another while a page loads (at
@@ -243,7 +348,25 @@ export function useNativeScreen(
   useEffect(() => {
     if (!o.inUse) return;
     startObserving();
-    const h = (a: NativeAction) => (a.a === "together" ? openTogether() : onAction.current(a));
+    const h = (a: NativeAction) => {
+      if (a.a === "together") return openTogether();
+      // A page's small menu over the screen: a row (it closes after), or closing it.
+      if (a.a === "sheet" && overSheet) {
+        const h = overSheet.handlers;
+        const item = a.what ? overSheet.rows.find((r) => r.id === a.what) : undefined;
+        if (item && !item.divider) h.select(item.id);
+        if (!item?.group && !item?.stay) h.close();
+        return;
+      }
+      // The held poster's menu: a row, or closing it.
+      if (a.a === "sheet" && heldMeta) {
+        const item = a.what ? heldRef.current.find((i) => i.id === a.what) : undefined;
+        setHeldMeta(null);
+        item?.onSelect?.();
+        return;
+      }
+      onAction.current(a);
+    };
     handlers.set(page, h);
     return () => {
       if (handlers.get(page) === h) handlers.delete(page);
@@ -360,6 +483,12 @@ export function useNativeMetaActions() {
       },
       hold: (m: Meta | undefined) => {
         if (!m) return;
+        // The screen's own menu, sliding up from the bottom (see useNativeScreen); the page's
+        // context menu where no native screen is up.
+        if (androidApi()?.homeSet) {
+          setHeldMeta(m);
+          return;
+        }
         const at = new MouseEvent("contextmenu", { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 });
         openContextMenu(at, { kind: "meta", meta: m });
       },

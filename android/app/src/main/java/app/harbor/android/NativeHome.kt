@@ -2108,6 +2108,15 @@ class NativeHome(
             }
             val res = when (it.icon) {
                 "bookmark" -> R.drawable.ic_bookmark
+                "bookmark-check" -> R.drawable.ic_bookmark_check
+                "info" -> R.drawable.ic_info
+                "list-checks" -> R.drawable.ic_list_checks
+                "list-plus" -> R.drawable.ic_list_plus
+                "users" -> R.drawable.ic_users
+                "pencil" -> R.drawable.ic_pencil
+                "plus" -> R.drawable.ic_plus
+                "eye" -> R.drawable.ic_eye
+                "eye-off" -> R.drawable.ic_eye_off
                 "check" -> R.drawable.ic_check
                 "star" -> R.drawable.ic_star
                 "play" -> R.drawable.ic_play
@@ -2127,7 +2136,7 @@ class NativeHome(
                     setImageDrawable(icon(R.drawable.ic_chevron_down, colors.muted))
                     rotation = if (it.open) 180f else 0f
                 }, LinearLayout.LayoutParams(dp(18), dp(18)))
-            } else if (it.active && it.indent) {
+            } else if (it.active && (it.indent || res == 0)) {
                 row.addView(ImageView(ctx).apply { setImageDrawable(icon(R.drawable.ic_check, colors.ink)) }, LinearLayout.LayoutParams(dp(16), dp(16)))
             }
             list.addView(row, LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(8), 0, dp(8), 0) })

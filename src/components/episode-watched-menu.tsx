@@ -7,6 +7,7 @@ import { stremioIdToSimklTarget } from "@/lib/simkl/ids";
 import { useSimkl } from "@/lib/simkl/provider";
 import { isPhoneLayout } from "@/lib/platform";
 import { t } from "@/lib/i18n/translate";
+import { useNativeSheet } from "@/views/native/native-screens";
 
 const PHONE = isPhoneLayout();
 
@@ -51,6 +52,41 @@ export function EpisodeWatchedMenu({
     const r = stremioIdToSimklTarget(metaId, { season: target.season, episode: target.episode });
     return r.ok && r.target.kind === "episode" ? r.target.show.ids : null;
   })();
+
+  const markWatched = () => {
+    setManualWatched(metaId, target.season, target.episode, true);
+    if (showIds) void markEpisodesWatched(showIds, target.season, [target.episode]);
+  };
+  const markUpTo = () => {
+    if (allEpisodes && allEpisodes.length > 0) {
+      const upTo = allEpisodes.filter(
+        (e) => e.season < target.season || (e.season === target.season && e.episode <= target.episode),
+      );
+      setManualWatchedMany(metaId, upTo, true);
+    } else {
+      setManualWatchedUpTo(metaId, target.season, target.episode, true);
+    }
+    if (showIds) {
+      const eps = Array.from({ length: target.episode }, (_, i) => i + 1);
+      void markEpisodesWatched(showIds, target.season, eps);
+    }
+  };
+  const markUnwatched = () => {
+    setManualWatched(metaId, target.season, target.episode, false);
+    if (showIds) void unmarkEpisodeWatched(showIds, target.season, target.episode);
+  };
+  // Android's native screen: the same rows in its own menu, sliding up from the bottom.
+  const native = useNativeSheet(
+    `episode:${metaId}:${target.season}:${target.episode}`,
+    target.watched
+      ? [{ id: "unwatched", label: t("Mark as unwatched"), icon: "eye-off", onSelect: markUnwatched }]
+      : [
+          { id: "watched", label: t("Mark as watched"), icon: "check", onSelect: markWatched },
+          { id: "upto", label: t("Mark watched up to here"), icon: "eye", onSelect: markUpTo },
+        ],
+    onClose,
+  );
+  if (native) return null;
 
   const left = Math.min(target.x, window.innerWidth - 232);
   const top = Math.min(target.y, window.innerHeight - 128);

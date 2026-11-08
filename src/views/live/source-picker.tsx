@@ -33,6 +33,7 @@ export function SourcePicker({
   loading,
   editRequest,
   openRequest,
+  addRequest,
   onOpenChange,
 }: {
   sources: IptvPlaylistSource[];
@@ -55,6 +56,8 @@ export function SourcePicker({
   editRequest?: { id: string; nonce: number } | null;
   /** Opens the picker when this changes (Android's native screen has its own button for it). */
   openRequest?: number;
+  /** Opens it straight into "Add another playlist" when this changes. */
+  addRequest?: number;
   /** Told when the picker opens and closes (the native screen steps aside while it's open). */
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -111,6 +114,12 @@ export function SourcePicker({
     setMode("list");
     setActions(null);
   }, [openRequest]);
+  useEffect(() => {
+    if (!addRequest) return;
+    setOpen(true);
+    setMode("add");
+    setActions(null);
+  }, [addRequest]);
 
   useEffect(() => {
     if (!editRequest) return;

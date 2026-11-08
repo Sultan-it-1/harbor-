@@ -29,7 +29,8 @@ import { ViewModeToggle, type ViewMode } from "./live/view-mode-toggle";
 import { isPhoneLayout, isWindowsDesktop } from "@/lib/platform";
 import { useNativeLive } from "./live/use-native-live";
 import { SportsCustomizeModal } from "./live/live-home/sports/sports-customize-modal";
-import { DEFAULT_SPORTS_LEAGUES } from "@/lib/sports/espn";
+import { DEFAULT_SPORTS_LEAGUES, LEAGUES, LEAGUE_GROUPS, getGroupLabel, getLeagueLabel } from "@/lib/sports/espn";
+import { useNativeSheet } from "@/views/native/native-screens";
 
 const ACTIVE_KEY = "harbor.iptv.active";
 const MODE_KEY = "harbor.iptv.viewMode";
@@ -251,6 +252,113 @@ export function LiveView({ active }: { active: boolean }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerRequest, setPickerRequest] = useState(0);
   const [sportsOpen, setSportsOpen] = useState(false);
+  // The playlists as the screen's own menu: switch, refresh; adding, editing and the rest open
+  // the page's picker (its forms).
+  const [plSheet, setPlSheet] = useState(false);
+  const [addRequest, setAddRequest] = useState(0);
+  useNativeSheet(
+    plSheet ? `live-playlists:${activeId}` : null,
+    [
+      ...managedSources.map((src) => ({
+        id: `pl:${src.id}`,
+        label: src.name,
+        active: src.id === activeId,
+        onSelect: () => {
+          setActiveId(src.id);
+          writeActiveId(src.id);
+        },
+      })),
+      { id: "-", label: "", divider: true },
+      {
+        id: "refresh",
+        label: t("Refresh playlist"),
+        icon: "retry",
+        onSelect: () => {
+          if (activeId) clearPlaylistCache(activeId);
+          refresh();
+        },
+      },
+      ...(activeId ? [{ id: "edit", label: t("Edit link & login"), icon: "pencil", onSelect: () => setEditRequest({ id: activeId, nonce: Date.now() }) }] : []),
+      { id: "add", label: t("Add another playlist"), icon: "plus", onSelect: () => setAddRequest((n) => n + 1) },
+      { id: "manage", label: `${t("Rename")} · ${t("Delete")} · ${t("Move up")}…`, icon: "list-checks", onSelect: () => setPickerRequest((n) => n + 1) },
+    ],
+    () => setPlSheet(false),
+  );
+  // The categories and the leagues as the screen's own menus (sliding up from the bottom); the
+  // page's drawer only to filter, hide or pin categories ("Manage").
+  const [catsWeb, setCatsWeb] = useState(false);
+  const total = useMemo(() => Array.from(counts.values()).reduce((a, b) => a + b, 0), [counts]);
+  const catsNative = useNativeSheet(
+    catsOpen && !catsWeb ? `live-cats:${activeId}` : null,
+    [
+      ...(favorites.count > 0
+        ? [{ id: FAVORITES_GROUP_KEY, label: `${t("Favorites")}  ${favorites.count}`, icon: "star", active: group === FAVORITES_GROUP_KEY, onSelect: () => setGroup(FAVORITES_GROUP_KEY) }]
+        : []),
+      { id: "*", label: `${t("All channels")}  ${total}`, active: group === null, onSelect: () => setGroup(null) },
+      ...sortedGroups.map((g) => ({ id: `g:${g}`, label: `${g}  ${counts.get(g) ?? 0}`, active: group === g, onSelect: () => setGroup(g) })),
+      { id: "-", label: "", divider: true },
+      { id: "manage", label: `${t("Categories")} · ${t("Manage")}`, icon: "list-checks", stay: true, onSelect: () => setCatsWeb(true) },
+    ],
+    () => {
+      if (!catsWeb) setCatsOpen(false);
+    },
+  );
+  useEffect(() => {
+    if (!catsOpen) setCatsWeb(false);
+  }, [catsOpen]);
+  const savedLeagues = settings.sportsLeagues?.length ? settings.sportsLeagues : DEFAULT_SPORTS_LEAGUES;
+  const [leagueDraft, setLeagueDraft] = useState<Set<string>>(() => new Set(savedLeagues));
+  useEffect(() => {
+    if (sportsOpen) setLeagueDraft(new Set(savedLeagues));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sportsOpen]);
+  const sportsNative = useNativeSheet(
+    sportsOpen ? "live-leagues" : null,
+    [
+      {
+        id: "save",
+        label: `${t("sports.customize.save")}  ·  ${t("sports.customize.selected", { n: leagueDraft.size })}`,
+        icon: "check",
+        onSelect: () => update({ sportsLeagues: [...leagueDraft] }),
+      },
+      { id: "-", label: "", divider: true },
+      ...LEAGUE_GROUPS.flatMap((g) => {
+        const keys = LEAGUES.filter((l) => l.group === g.key).map((l) => l.key);
+        if (keys.length === 0) return [];
+        const all = keys.every((k) => leagueDraft.has(k));
+        return [
+          {
+            id: `grp:${g.key}`,
+            label: `${g.icon}  ${getGroupLabel(g)}`,
+            active: all,
+            stay: true,
+            onSelect: () =>
+              setLeagueDraft((prev) => {
+                const next = new Set(prev);
+                if (all) keys.forEach((k) => next.delete(k));
+                else keys.forEach((k) => next.add(k));
+                return next;
+              }),
+          },
+          ...LEAGUES.filter((l) => l.group === g.key).map((l) => ({
+            id: `lg:${l.key}`,
+            label: getLeagueLabel(l),
+            indent: true,
+            active: leagueDraft.has(l.key),
+            stay: true,
+            onSelect: () =>
+              setLeagueDraft((prev) => {
+                const next = new Set(prev);
+                if (next.has(l.key)) next.delete(l.key);
+                else next.add(l.key);
+                return next;
+              }),
+          })),
+        ];
+      }),
+    ],
+    () => setSportsOpen(false),
+  );
   const native = useNativeLive({
     active: active && topKind === "live",
     mode,
@@ -264,9 +372,9 @@ export function LiveView({ active }: { active: boolean }) {
       if (activeId) clearPlaylistCache(activeId);
       refresh();
     },
-    onOpenPicker: () => setPickerRequest((n) => n + 1),
+    onOpenPicker: () => setPlSheet(true),
     pickerOpen,
-    catsOpen,
+    catsOpen: catsOpen && !catsNative,
     onOpenCats: () => setCatsOpen(true),
     hasCategories: !!playlist && sortedGroups.length > 0 && mode === "grid" && state.kind !== "error",
     catsLabel,
@@ -288,7 +396,7 @@ export function LiveView({ active }: { active: boolean }) {
     onPlay: handlePlay,
     onInfo: (meta) => openMeta(meta, { liveContext: true }),
     onCustomizeSports: () => setSportsOpen(true),
-    sportsOpen,
+    sportsOpen: sportsOpen && !sportsNative,
   });
   if (native) {
     return (
@@ -318,10 +426,11 @@ export function LiveView({ active }: { active: boolean }) {
             loading={state.kind === "loading"}
             editRequest={editRequest}
             openRequest={pickerRequest}
+            addRequest={addRequest}
             onOpenChange={setPickerOpen}
           />
         </header>
-        {catsOpen && (
+        {catsOpen && !catsNative && (
           <CategoryDrawer
             groups={sortedGroups}
             active={group}
@@ -333,7 +442,7 @@ export function LiveView({ active }: { active: boolean }) {
             sourceId={activeId ?? ""}
           />
         )}
-        {sportsOpen && (
+        {sportsOpen && !sportsNative && (
           <SportsCustomizeModal
             selected={settings.sportsLeagues?.length ? settings.sportsLeagues : DEFAULT_SPORTS_LEAGUES}
             onSave={(keys) => update({ sportsLeagues: keys })}
