@@ -48,7 +48,7 @@ class NativeHome(
     val page: String,
     private val onAction: (JSONObject) -> Unit,
 ) {
-    val root = FrameLayout(ctx)
+    val root = ScreenRoot(ctx)
     private val list = RecyclerView(ctx)
     private val sections = SectionsAdapter()
     private val togetherButton = FrameLayout(ctx)
@@ -85,6 +85,7 @@ class NativeHome(
 
     init {
         root.visibility = View.GONE
+        root.live = false
         root.isClickable = true // taps never fall through to the page underneath
         list.layoutManager = LinearLayoutManager(ctx, RecyclerView.VERTICAL, false).apply { initialPrefetchItemCount = 3 }
         list.adapter = sections
@@ -348,6 +349,8 @@ class NativeHome(
             root.animate().cancel()
             root.alpha = 1f
             root.bringToFront()
+            root.live = true
+            root.post { images.resume(root) }
             return
         }
         if (want == isShowing) return
@@ -357,9 +360,14 @@ class NativeHome(
             root.bringToFront()
             root.alpha = 0f
             root.visibility = View.VISIBLE
+            root.live = true
             root.animate().alpha(1f).setDuration(140).start()
             bindSheet(model?.sheet)
+            // Pictures it was still waiting for when it stepped aside.
+            root.post { images.resume(root) }
         } else {
+            // Its pictures still to come wait (the screen on show goes first).
+            root.live = false
             if (searchField.hasFocus()) hideKeyboard(searchField)
             // The screen stepping aside closes its menu (and the page hears it closed).
             sheetDialog?.dismiss()
@@ -1490,6 +1498,12 @@ class NativeHome(
 
     // ---- The play picker's other layout (its big card, qualities, every source, messages) -----
 
+    /** Empties a container its holder redraws, letting go of the pictures its old views waited for. */
+    private fun ViewGroup.dropAll() {
+        images.release(this)
+        removeAllViews()
+    }
+
     private val pkGreen = 0xFF6EE7B7.toInt()
     private val pkDanger = 0xFFE5484D.toInt()
     private val pkAmber100 = 0xFFFEF3C7.toInt()
@@ -1832,12 +1846,12 @@ class NativeHome(
             } else {
                 images.clear(logo)
             }
-            badges.removeAllViews()
+            badges.dropAll()
             for (b in p.badges) badges.addView(pkBadge(b, 28f), LinearLayout.LayoutParams(wrap, wrap).apply { bottomMargin = dp(4) })
             badgeShade.visibility = if (p.badges.isEmpty()) View.GONE else View.VISIBLE
             badgeShade.layoutParams = FrameLayout.LayoutParams(MATCH, ah / 3)
 
-            flags.removeAllViews()
+            flags.dropAll()
             flags.middle = true
             if (p.flags.isNotEmpty()) {
                 for (f in p.flags) flags.addView(pkFlag(f, big = true, named = true))
@@ -1854,7 +1868,7 @@ class NativeHome(
             confirm.visibility = if (p.confirm == null) View.GONE else View.VISIBLE
             p.confirm?.let { caps(confirm, it, 0.28f) }
             confirm.setTextColor(colors.subtle)
-            match.removeAllViews()
+            match.dropAll()
             p.match?.let { match.addView(pkTagView(it)) }
             match.visibility = if (p.match == null) View.GONE else View.VISIBLE
             title.text = p.title
@@ -1866,12 +1880,12 @@ class NativeHome(
             summary.visibility = if (p.summary.isEmpty()) View.GONE else View.VISIBLE
             summary.setTextColor(colors.muted)
 
-            chips.removeAllViews()
+            chips.dropAll()
             p.status?.let { chips.addView(pkStatusView(it, 12.5f, 0.04f)) }
             for (c in p.chips) chips.addView(pkTagView(c))
             chips.visibility = if (chips.childCount == 0) View.GONE else View.VISIBLE
 
-            actions.removeAllViews()
+            actions.dropAll()
             actions.addView(pkButtonView(p.button, dp(52), dp(26).toFloat()) { act("pk", row = rowKey, what = "primary") })
             p.via?.let { actions.addView(viaView(it)) }
             p.copy?.let { url -> actions.addView(pkCopyButton(url, 36), ViewGroup.LayoutParams(dp(36), dp(36))) }
@@ -1967,7 +1981,7 @@ class NativeHome(
             noteBody.text = t.infoBody
             noteBody.setTextColor(colors.muted)
             note.visibility = if (pkInfoOpen) View.VISIBLE else View.GONE
-            pills.removeAllViews()
+            pills.dropAll()
             for (p in t.pills) {
                 val on = p.on
                 val c = if (on) (if (p.icon == "zap") colors.accent else colors.muted) else withAlpha(colors.subtle, 0.8f)
@@ -1988,7 +2002,7 @@ class NativeHome(
                 })
                 pills.addView(pill, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(4) })
             }
-            tiers.removeAllViews()
+            tiers.dropAll()
             t.tiers.forEachIndexed { i, tier -> tiers.addView(tierView(tier, i)) }
         }
 
@@ -2071,7 +2085,7 @@ class NativeHome(
             count.text = d.count
             count.setTextColor(withAlpha(colors.subtle, 0.8f))
             toggle.contentDescription = d.label + " " + d.count
-            logos.removeAllViews()
+            logos.dropAll()
             d.logos.take(5).forEachIndexed { i, l ->
                 logos.addView(pkLogoView(l, 20, dp(2)), FrameLayout.LayoutParams(dp(20), dp(20)).apply { marginStart = i * dp(13) })
             }
@@ -2079,7 +2093,7 @@ class NativeHome(
             addons.text = d.addons ?: ""
             addons.visibility = if (d.addons == null) View.GONE else View.VISIBLE
             addons.setTextColor(withAlpha(colors.subtle, 0.8f))
-            pills.removeAllViews()
+            pills.dropAll()
             for (p in d.pills) {
                 val pill = LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -2181,22 +2195,22 @@ class NativeHome(
             divider.setBackgroundColor(withAlpha(colors.ink, 0.05f))
             line.background = focusable(rounded(Color.TRANSPARENT, dp(16).toFloat()))
             line.contentDescription = s.title
-            badges.removeAllViews()
+            badges.dropAll()
             for (b in s.badges) badges.addView(pkBadge(b, 40f), LinearLayout.LayoutParams(wrap, wrap).apply { bottomMargin = dp(4) })
             badges.visibility = if (s.badges.isEmpty()) View.GONE else View.VISIBLE
             title.text = s.title
             title.setTextColor(colors.ink)
-            edition.removeAllViews()
+            edition.dropAll()
             s.edition?.let { edition.addView(pkTagView(PkTag(it, "accent"))) }
             edition.visibility = if (s.edition == null) View.GONE else View.VISIBLE
             file.text = s.file ?: ""
             file.visibility = if (s.file == null) View.GONE else View.VISIBLE
             file.setTextColor(withAlpha(colors.subtle, 0.75f))
-            addonLogo.removeAllViews()
+            addonLogo.dropAll()
             addonLogo.addView(pkLogoView(s.logo, 18), FrameLayout.LayoutParams(MATCH, MATCH))
             caps(addon, s.addon + (s.summary?.let { "  ·  $it" } ?: ""), 0.14f)
             addon.setTextColor(colors.subtle)
-            meta.removeAllViews()
+            meta.dropAll()
             s.match?.let { meta.addView(pkTagView(it)) }
             if (s.flags.isNotEmpty()) {
                 val fl = LinearLayout(ctx).apply {
@@ -2217,7 +2231,7 @@ class NativeHome(
             endIcon.scaleX = if (model?.rtl == true && s.end != "external") -1f else 1f
             line.isEnabled = !busy
             line.alpha = if (busy) 0.6f else 1f
-            copyBox.removeAllViews()
+            copyBox.dropAll()
             s.copy?.let { url -> copyBox.addView(pkCopyButton(url, 30), FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER)) }
             copyBox.visibility = if (s.copy == null) View.GONE else View.VISIBLE
         }
@@ -2391,7 +2405,7 @@ class NativeHome(
             body.setTextColor(if (plain) colors.subtle else colors.muted)
             (body.layoutParams as LinearLayout.LayoutParams).topMargin = if (p.title == null && p.kicker == null) 0 else dp(if (warn) 2 else 16)
             pills.center = center
-            pills.removeAllViews()
+            pills.dropAll()
             for (t in p.pills) pills.addView(label(t, 12f, bold = true, lines = 1).apply {
                 setTextColor(colors.muted)
                 setPaddingRelative(dp(12), dp(4), dp(12), dp(4))
@@ -2401,7 +2415,7 @@ class NativeHome(
             mono.visibility = if (p.mono == null) View.GONE else View.VISIBLE
             p.mono?.let { caps(mono, it, 0.18f) }
             mono.setTextColor(withAlpha(colors.subtle, 0.7f))
-            button.removeAllViews()
+            button.dropAll()
             p.button?.let { b ->
                 val h = when (b.style) {
                     "amber" -> dp(36)
@@ -2583,7 +2597,7 @@ class NativeHome(
         fun bind(r: HomeRow, c: AdCard) {
             rowKey = r.key
             if (c.more) act("ad", row = r.key, what = "more")
-            frame.removeAllViews()
+            frame.dropAll()
             frame.background = focusable(rounded(colors.surface, dp(16).toFloat(), max(1, dp(1)), adEdge))
             frame.alpha = if (c.dim) 0.6f else 1f
             frame.contentDescription = c.name
@@ -2655,7 +2669,7 @@ class NativeHome(
         fun bind(r: HomeRow, t: AdTiles) {
             val keepX = if (rowKey == r.key) (frame.getChildAt(0) as? android.widget.HorizontalScrollView)?.scrollX ?: 0 else 0
             rowKey = r.key
-            frame.removeAllViews()
+            frame.dropAll()
             val lp = frame.layoutParams as RecyclerView.LayoutParams
             if (t.strip) {
                 lp.marginStart = 0
@@ -2755,7 +2769,7 @@ class NativeHome(
 
         fun bind(r: HomeRow, h: AdHero) {
             rowKey = r.key
-            frame.removeAllViews()
+            frame.dropAll()
             frame.background = focusable(rounded(colors.surface, dp(24).toFloat(), max(1, dp(1)), adEdge))
             frame.contentDescription = h.title
             val rtl = model?.rtl == true
@@ -2833,7 +2847,7 @@ class NativeHome(
             val keepX = if (rowKey == r.key) strip?.scrollX ?: 0 else 0
             strip = null
             rowKey = r.key
-            col.removeAllViews()
+            col.dropAll()
             val head = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -3065,7 +3079,7 @@ class NativeHome(
 
         fun bind(r: HomeRow, h: AdHead) {
             rowKey = r.key
-            frame.removeAllViews()
+            frame.dropAll()
             frame.addView(adHeading(h.title, h.blurb, h.action, h.open, h.size) { act("ad", row = rowKey, what = "more") })
         }
     }
@@ -3082,7 +3096,7 @@ class NativeHome(
 
         fun bind(r: HomeRow, c: AdCategories) {
             rowKey = r.key
-            col.removeAllViews()
+            col.dropAll()
             col.addView(adHeading(c.title, c.blurb, null, false, 26f, null), LinearLayout.LayoutParams(MATCH, wrap).apply { bottomMargin = dp(20) })
             var i = 0
             while (i < c.tiles.size) {
@@ -3154,7 +3168,7 @@ class NativeHome(
 
         fun bind(r: HomeRow, a: AdInstalled) {
             rowKey = r.key
-            card.removeAllViews()
+            card.dropAll()
             card.background = focusable(rounded(colors.surface, dp(12).toFloat(), max(1, dp(1)), adEdge))
             card.alpha = if (a.dim) 0.6f else 1f
             card.contentDescription = a.name
@@ -3216,7 +3230,7 @@ class NativeHome(
 
         fun bind(r: HomeRow, d: AdDetail) {
             rowKey = r.key
-            frame.removeAllViews()
+            frame.dropAll()
             val c = colors.canvas
             frame.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(colors.surface, c, c))
             if (d.background != null) {
@@ -3341,7 +3355,7 @@ class NativeHome(
 
         fun bind(r: HomeRow, a: AdInfo) {
             rowKey = r.key
-            col.removeAllViews()
+            col.dropAll()
             col.setBackgroundColor(withAlpha(colors.surface, 0.15f))
             val head = FlowRow(ctx, dp(16), dp(4)).apply { middle = true }
             head.addView(label(a.title, 22f, lines = 1).apply {
@@ -3428,7 +3442,7 @@ class NativeHome(
 
         fun bind(r: HomeRow, d: AdDoc) {
             rowKey = r.key
-            col.removeAllViews()
+            col.dropAll()
             col.setBackgroundColor(withAlpha(colors.surface, 0.15f))
             val head = FlowRow(ctx, dp(16), dp(4)).apply { middle = true }
             head.addView(label(d.title, 22f, lines = 1).apply {
@@ -3565,12 +3579,12 @@ class NativeHome(
         stagePulse = null
         if (s == null) {
             stageView.visibility = View.GONE
-            stageView.removeAllViews()
+            stageView.dropAll()
             stageKey = null
             return
         }
         val focusWas = stageView.findFocus()?.tag as? String
-        stageView.removeAllViews()
+        stageView.dropAll()
         stageView.visibility = View.VISIBLE
         stageView.isClickable = true
         stageView.setBackgroundColor(Color.BLACK)

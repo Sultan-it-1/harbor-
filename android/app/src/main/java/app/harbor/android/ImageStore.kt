@@ -165,8 +165,9 @@ class ImageStore(
         repeat(MAX_REDIRECTS) {
             val c = target.openConnection() as HttpURLConnection
             c.instanceFollowRedirects = false
-            c.connectTimeout = 15_000
-            c.readTimeout = 20_000
+            // A picture that doesn't come in time isn't worth holding a download slot for.
+            c.connectTimeout = 8_000
+            c.readTimeout = 12_000
             headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
             val code = c.responseCode
             if (code in 300..399 && code != 304) {

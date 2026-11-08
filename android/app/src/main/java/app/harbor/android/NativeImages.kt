@@ -16,6 +16,17 @@ import java.util.concurrent.Future
 class NetImage(context: Context) : ImageView(context) {
     internal var want: String? = null
     internal var job: Future<*>? = null
+    /** Asks for the picture it is waiting for again (set while it has none yet). */
+    internal var again: (() -> Unit)? = null
+}
+
+/**
+ * A native screen's outermost view. While it isn't [live] (stepped aside, another screen in
+ * front) its pictures still to come wait instead of taking turns from the screen on show; they
+ * are asked for again when it comes back ([NativeImages.resume]).
+ */
+class ScreenRoot(context: Context) : android.widget.FrameLayout(context) {
+    @Volatile var live = true
 }
 
 /**
@@ -94,6 +105,45 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
 
     private fun isLocal(url: String) = url.startsWith("data:") || url.startsWith(APP_ORIGIN)
 
+    /** [view] is on a screen that is showing (or not on a screen at all, e.g. made ahead of time). */
+    private fun onLiveScreen(view: android.view.View): Boolean {
+        var p = view.parent
+        while (p != null) {
+            if (p is ScreenRoot) return p.live
+            p = p.parent
+        }
+        return true
+    }
+
+    /** [root]'s pictures are gone for good (a card redrawn with new views): stop waiting for them. */
+    fun release(root: android.view.View) {
+        val stack = ArrayDeque<android.view.View>()
+        stack.add(root)
+        while (stack.isNotEmpty()) {
+            val v = stack.removeLast()
+            if (v is NetImage) {
+                v.want = null
+                v.again = null
+            } else if (v is android.view.ViewGroup) {
+                for (i in 0 until v.childCount) stack.add(v.getChildAt(i))
+            }
+        }
+    }
+
+    /** A screen came back: its pictures that never arrived are asked for again. */
+    fun resume(root: android.view.ViewGroup) {
+        val stack = ArrayDeque<android.view.View>()
+        stack.add(root)
+        while (stack.isNotEmpty()) {
+            val v = stack.removeLast()
+            if (v is NetImage) {
+                if (v.drawable == null) v.again?.invoke()
+            } else if (v is android.view.ViewGroup) {
+                for (i in 0 until v.childCount) stack.add(v.getChildAt(i))
+            }
+        }
+    }
+
     /**
      * Shows the first of [urls] that loads in [view], decoded for about [widthPx] x [heightPx].
      * A view that is bound to something else before the picture arrives never gets it.
@@ -117,6 +167,7 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
         }
         view.job = null
         view.want = sig
+        view.again = null
         if (list.isEmpty()) {
             view.setImageDrawable(null)
             onResult?.invoke(false)
@@ -130,6 +181,7 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
             return
         }
         if (!(keep && view.drawable != null)) view.setImageDrawable(null)
+        view.again = { if (view.want == sig) load(view, urls, widthPx, heightPx, alpha, crop, keep, onResult) }
         val waiter = Waiter(view, keep, onResult)
         synchronized(inflight) {
             inflight[sig]?.let {
@@ -140,8 +192,9 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
         }
         val lane = if (list.all { isLocal(it) }) local else net
         lane.execute {
-            // Nobody wants it any more (the card was redrawn or scrolled away): skip the work.
-            val wanted = synchronized(inflight) { inflight[sig]?.any { it.view.want == sig } == true }
+            // Nobody wants it any more (the card was redrawn or scrolled away), or only a screen
+            // that stepped aside does: skip the work (that screen asks again when it's back).
+            val wanted = synchronized(inflight) { inflight[sig]?.any { it.view.want == sig && onLiveScreen(it.view) } == true }
             var bmp: Bitmap? = null
             if (wanted) {
                 for (u in list) {
@@ -158,10 +211,12 @@ class NativeImages(private val store: ImageStore, private val screenShortSidePx:
                     val v = wt.view
                     if (v.want != sig) continue
                     if (!wanted) {
-                        // Skipped while nobody wanted it, wanted again since: ask once more.
-                        load(v, urls, widthPx, heightPx, alpha, crop, wt.keep, wt.onResult)
+                        // Skipped while nobody on screen wanted it, wanted on screen since: ask
+                        // once more (else its screen asks when it's back).
+                        if (onLiveScreen(v)) load(v, urls, widthPx, heightPx, alpha, crop, wt.keep, wt.onResult)
                         continue
                     }
+                    v.again = null
                     if (result != null) {
                         if (wt.keep && v.drawable != null) {
                             v.animate().cancel()
