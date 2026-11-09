@@ -128,6 +128,9 @@ jobs:
           xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/3-player.png"
           sleep 9
           xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/4-player-later.png"
+          # Stop the app (and its console) so the log is complete before it's published.
+          xcrun simctl terminate "$UDID" app.harbor.ios || true
+          sleep 2
           grep "harbor player" "$GITHUB_WORKSPACE/simulator/player.log" | tail -n 30 || true
           grep -iE "subtitle|subsdec|freetype|slave|srt" "$GITHUB_WORKSPACE/simulator/player.log" | grep -v "harbor player" | tail -n 40 || true
 

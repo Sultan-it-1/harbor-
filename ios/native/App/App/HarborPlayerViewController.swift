@@ -44,6 +44,7 @@ final class HarborPlayerViewController: UIViewController {
     private var hasNext = false
     private var fill = false
     private var lastState: VLCMediaPlayerState = .opening
+    private var wasPlaying = false
     private var knownSubTracks = Set<Int32>()
     /// External subtitles we loaded: our URL -> VLC's track id.
     private var externalTrack: [String: Int32] = [:]
@@ -121,6 +122,7 @@ final class HarborPlayerViewController: UIViewController {
         sentEnded = false
         sentError = false
         userPickedSub = false
+        wasPlaying = false
         externalTrack = [:]
         knownSubTracks = []
         pendingExternal = nil
@@ -264,8 +266,10 @@ final class HarborPlayerViewController: UIViewController {
         }
         if state != lastState {
             log("state \(state.rawValue) playing=\(player.isPlaying) subs=\(player.videoSubTitlesIndexes ?? []) current=\(player.currentVideoSubTitleIndex)")
-            if state == .playing { autoPickSubtitle() }
         }
+        // VLC keeps saying "buffering" while a network stream plays: the picture moving is what counts.
+        if player.isPlaying && !wasPlaying { autoPickSubtitle() }
+        wasPlaying = player.isPlaying
         lastState = state
     }
 
