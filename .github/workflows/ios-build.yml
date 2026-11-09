@@ -3,17 +3,10 @@ name: ios-build
 # The iPhone app: Harbor's web UI in the iOS shell (ios/). Every push that touches it builds an
 # unsigned IPA (SideStore / AltStore sign it on the phone), then runs the app in the iPhone
 # simulator and keeps screenshots and the app's log, since nobody here has an iPhone to try it on.
+# Run by hand only (Actions tab -> ios-build -> Run workflow): while the native iOS screens are
+# being written, pushes don't build (each build uses Mac minutes).
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "ios/**"
-      - "src/**"
-      - "public/**"
-      - "index.html"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ios-build.yml"
 
 concurrency:
   group: ios-${{ github.ref }}
