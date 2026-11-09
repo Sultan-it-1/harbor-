@@ -749,17 +749,19 @@ enum SubtitleFile {
         guard !data.isEmpty else { return nil }
         var text = String(data: data, encoding: .utf8)
         if text == nil {
-            let l = (lang ?? "").lowercased()
-            let legacy: CFStringEncodings
-            switch l {
-            case "ar", "fa", "ur", "ps", "ku": legacy = .windowsArabic
-            case "he": legacy = .windowsHebrew
-            case "ru", "uk", "bg", "sr", "mk": legacy = .windowsCyrillic
-            case "el": legacy = .windowsGreek
-            case "tr", "az": legacy = .windowsLatin5
-            default: legacy = .windowsLatin1
+            func cf(_ e: CFStringEncodings) -> String.Encoding {
+                String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(e.rawValue)))
             }
-            let encoding = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(legacy.rawValue)))
+            let encoding: String.Encoding
+            switch (lang ?? "").lowercased() {
+            case "ar", "fa", "ur", "ps", "ku": encoding = cf(.windowsArabic)
+            case "he": encoding = cf(.windowsHebrew)
+            case "ru", "uk", "bg", "sr", "mk": encoding = .windowsCP1251
+            case "el": encoding = .windowsCP1253
+            case "tr", "az": encoding = .windowsCP1254
+            case "pl", "cs", "sk", "hu", "ro", "hr", "sl", "bs": encoding = .windowsCP1250
+            default: encoding = .windowsCP1252
+            }
             text = String(data: data, encoding: encoding) ?? String(data: data, encoding: .windowsCP1252)
         }
         guard var body = text else { return nil }
