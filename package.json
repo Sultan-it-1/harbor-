@@ -1,19 +1,13 @@
 {
-  "name": "harbor",
+  "name": "harbor-app",
   "private": true,
-  "version": "0.9.36",
+  "version": "1.0.14",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "start": "node server.js",
     "preview": "vite preview",
-    "tauri": "tauri",
-    "tauri:build:linux-system": "tauri build --config src-tauri/tauri.linux-system.conf.json",
-    "setup:libmpv": "node scripts/fetch-libmpv.mjs",
-    "setup:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
-    "setup:fonts": "node scripts/fetch-fonts.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:phone": "node tests/phone-smoke.mjs"
   },

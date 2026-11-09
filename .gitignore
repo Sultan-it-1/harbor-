@@ -30,12 +30,9 @@ pnpm-debug.log*
 *.suo
 *.sw?
 
-/src-tauri/binaries/stremio-server-*
-/src-tauri/binaries/yt-dlp-*
-/src-tauri/binaries/ffmpeg*
-/src-tauri/binaries/ffprobe*
-/src-tauri/binaries/mpv-*
-/src-tauri/libmpv/libmpv-2.dll
-/src-tauri/fonts/*.otf
-/src-tauri/fonts/*.ttf
 local_docs/
+
+# Signing keys live in the repository secrets, never in files.
+*.p12
+*.jks
+*.keystore

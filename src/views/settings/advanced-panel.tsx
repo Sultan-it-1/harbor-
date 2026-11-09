@@ -579,16 +579,14 @@ function AboutRow() {
   const android = androidApi();
   let version = `${__APP_VERSION__}${IS_BETA_BUILD ? " (Beta)" : ""}`;
   if (android) {
-    // The installed app's own version and build number (the "-88" of android-v0.9.36-88).
+    // The installed app's own version ("1.0.0").
     let name = "";
-    let build = "";
     try {
       name = android.version();
-      build = android.build?.() ?? "";
     } catch {
       /* older shell */
     }
-    version = `${name || __APP_VERSION__}${build && build !== "0" ? ` (${t("build {n}", { n: build })})` : ""}`;
+    version = name || __APP_VERSION__;
   }
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-edge-soft bg-canvas/40 px-4 py-3.5 text-[13px] text-ink-muted">

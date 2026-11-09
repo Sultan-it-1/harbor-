@@ -13,8 +13,9 @@ import { omdbSeasonRatings } from "@/lib/providers/omdb";
 import { useSettings } from "@/lib/settings";
 import { spoilerMaskFor } from "@/lib/spoilers";
 import { fetchWatchedKeySet } from "@/lib/trakt/history";
+import { useTraktShowWatched } from "@/lib/trakt/use-show-watched";
 import { useTrakt } from "@/lib/trakt/provider";
-import { loadSimklWatchedMap, simklWatchedForId } from "@/lib/simkl/list-status";
+import { loadSimklWatchedMap, simklWatchedForId, useSimklListVersion } from "@/lib/simkl/list-status";
 import { markEpisodesWatched, unmarkEpisodeWatched } from "@/lib/simkl/history";
 import { stremioIdToSimklTarget } from "@/lib/simkl/ids";
 import { useSimkl } from "@/lib/simkl/provider";
@@ -82,8 +83,10 @@ export function SeriesEpisodes({
   const [tvdbBySeason, setTvdbBySeason] = useState<Map<number, Map<number, TvdbEpisode>>>(new Map());
   const [omdbBySeason, setOmdbBySeason] = useState<Map<number, Map<number, number>>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [traktWatched, setTraktWatched] = useState<Set<string>>(() => new Set());
+  const [traktWatchedAll, setTraktWatched] = useState<Set<string>>(() => new Set());
   const [simklWatched, setSimklWatched] = useState<Set<string>>(() => new Set());
+  // Bumped when Simkl's list was read again with something new (watched elsewhere).
+  const simklVersion = useSimklListVersion();
   const cache = useRef<Map<number, Episode[]>>(new Map());
 
   useEffect(() => {
@@ -116,9 +119,11 @@ export function SeriesEpisodes({
     return () => {
       cancelled = true;
     };
-  }, [simklConnected, imdbId, meta.id]);
+  }, [simklConnected, imdbId, meta.id, simklVersion]);
 
   const traktKey = imdbId ?? meta.id;
+  // This show's every watched episode on Trakt, with the account-wide set.
+  const traktWatched = useTraktShowWatched(traktWatchedAll, traktConnected, meta.id, imdbId);
 
   // Season sizes tell how many episodes the show has (used when Cinemeta's list isn't there).
   useEffect(() => {
@@ -366,7 +371,9 @@ export function SeriesEpisodes({
             : !pr.watched && pr.ratio > 0.01 && ago
               ? `${t("{pct}% watched", { pct: Math.round(pr.ratio * 100) })} · ${ago}`
               : "";
-        const rating = ep.imdbRating ?? ep.voteAverage;
+        // IMDb's rating when there is one; otherwise TMDB's, marked with a star (not as IMDb's).
+        const isImdb = ep.imdbRating != null && ep.imdbRating > 0;
+        const rating = isImdb ? ep.imdbRating : ep.voteAverage;
         return {
           title: sp?.title ? t("Episode {n}", { n }) : ep.name || t("Episode {n}", { n }),
           sub: progressText ? `${line}  ·  ${progressText}` : line,
@@ -375,7 +382,7 @@ export function SeriesEpisodes({
           rank: n,
           progress: pr.ratio,
           watched: pr.watched && settings.showWatchedMarks !== false,
-          rating: settings.showEpisodeRating && rating != null && rating > 0 ? String(rating) : null,
+          rating: settings.showEpisodeRating && rating != null && rating > 0 ? `${isImdb ? "" : "★"}${rating.toFixed(1)}` : null,
           kicker: isUpcomingEpisode(ep) ? t("Upcoming") : isNewEpisode(ep) ? t("New") : null,
           play: true,
         };

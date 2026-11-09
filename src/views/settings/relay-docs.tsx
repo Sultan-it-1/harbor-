@@ -56,7 +56,7 @@ export function RelayDocs({ onBack }: { onBack: () => void }) {
           {t("The Harbor relay is a Cloudflare Worker that hosts WebSocket rooms for Watch Together. Each user runs their own. There is no central Harbor server.")}
         </DocsP>
         <DocsP>
-          {t("Source:")} <DocsCode>src-tauri/relay/worker.js</DocsCode>. {t("About 200 lines of JavaScript, no dependencies. Read it before deploying if you want to know what runs.")}
+          {t("Source:")} <DocsCode>relay/worker.js</DocsCode>. {t("About 200 lines of JavaScript, no dependencies. Read it before deploying if you want to know what runs.")}
         </DocsP>
       </DocsBlock>
 
@@ -102,7 +102,7 @@ export function RelayDocs({ onBack }: { onBack: () => void }) {
             <DocsPre>{`npm install -g wrangler\nwrangler login`}</DocsPre>
           </li>
           <li>
-            {t("Save the worker source. Copy")} <DocsCode>src-tauri/relay/worker.js</DocsCode> {t("from the Harbor repo into a new directory as")} <DocsCode>worker.js</DocsCode>.
+            {t("Save the worker source. Copy")} <DocsCode>relay/worker.js</DocsCode> {t("from the Harbor repo into a new directory as")} <DocsCode>worker.js</DocsCode>.
           </li>
           <li>
             {t("Save this")} <DocsCode>wrangler.toml</DocsCode> {t("next to it:")}

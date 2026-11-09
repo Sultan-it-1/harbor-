@@ -1,6 +1,6 @@
 plugins {
+    // Kotlin comes with the Android plugin (AGP 9).
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 val media3 = "1.9.0"
@@ -30,7 +30,7 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = (project.findProperty("harborVersionCode") as String?)?.toInt() ?: 1
-        versionName = (project.findProperty("harborVersionName") as String?) ?: "0.9.36"
+        versionName = (project.findProperty("harborVersionName") as String?) ?: "1.0.14"
         // Phones are ARM: the x86 copies of the FFmpeg decoder only served emulators (an x86
         // emulator or Chromebook with ARM translation still runs this build).
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
@@ -42,9 +42,9 @@ android {
     }
 
     signingConfigs {
-        // Release key: android/keystore/harbor-release.p12 (encrypted; committed) unlocked by
-        // the HARBOR_KEYSTORE_PASSWORD secret. Same key every build => updates install over
-        // the previous version. Without the password the debug key is used.
+        // Release key: the .p12 the build writes from the HARBOR_KEYSTORE_BASE64 secret (its path
+        // in HARBOR_KEYSTORE_PATH), unlocked by the HARBOR_KEYSTORE_PASSWORD secret. Same key every
+        // build => updates install over the previous version. Without it the debug key is used.
         val ksPassword = System.getenv("HARBOR_KEYSTORE_PASSWORD")
         val ksFile = System.getenv("HARBOR_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) }
             ?: rootProject.file("keystore/harbor-release.p12")
@@ -67,9 +67,10 @@ android {
     }
 
     sourceSets["main"].apply {
-        assets.srcDir(webAssetsOut)
+        // A plain folder (AGP 9 takes no Provider here); copyWebAssets fills it before each build.
+        assets.srcDir(webAssetsOut.get().asFile)
         // Reuse the launcher icons that already live with the Tauri project.
-        res.srcDir(rootProject.file("../src-tauri/icons/android"))
+        res.srcDir("src/main/res-launcher")
     }
 
     compileOptions {
