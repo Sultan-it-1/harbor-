@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { fetch as tauriFetchImpl } from "@tauri-apps/plugin-http";
 import { TrackerBlockedError, isBlockedUrl, noteBlocked } from "./privacy/blocklist";
 import { androidFetch, canNativeFetch, isAndroidApp } from "./android";
+import { isIOSApp } from "./platform";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -75,7 +76,8 @@ function needsProxy(parsed: URL): boolean {
 }
 
 function rewriteForWeb(url: string, init?: RequestInit): { url: string; init?: RequestInit } {
-  if (isTauri) return { url, init };
+  // The iPhone app has no /api-proxy server behind it; its requests are CORS-free (native HTTP).
+  if (isTauri || isIOSApp()) return { url, init };
   let parsed: URL;
   try {
     parsed = new URL(url);

@@ -124,11 +124,12 @@ jobs:
           xcrun simctl terminate "$UDID" app.harbor.ios || true
           xcrun simctl launch --console-pty "$UDID" app.harbor.ios -HarborPlayerTest \
             "http://127.0.0.1:8765/test.mkv" "http://127.0.0.1:8765/sub-ar.srt" > "$GITHUB_WORKSPACE/simulator/player.log" 2>&1 &
-          sleep 9
+          sleep 5
           xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/3-player.png"
-          sleep 8
+          sleep 9
           xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/4-player-later.png"
-          grep "player event" "$GITHUB_WORKSPACE/simulator/player.log" | tail -n 5 || true
+          grep "harbor player" "$GITHUB_WORKSPACE/simulator/player.log" | tail -n 30 || true
+          grep -iE "subtitle|subsdec|freetype|slave|srt" "$GITHUB_WORKSPACE/simulator/player.log" | grep -v "harbor player" | tail -n 40 || true
 
       - name: Publish (pre-release)
         uses: softprops/action-gh-release@v3

@@ -22,6 +22,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             var source: [String: Any] = ["url": args[i + 1], "title": "Player test", "prefSubLangs": ["ar"], "uiLang": "ar"]
             if i + 2 < args.count { source["subtitles"] = [["url": args[i + 2], "lang": "ar", "label": "Arabic (test)"]] }
             let json = String(data: (try? JSONSerialization.data(withJSONObject: source)) ?? Data(), encoding: .utf8) ?? ""
+            HarborPlayerViewController.verbose = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
                 guard let src = PlayerSource(json: json) else { return }
                 let player = HarborPlayerViewController(source: src) { print("[player event] \($0)") }

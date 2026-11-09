@@ -54,6 +54,12 @@ final class HarborPlayerViewController: UIViewController {
     private var lastKnownMs: Int32 = 0
 
     private static let sizeKey = "harbor.ios.subSize"
+    /// Test builds (the simulator check): VLC's own log and the subtitle steps in the console.
+    static var verbose = false
+
+    private func log(_ message: @autoclosure () -> String) {
+        if Self.verbose { NSLog("[harbor player] %@", message()) }
+    }
     private static let sizes: [Int] = [20, 18, 16, 12, 6] // VLC's relative sizes: smaller number = bigger text
 
     init(source: PlayerSource, send: @escaping (String) -> Void) {
@@ -70,11 +76,16 @@ final class HarborPlayerViewController: UIViewController {
 
     private static func makePlayer() -> VLCMediaPlayer {
         let size = UserDefaults.standard.object(forKey: sizeKey) as? Int ?? 16
-        return VLCMediaPlayer(options: [
+        let made = VLCMediaPlayer(options: [
             "--freetype-rel-fontsize=\(size)",
             "--freetype-outline-thickness=4",
             "--freetype-background-opacity=0",
         ])
+        if verbose {
+            made.libraryInstance.debugLogging = true
+            made.libraryInstance.debugLoggingLevel = 3
+        }
+        return made
     }
 
     // MARK: - Lifecycle
@@ -251,7 +262,10 @@ final class HarborPlayerViewController: UIViewController {
             errorBox.isHidden = false
             showControls(autoHide: false)
         }
-        if state != lastState, state == .playing { autoPickSubtitle() }
+        if state != lastState {
+            log("state \(state.rawValue) playing=\(player.isPlaying) subs=\(player.videoSubTitlesIndexes ?? []) current=\(player.currentVideoSubTitleIndex)")
+            if state == .playing { autoPickSubtitle() }
+        }
         lastState = state
     }
 
@@ -385,6 +399,7 @@ final class HarborPlayerViewController: UIViewController {
 
     /// The best subtitle in the preferred languages, once, unless the viewer already chose.
     private func autoPickSubtitle() {
+        log("autoPick: picked=\(userPickedSub) current=\(player.currentVideoSubTitleIndex) pending=\(pendingExternal ?? "-") downloading=\(downloadingExternal ?? "-") subs=\(source.subtitles.count) prefs=\(source.prefSubLangs)")
         guard !userPickedSub, player.currentVideoSubTitleIndex == -1, pendingExternal == nil, downloadingExternal == nil else { return }
         for lang in source.prefSubLangs {
             if let sub = source.subtitles.first(where: { ($0.lang ?? "").lowercased() == lang.lowercased() }) {
@@ -408,17 +423,20 @@ final class HarborPlayerViewController: UIViewController {
         if let ua = source.headers.first(where: { $0.key.lowercased() == "user-agent" })?.value {
             request.setValue(ua, forHTTPHeaderField: "User-Agent")
         }
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+        log("subtitle: downloading \(sub.url)")
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.downloadingExternal = nil
+                self.log("subtitle: got \(data?.count ?? -1) bytes, status \((response as? HTTPURLResponse)?.statusCode ?? -1), error \(error?.localizedDescription ?? "none")")
                 guard let data, let file = SubtitleFile.save(data, lang: sub.lang) else {
                     if announce { self.showToast(self.text.subFailed) }
                     return
                 }
                 self.knownSubTracks = Set((self.player.videoSubTitlesIndexes as? [NSNumber] ?? []).map { $0.int32Value })
                 self.pendingExternal = sub.url
-                _ = self.player.addPlaybackSlave(file, type: .subtitle, enforce: true)
+                let added = self.player.addPlaybackSlave(file, type: .subtitle, enforce: true)
+                self.log("subtitle: saved \(file.path), addPlaybackSlave -> \(added), tracks \(self.player.videoSubTitlesIndexes ?? []) names \(self.player.videoSubTitlesNames ?? [])")
             }
         }.resume()
     }
