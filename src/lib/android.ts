@@ -124,6 +124,26 @@ export function nativePlayerApi(): NativePlayerApi | null {
   return androidApi() ?? iosPlayerApi();
 }
 
+/** The native screens (Home, Discover… drawn by the app, not the page): Android's shell, or the
+ *  iPhone app's HarborNative plugin, which takes the same calls and answers through
+ *  window.__harborNativeHome like Android. */
+export type NativeScreensApi = { homeSet(json: string): void; screenShow(page: string, bottomCss: number, cssWidth: number): void };
+
+export function nativeScreensApi(): NativeScreensApi | null {
+  const a = androidApi();
+  if (a) return a.homeSet && a.screenShow ? (a as NativeScreensApi) : null;
+  if (typeof window === "undefined" || !isIOSApp()) return null;
+  const cap = (window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor;
+  if (!cap?.nativePromise) return null;
+  const call = (method: string, options: object) => {
+    void cap.nativePromise?.("HarborNative", method, options).catch((e) => console.warn("[ios screens]", method, e));
+  };
+  return {
+    homeSet: (json) => call("homeSet", { json }),
+    screenShow: (page, bottom, width) => call("screenShow", { page, bottom, width }),
+  };
+}
+
 /** Playback goes to a native player that covers the page (Android or iPhone app). */
 export function hasNativePlayer(): boolean {
   return nativePlayerApi() != null;

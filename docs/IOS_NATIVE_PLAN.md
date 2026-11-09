@@ -22,7 +22,7 @@ Then: build, fix what the compiler finds, check every screen in the simulator, I
 ## Phases
 
 - [x] **0. Prep**: iOS builds manual-only; this plan.
-- [ ] **1. Foundation**: bridge (`homeSet`, `screenShow`, actions back); screen container over
+- [x] **1. Foundation**: bridge (`homeSet`, `screenShow`, actions back); screen container over
   the web view (above the page, below its tab bar), one screen per page; the three models in
   Swift; image loader + caches; colours / fonts / helpers (Ui.kt); the 74 icons; web side:
   `nativeScreensApi()` so the page feeds iOS like Android.

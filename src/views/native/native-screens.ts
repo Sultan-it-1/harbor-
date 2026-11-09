@@ -7,7 +7,7 @@
 //   page   -> HarborAndroid.screenShow(page, bottom, w)  which page's native screen is up ("" = none)
 //   native -> window.__harborNativeHome(json)           taps: {p: page, a: …} (see NativeAction)
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { androidApi, visiblePopups } from "@/lib/android";
+import { nativeScreensApi, visiblePopups } from "@/lib/android";
 import type { Meta } from "@/lib/cinemeta";
 import { formatRemaining } from "@/components/continue-card";
 import { useContextMenu } from "@/lib/context-menu";
@@ -48,8 +48,7 @@ export type NativeAction = {
 
 /** The shell can draw the browse screens (an Android build with NativeScreens). */
 export function nativeScreensAvailable(): boolean {
-  const api = androidApi();
-  return !!api && "homeSet" in api && "screenShow" in api;
+  return nativeScreensApi() != null;
 }
 
 // ---- turned off for the session if the shell reports it couldn't show what it got ----
@@ -89,7 +88,7 @@ const latestModel = new Map<string, string>();
 
 function sendModel(json: string) {
   try {
-    androidApi()?.homeSet?.(json);
+    nativeScreensApi()?.homeSet(json);
   } catch {
     markFailed();
   }
@@ -142,7 +141,7 @@ function sendShownNow(graceOver = false) {
   const model = page ? latestModel.get(page) : undefined;
   if (page && model) sendModel(model);
   try {
-    androidApi()?.screenShow?.(page, tabBarRoom, window.innerWidth);
+    nativeScreensApi()?.screenShow(page, tabBarRoom, window.innerWidth);
   } catch {
     /* an older shell */
   }
@@ -487,7 +486,7 @@ export function useNativeMetaActions() {
         if (!m) return;
         // The screen's own menu, sliding up from the bottom (see useNativeScreen); the page's
         // context menu where no native screen is up.
-        if (androidApi()?.homeSet) {
+        if (nativeScreensApi()) {
           setHeldMeta(m);
           return;
         }

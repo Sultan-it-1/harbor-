@@ -54,12 +54,15 @@ final class HarborRootViewController: UIViewController {
         view.addSubview(bridgeController.view)
         bridgeController.didMove(toParent: self)
         bridgeController.view.backgroundColor = .black
+        // The native screens (Home, Discover…) over the page, under the player.
+        NativeScreens.shared.install(in: view)
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         let top = view.safeAreaInsets.top
         bridgeController.view.frame = CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, view.bounds.height - top))
+        NativeScreens.shared.layout(frame: bridgeController.view.frame)
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }

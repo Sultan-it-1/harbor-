@@ -6,6 +6,7 @@ final class HarborBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
         bridge?.registerPluginInstance(HarborPlayerPlugin())
+        bridge?.registerPluginInstance(HarborNativePlugin())
     }
 }
 
