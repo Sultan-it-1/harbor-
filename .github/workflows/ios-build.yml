@@ -19,6 +19,10 @@ concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
 
+# Publishes each build as a pre-release (the repository's storage for build files is full).
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -93,13 +97,22 @@ jobs:
           # What the page logged (Capacitor passes console messages to the system log).
           xcrun simctl spawn "$UDID" log show --last 3m --style compact \
             --predicate 'process == "App"' > "$GITHUB_WORKSPACE/simulator/app.log" || true
-          tail -n 80 "$GITHUB_WORKSPACE/simulator/app.log" || true
+          # The page's own messages and errors (not WebKit's loading chatter).
+          grep -E "⚡️|\[error\]|\[warn\]|JS Eval|Unhandled|TypeError|ReferenceError" \
+            "$GITHUB_WORKSPACE/simulator/app.log" | grep -v "com.apple.WebKit" | tail -n 120 || true
 
-      - uses: actions/upload-artifact@v7
+      - name: Publish (pre-release)
+        uses: softprops/action-gh-release@v3
         with:
-          name: harbor-ios
-          path: |
+          tag_name: ios-build-${{ github.run_number }}
+          name: iOS build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: "false"
+          body: |
+            Unsigned IPA for SideStore / AltStore, and the iPhone simulator's screenshots and log.
+          files: |
             harbor-ios.ipa
-            simulator/
-          if-no-files-found: error
-          retention-days: 7
+            simulator/1-after-20s.png
+            simulator/2-after-40s.png
+            simulator/app.log
