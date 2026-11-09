@@ -1,1 +1,5 @@
 CAPACITOR_DEBUG = true
+
+// Debug builds use this file as their base, so CocoaPods (the player's VLC) can't put its own
+// settings there: they come in here (when `pod install` has been run).
+#include? "App/Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"
