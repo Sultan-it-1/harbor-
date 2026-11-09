@@ -1,0 +1,17 @@
+# The player's engine: MobileVLCKit, VideoLAN's own build (LGPL 2.1). Capacitor itself comes
+# through Swift Package Manager (CapApp-SPM); CocoaPods only brings VLC.
+platform :ios, '15.0'
+project 'App.xcodeproj'
+install! 'cocoapods', :warn_for_unused_master_specs_repo => false
+
+target 'App' do
+  pod 'MobileVLCKit', '3.7.5'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
+  end
+end

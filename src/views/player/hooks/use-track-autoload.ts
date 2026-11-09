@@ -9,7 +9,7 @@ import type { Addon } from "@/lib/addons";
 import { gatherSubtitleAddons } from "@/lib/subtitles/addon-source";
 import type { PlayerSrc } from "@/lib/view";
 import type { Settings } from "@/lib/settings";
-import { isAndroidApp, onNativePlayerEvent } from "@/lib/android";
+import { hasNativePlayer, onNativePlayerEvent } from "@/lib/android";
 import { notifyAndroidSubSearch } from "@/lib/player/android/bridge";
 
 export function useTrackAutoload(params: {
@@ -140,7 +140,7 @@ export function useTrackAutoload(params: {
     // Android: the native player lists subtitles by language and only downloads the one you
     // pick, so it gets every language the addons returned (preferred ones first — results are
     // already ranked). Other engines keep the preferred-language filter.
-    const android = isAndroidApp();
+    const android = hasNativePlayer();
     const matches = android ? results : results.filter((r) => langScore(r.lang ?? "", langs) >= 0);
     console.info(`[subs/autoload] ${matches.length} match preferred langs`);
     const perLang = new Map<string, number>();
@@ -185,7 +185,7 @@ export function useTrackAutoload(params: {
 
   // Android player: "fetch subtitles from addons" button.
   useEffect(() => {
-    if (!isAndroidApp()) return;
+    if (!hasNativePlayer()) return;
     return onNativePlayerEvent((e) => {
       if (e.type === "subSearch") void searchRef.current(true);
     });

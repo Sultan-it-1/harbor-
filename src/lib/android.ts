@@ -1,5 +1,8 @@
 // Bridge to the native Android shell (android/ in this repo). The shell injects
 // `window.HarborAndroid` before the page loads; everywhere else this module is inert.
+// The iPhone app (ios/) has the same native player, reached through nativePlayerApi().
+
+import { isIOSApp } from "@/lib/platform";
 
 type HarborAndroidApi = {
   version(): string;
@@ -99,6 +102,31 @@ export function androidApi(): HarborAndroidApi | null {
 
 export function isAndroidApp(): boolean {
   return androidApi() != null;
+}
+
+/** The native video player, spoken to the same way on Android (ExoPlayer) and the iPhone (VLC). */
+export type NativePlayerApi = { play(sourceJson: string): void; command(json: string): void; stop(): void };
+
+type CapacitorGlobal = { nativePromise?: (plugin: string, method: string, options?: object) => Promise<unknown> };
+
+/** The iPhone app's player plugin; it answers through window.__harborNativeEvent like Android. */
+function iosPlayerApi(): NativePlayerApi | null {
+  if (typeof window === "undefined" || !isIOSApp()) return null;
+  const cap = (window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor;
+  if (!cap?.nativePromise) return null;
+  const call = (method: string, json?: string) => {
+    void cap.nativePromise?.("HarborPlayer", method, json != null ? { json } : {}).catch((e) => console.warn("[ios player]", method, e));
+  };
+  return { play: (j) => call("play", j), command: (j) => call("command", j), stop: () => call("stop") };
+}
+
+export function nativePlayerApi(): NativePlayerApi | null {
+  return androidApi() ?? iosPlayerApi();
+}
+
+/** Playback goes to a native player that covers the page (Android or iPhone app). */
+export function hasNativePlayer(): boolean {
+  return nativePlayerApi() != null;
 }
 
 // ---- native fetch -------------------------------------------------------------------

@@ -49,13 +49,15 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx cap sync ios
+          # The player's engine (MobileVLCKit) comes through CocoaPods.
+          cd native/App && pod install --repo-update
 
       - name: Build the app (unsigned IPA)
         working-directory: ios/native/App
         run: |
           set -o pipefail
           VERSION=$(node -p "require('../../../package.json').version")
-          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/device" \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
@@ -70,19 +72,20 @@ jobs:
         working-directory: ios/native/App
         run: |
           set -o pipefail
-          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/sim" CODE_SIGNING_ALLOWED=NO \
             build | tail -n 20
           APP="$RUNNER_TEMP/sim/Build/Products/Debug-iphonesimulator/App.app"
-          # The newest iPhone the runner has.
+          # The newest iPhone the runner has, a Pro (a notch / Dynamic Island) when there is one.
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           devs = json.load(sys.stdin)["devices"]
           for runtime in sorted((k for k in devs if "iOS" in k), reverse=True):
               phones = [d for d in devs[runtime] if d["name"].startswith("iPhone")]
+              pros = [d for d in phones if "Pro" in d["name"]]
               if phones:
-                  print(phones[-1]["udid"]); break
+                  print((pros or phones)[-1]["udid"]); break
           ')
           echo "Simulator: $UDID"
           xcrun simctl boot "$UDID"
@@ -101,6 +104,32 @@ jobs:
           grep -E "⚡️|\[error\]|\[warn\]|JS Eval|Unhandled|TypeError|ReferenceError" \
             "$GITHUB_WORKSPACE/simulator/app.log" | grep -v "com.apple.WebKit" | tail -n 120 || true
 
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
+      # The player in the simulator (a failure here doesn't stop the build from being published).
+      - name: Player test in the simulator
+        continue-on-error: true
+        run: |
+          UDID="$SIM_UDID"
+          # An MKV with Dolby (AC3) audio and an Arabic subtitle file in the old
+          # Windows-1256 encoding (common for Arabic subtitles), served from the runner.
+          command -v ffmpeg >/dev/null || brew install ffmpeg >/dev/null
+          mkdir -p "$RUNNER_TEMP/media" && cd "$RUNNER_TEMP/media"
+          printf '1\r\n00:00:01,000 --> 00:01:00,000\r\nهذه ترجمة عربية للتجربة\r\n\r\n' | iconv -f UTF-8 -t CP1256 > sub-ar.srt
+          ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=1280x720:rate=24 \
+            -f lavfi -i sine=frequency=440:sample_rate=48000 -t 60 \
+            -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a ac3 -ac 6 test.mkv
+          (python3 -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 2
+          xcrun simctl terminate "$UDID" app.harbor.ios || true
+          xcrun simctl launch --console-pty "$UDID" app.harbor.ios -HarborPlayerTest \
+            "http://127.0.0.1:8765/test.mkv" "http://127.0.0.1:8765/sub-ar.srt" > "$GITHUB_WORKSPACE/simulator/player.log" 2>&1 &
+          sleep 9
+          xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/3-player.png"
+          sleep 8
+          xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/4-player-later.png"
+          grep "player event" "$GITHUB_WORKSPACE/simulator/player.log" | tail -n 5 || true
+
       - name: Publish (pre-release)
         uses: softprops/action-gh-release@v3
         with:
@@ -115,4 +144,7 @@ jobs:
             harbor-ios.ipa
             simulator/1-after-20s.png
             simulator/2-after-40s.png
+            simulator/3-player.png
+            simulator/4-player-later.png
             simulator/app.log
+            simulator/player.log

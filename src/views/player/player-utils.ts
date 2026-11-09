@@ -2,7 +2,7 @@ import { createHtml5Bridge } from "@/lib/player/html5";
 import { createMpvBridge, probeMpv, type MpvRect } from "@/lib/player/mpv";
 import type { PlayerBridge } from "@/lib/player/bridge";
 import { isLinuxDesktop, isMacDesktop } from "@/lib/platform";
-import { isAndroidApp } from "@/lib/android";
+import { hasNativePlayer } from "@/lib/android";
 import { createAndroidBridge } from "@/lib/player/android/bridge";
 
 export const SYNC_DRIFT_TOLERANCE_S = 0.6;
@@ -68,8 +68,8 @@ export async function pickBridge(
     getEmbedRect?: () => Promise<MpvRect | null> | MpvRect | null;
   },
 ): Promise<{ bridge: PlayerBridge; engine: "html5" | "mpv" }> {
-  // Android app: always the native ExoPlayer (it handles Dolby/DTS audio the WebView can't).
-  if (isAndroidApp()) return { bridge: createAndroidBridge(), engine: "html5" };
+  // Android / iPhone app: always the native player (ExoPlayer / VLC: Dolby, DTS, MKV the WebView can't).
+  if (hasNativePlayer()) return { bridge: createAndroidBridge(), engine: "html5" };
   if (want === "html5") return { bridge: createHtml5Bridge(), engine: "html5" };
   if (want === "mpv") {
     const probe = await probeMpv();

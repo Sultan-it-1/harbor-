@@ -1,4 +1,4 @@
-import { androidApi, onNativePlayerEvent } from "@/lib/android";
+import { nativePlayerApi, onNativePlayerEvent } from "@/lib/android";
 import { emptySnapshot, type PlayerBridge, type PlayerSnapshot } from "../bridge";
 import { uiLocale } from "@/lib/i18n/locale";
 
@@ -125,11 +125,11 @@ function nativeSub(url: string, lang?: string, rawTitle?: string): NativeSub {
 /** Plays through the Android shell's native ExoPlayer (FFmpeg audio decoders included). */
 /** Lets the native player say "no subtitles found" instead of staying silent. */
 export function notifyAndroidSubSearch(found: number, manual = false) {
-  androidApi()?.command(JSON.stringify({ cmd: "subSearch", count: found, manual }));
+  nativePlayerApi()?.command(JSON.stringify({ cmd: "subSearch", count: found, manual }));
 }
 
 export function createAndroidBridge(): PlayerBridge {
-  const api = androidApi();
+  const api = nativePlayerApi();
   let snap: PlayerSnapshot = { ...emptySnapshot };
   const listeners = new Set<(s: PlayerSnapshot) => void>();
   let title = "";
@@ -229,6 +229,8 @@ export function createAndroidBridge(): PlayerBridge {
           isLive: src.isLive === true,
           contentKey: src.contentKey ?? lastContentKey,
           downloadId: src.contentKey != null ? (src.downloadId ?? "") : lastDownloadId,
+          // The iPhone player's own labels follow the app's language.
+          uiLang: uiLocale(),
         }),
       );
     },

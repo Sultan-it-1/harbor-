@@ -5,7 +5,7 @@ import { cloudWriteId, episodeFromVideoId, libraryGetOne } from "@/lib/stremio";
 import type { PlayerSrc } from "@/lib/view";
 import { videoIdFor } from "./use-stremio-sync";
 import { useSettings } from "@/lib/settings";
-import { isAndroidApp } from "@/lib/android";
+import { hasNativePlayer, isAndroidApp } from "@/lib/android";
 import { androidDownloadIdFor } from "@/lib/download/downloads-store";
 
 const RESUME_PROMPT_MIN_SEC = 30;
@@ -97,8 +97,8 @@ export function useBridgeLoad(params: {
         resumePromptRef.current &&
         startSec > RESUME_PROMPT_MIN_SEC &&
         !guestInRoom &&
-        // The native Android player sits on top of the web UI, so the prompt would be hidden.
-        !isAndroidApp();
+        // The native player sits on top of the web UI, so the prompt would be hidden.
+        !hasNativePlayer();
       try {
         await bridge.load({
           url: playUrl,

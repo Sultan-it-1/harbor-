@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { androidApi, isAndroidApp, onNativePlayerEvent } from "@/lib/android";
+import { hasNativePlayer, nativePlayerApi, onNativePlayerEvent } from "@/lib/android";
 import { peekPickerCache } from "@/lib/picker-cache";
 import type { ScoredStream } from "@/lib/streams/types";
 import type { PlayerSrc, PlayEpisode } from "@/lib/view";
@@ -14,7 +14,7 @@ const clean = (s: string) =>
   s.replace(FLAG_EMOJI_RX, "").split("\n").map((l) => l.replace(/\s{2,}/g, " ").trim()).filter(Boolean);
 
 function send(cmd: Record<string, unknown>) {
-  androidApi()?.command(JSON.stringify(cmd));
+  nativePlayerApi()?.command(JSON.stringify(cmd));
 }
 
 /** One row of the native stream list. */
@@ -65,7 +65,7 @@ export function useAndroidPlayerExtras(params: {
   const showQuality = settings.showQualityInfo === true;
   const latest = useRef(params);
   latest.current = params;
-  const enabled = isAndroidApp();
+  const enabled = hasNativePlayer();
 
   // Title line + episode line + next-episode availability.
   const ep = src.episode;

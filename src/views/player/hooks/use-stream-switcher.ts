@@ -9,7 +9,7 @@ import type { ScoredStream } from "@/lib/streams/types";
 import { registerStreamProxy } from "@/lib/stream-proxy";
 import type { PlayerSrc } from "@/lib/view";
 import type { DebridStore } from "@/lib/debrid/types";
-import { androidApi, isAndroidApp } from "@/lib/android";
+import { hasNativePlayer, nativePlayerApi } from "@/lib/android";
 import { PLACEHOLDER_MAX_SEC, setSwapState } from "@/lib/player/swap-state";
 import { formatStreamQuality } from "@/views/play-picker/picker-utils";
 
@@ -148,7 +148,7 @@ export function useStreamSwitcher(params: {
           STUB_TTL_MS,
         ),
       );
-      androidApi()?.command(
+      nativePlayerApi()?.command(
         JSON.stringify({
           cmd: "streamFailed",
           message:
@@ -169,7 +169,7 @@ export function useStreamSwitcher(params: {
           url: prev.url,
           subtitles: prev.subtitles,
           notWebReady: prev.notWebReady,
-          headers: isAndroidApp() ? prev.headers : undefined,
+          headers: hasNativePlayer() ? prev.headers : undefined,
           startAtSec: t.resumeAt > 5 ? t.resumeAt : undefined,
         });
         await b.play().catch(() => {});
@@ -223,7 +223,7 @@ export function useStreamSwitcher(params: {
       }
       let playUrl = r.data.url;
       // Android: the native player sends the headers itself (no local proxy there).
-      const nativeHeaders = isAndroidApp() ? r.data.headers : undefined;
+      const nativeHeaders = hasNativePlayer() ? r.data.headers : undefined;
       if (!nativeHeaders && r.data.headers && Object.keys(r.data.headers).length > 0) {
         try {
           const proxied = await registerStreamProxy(r.data.url, r.data.headers);
