@@ -1,0 +1,16 @@
+{
+  "appId": "app.harbor.ios",
+  "appName": "Harbor",
+  "webDir": "../dist",
+  "ios": {
+    "path": "native",
+    "contentInset": "never",
+    "backgroundColor": "#000000",
+    "appendUserAgent": "HarborIOS/1",
+    "allowsLinkPreview": false,
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true }
+  }
+}

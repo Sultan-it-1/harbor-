@@ -1,0 +1,105 @@
+name: ios-build
+
+# The iPhone app: Harbor's web UI in the iOS shell (ios/). Every push that touches it builds an
+# unsigned IPA (SideStore / AltStore sign it on the phone), then runs the app in the iPhone
+# simulator and keeps screenshots and the app's log, since nobody here has an iPhone to try it on.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ios-build.yml"
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Web UI
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: iOS shell
+        working-directory: ios
+        run: |
+          npm ci --no-audit --no-fund
+          npx cap sync ios
+
+      - name: Build the app (unsigned IPA)
+        working-directory: ios/native/App
+        run: |
+          set -o pipefail
+          VERSION=$(node -p "require('../../../package.json').version")
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/device" \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -n 60
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/device/Build/Products/Release-iphoneos/App.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/harbor-ios.ipa" Payload)
+          ls -la "$GITHUB_WORKSPACE/harbor-ios.ipa"
+
+      - name: Run it in the iPhone simulator
+        working-directory: ios/native/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/sim" CODE_SIGNING_ALLOWED=NO \
+            build | tail -n 20
+          APP="$RUNNER_TEMP/sim/Build/Products/Debug-iphonesimulator/App.app"
+          # The newest iPhone the runner has.
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devs = json.load(sys.stdin)["devices"]
+          for runtime in sorted((k for k in devs if "iOS" in k), reverse=True):
+              phones = [d for d in devs[runtime] if d["name"].startswith("iPhone")]
+              if phones:
+                  print(phones[-1]["udid"]); break
+          ')
+          echo "Simulator: $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" app.harbor.ios
+          mkdir -p "$GITHUB_WORKSPACE/simulator"
+          sleep 20
+          xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/1-after-20s.png"
+          sleep 20
+          xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/simulator/2-after-40s.png"
+          # What the page logged (Capacitor passes console messages to the system log).
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact \
+            --predicate 'process == "App"' > "$GITHUB_WORKSPACE/simulator/app.log" || true
+          tail -n 80 "$GITHUB_WORKSPACE/simulator/app.log" || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: harbor-ios
+          path: |
+            harbor-ios.ipa
+            simulator/
+          if-no-files-found: error
+          retention-days: 7

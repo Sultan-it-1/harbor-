@@ -1,0 +1,10 @@
+{
+  "name": "harbor-ios",
+  "private": true,
+  "description": "The iPhone app: Harbor's web UI in a native iOS shell (Capacitor). Build the web UI first (pnpm build at the repo root), then npx cap sync ios.",
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0"
+  }
+}

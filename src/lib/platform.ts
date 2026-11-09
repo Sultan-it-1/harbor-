@@ -38,7 +38,12 @@ export function isMobileDevice(): boolean {
   return false;
 }
 
-/** Native-app phone layout (the Android shell): bottom tab bar, device-width viewport. */
+/** The iPhone app: Harbor's web UI in the iOS shell (it adds "HarborIOS/" to the user agent). */
+export function isIOSApp(): boolean {
+  return typeof navigator !== "undefined" && /\bHarborIOS\//.test(navigator.userAgent || "");
+}
+
+/** Native-app phone layout (the Android or iPhone shell): bottom tab bar, device-width viewport. */
 export function isPhoneLayout(): boolean {
-  return typeof window !== "undefined" && "HarborAndroid" in window;
+  return typeof window !== "undefined" && ("HarborAndroid" in window || isIOSApp());
 }
