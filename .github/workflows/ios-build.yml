@@ -50,12 +50,20 @@ jobs:
         run: |
           set -o pipefail
           VERSION=$(node -p "require('../../../package.json').version")
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+          # Every compiler error at once (not only the last lines), so one run shows them all.
+          if ! xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/device" \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tail -n 60
+            build > "$RUNNER_TEMP/build.log" 2>&1; then
+            echo "::group::Compiler errors"
+            grep -E ": (error|fatal error):" "$RUNNER_TEMP/build.log" | sed -E 's#^.*/ios/native/App/##' | sort -u | head -n 400
+            echo "::endgroup::"
+            tail -n 40 "$RUNNER_TEMP/build.log"
+            exit 1
+          fi
+          tail -n 15 "$RUNNER_TEMP/build.log"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$RUNNER_TEMP/device/Build/Products/Release-iphoneos/App.app" "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/harbor-ios.ipa" Payload)
