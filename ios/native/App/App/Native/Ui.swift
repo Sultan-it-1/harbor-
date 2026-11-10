@@ -54,6 +54,12 @@ extension UIView {
     func setDirection(rtl: Bool) {
         let attr: UISemanticContentAttribute = rtl ? .forceRightToLeft : .forceLeftToRight
         if semanticContentAttribute != attr { semanticContentAttribute = attr }
+        // Text starts at the reading side too (centred text stays centred).
+        if let l = self as? UILabel, l.textAlignment != .center {
+            l.textAlignment = rtl ? .right : .left
+        } else if let f = self as? UITextField, f.textAlignment != .center {
+            f.textAlignment = rtl ? .right : .left
+        }
         for sub in subviews { sub.setDirection(rtl: rtl) }
     }
 
@@ -65,6 +71,66 @@ extension UIView {
             leadingAnchor.constraint(equalTo: other.leadingAnchor, constant: insets.left),
             trailingAnchor.constraint(equalTo: other.trailingAnchor, constant: -insets.right),
         ])
+    }
+
+    /// Like pinEdges, the bottom a little weaker: a table cell's content sets the cell's height
+    /// without fighting the height the table gives it first.
+    func pinInCell(_ cell: UIView, top: CGFloat = 0, leading: CGFloat = 0, bottom: CGFloat = 0, trailing: CGFloat = 0) {
+        translatesAutoresizingMaskIntoConstraints = false
+        let b = bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -bottom)
+        b.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([
+            topAnchor.constraint(equalTo: cell.topAnchor, constant: top),
+            b,
+            leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: leading),
+            trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -trailing),
+        ])
+    }
+
+    /// Fixed width and / or height constraints (returned so they can change later).
+    @discardableResult
+    func sized(w: CGFloat? = nil, h: CGFloat? = nil) -> (w: NSLayoutConstraint?, h: NSLayoutConstraint?) {
+        translatesAutoresizingMaskIntoConstraints = false
+        let wc = w.map { widthAnchor.constraint(equalToConstant: $0) }
+        let hc = h.map { heightAnchor.constraint(equalToConstant: $0) }
+        NSLayoutConstraint.activate([wc, hc].compactMap { $0 })
+        return (wc, hc)
+    }
+
+    /// Centred in [other].
+    func centerIn(_ other: UIView) {
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            centerXAnchor.constraint(equalTo: other.centerXAnchor),
+            centerYAnchor.constraint(equalTo: other.centerYAnchor),
+        ])
+    }
+
+    func removeAllSubviews() {
+        for v in subviews { v.removeFromSuperview() }
+    }
+}
+
+extension UIStackView {
+    convenience init(axis: NSLayoutConstraint.Axis, spacing: CGFloat = 0, alignment: UIStackView.Alignment = .fill, views: [UIView] = []) {
+        self.init(arrangedSubviews: views)
+        self.axis = axis
+        self.spacing = spacing
+        self.alignment = alignment
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    func removeAllArranged() {
+        for v in arrangedSubviews {
+            removeArrangedSubview(v)
+            v.removeFromSuperview()
+        }
+    }
+
+    /// Adds [v] with [before] points of room above / before it (none for the first).
+    func add(_ v: UIView, gap before: CGFloat = 0) {
+        if let last = arrangedSubviews.last, before > 0 { setCustomSpacing(before, after: last) }
+        addArrangedSubview(v)
     }
 }
 
@@ -112,7 +178,7 @@ final class ShadeView: UIView {
 }
 
 /// A button that runs a closure (no target / selector boilerplate), shrinking a little when held.
-final class TapButton: UIControl {
+class TapButton: UIControl {
     var onTap: (() -> Void)?
     /// How much it shrinks while pressed (1 = not at all).
     var pressScale: CGFloat = 0.97

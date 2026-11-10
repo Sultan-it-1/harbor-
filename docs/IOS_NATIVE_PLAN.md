@@ -26,14 +26,16 @@ Then: build, fix what the compiler finds, check every screen in the simulator, I
   the web view (above the page, below its tab bar), one screen per page; the three models in
   Swift; image loader + caches; colours / fonts / helpers (Ui.kt); the 74 icons; web side:
   `nativeScreensApi()` so the page feeds iOS like Android.
-- [ ] **2. Browse screens**: hero (auto-advance), rows and cards (poster, Top 10, Continue
+- [x] **2. Browse screens**: hero (auto-advance), rows and cards (poster, Top 10, Continue
   Watching, tiles, logos, feature, lead, live, channel), header, chips, notes / messages / empty,
   search bar, "See all" grid, customize mode, Critics' Pick, Discovery Queue, award winners.
   Covers Home, Discover, Movies, Shows, Anime, Library, Search, See all, Collections, Awards.
-- [ ] **3. Title pages**: detail, seasons + episodes, list items / actions, person, episode
+  (Live TV's own card faces in rows come with phase 5; until then those rows show posters.)
+- [x] **3. Title pages**: detail, seasons + episodes, list items / actions, person, episode
   detail, "Watch on".
-- [ ] **4. Overlays**: long-press menus (sheet), toast, prompt, full-screen steps (stage), top
-  shade, Back / Watch together buttons, edge swipe back.
+- [x] **4. Overlays**: long-press menus (sheet), toast, prompt, full-screen steps (stage), top
+  shade, Back / Watch together buttons, edge swipe back (the page's own Back handler, now
+  registered on iOS too), stills full screen, row rename.
 - [ ] **5. Calendar, Downloads page, Live TV** (live hero, channels, TV guide ruler and rows),
   **match pages** (match, versus, pitch).
 - [ ] **6. Play picker** (pick, quality tiers, streams, drawer, diagnostics, panel, loader).

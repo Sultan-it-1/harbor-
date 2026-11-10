@@ -3,7 +3,7 @@ import ImageIO
 import UIKit
 
 /// An image view that remembers which picture it is waiting for (see ImageLoader.load).
-final class NetImageView: UIImageView {
+class NetImageView: UIImageView {
     fileprivate var want: String?
 
     override init(frame: CGRect) {

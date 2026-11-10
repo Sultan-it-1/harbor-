@@ -40,6 +40,9 @@ final class NativeScreens {
 
     var isShowing: Bool { current.flatMap { screens[$0] }?.isShowing == true }
 
+    /// The app's reading direction as the pages last said (the edge Back is swiped from).
+    private(set) var rtl = false
+
     private var screenFrame: CGRect {
         CGRect(x: 0, y: 0, width: root.bounds.width, height: max(0, root.bounds.height - bottom))
     }
@@ -64,6 +67,7 @@ final class NativeScreens {
             NSLog("[harbor screens] model rejected")
             return
         }
+        rtl = model.rtl
         screen(model.page).setModel(model, json: json)
     }
 

@@ -16,6 +16,17 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		E605DD953C8A6501AC3C7DAB /* TitleCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = D67DF9DE91409844BEBA6886 /* TitleCells.swift */; };
+		3F352633DA550BDC97D62DD4 /* Sections.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D5EA86109CF360A944A72F /* Sections.swift */; };
+		47B161A7F9F1EBDA890C7759 /* Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCB883CEA6B430C706DD51F /* Search.swift */; };
+		4063222A1F26B097DB2A96F3 /* RowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77F708692D48FE6DB7253429 /* RowCell.swift */; };
+		C755FF77108C0A8AC5C2561E /* QueueCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB94A5B962D5E95ADB4305B /* QueueCell.swift */; };
+		924B1C8F200C9A09DF58E5D1 /* Overlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A758BF3684AC620EEC00DA /* Overlays.swift */; };
+		6B3D6F7517F3FE64030E9C2B /* ListCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7F34866D1CF5B31FBCCC75 /* ListCells.swift */; };
+		483923D1BFF21A09E0510FD8 /* Kit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60485BA93790C1FD02DF1EAD /* Kit.swift */; };
+		747FD9A7B2DE8321D6CA7CEC /* HeroCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1A302C670887D7BE067102 /* HeroCell.swift */; };
+		12B593387196B328B0B93A4C /* CriticCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BA4A8B87C98EC80DF72C1DE /* CriticCard.swift */; };
+		1522D2189372EACD196A5FF8 /* Cards.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6E3396A2E5888132EEC1AB /* Cards.swift */; };
 		4ED4F260B2221B7E6BAD64A9 /* Ui.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DBB408E4F06F58FA73D9DB /* Ui.swift */; };
 		F5B674A22002A2138C73671F /* PickerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E9A2670A3137EC8F1B3DA2B /* PickerModel.swift */; };
 		7F158B4734F70AE193BFD8BE /* NativeScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E2747A28A12B26BFA914521 /* NativeScreens.swift */; };
@@ -41,6 +52,17 @@
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		D67DF9DE91409844BEBA6886 /* TitleCells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/TitleCells.swift"; sourceTree = "<group>"; };
+		A8D5EA86109CF360A944A72F /* Sections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Sections.swift"; sourceTree = "<group>"; };
+		ABCB883CEA6B430C706DD51F /* Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Search.swift"; sourceTree = "<group>"; };
+		77F708692D48FE6DB7253429 /* RowCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/RowCell.swift"; sourceTree = "<group>"; };
+		7DB94A5B962D5E95ADB4305B /* QueueCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/QueueCell.swift"; sourceTree = "<group>"; };
+		69A758BF3684AC620EEC00DA /* Overlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Overlays.swift"; sourceTree = "<group>"; };
+		7E7F34866D1CF5B31FBCCC75 /* ListCells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/ListCells.swift"; sourceTree = "<group>"; };
+		60485BA93790C1FD02DF1EAD /* Kit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Kit.swift"; sourceTree = "<group>"; };
+		5C1A302C670887D7BE067102 /* HeroCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/HeroCell.swift"; sourceTree = "<group>"; };
+		3BA4A8B87C98EC80DF72C1DE /* CriticCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/CriticCard.swift"; sourceTree = "<group>"; };
+		DA6E3396A2E5888132EEC1AB /* Cards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Cards.swift"; sourceTree = "<group>"; };
 		37DBB408E4F06F58FA73D9DB /* Ui.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Ui.swift"; sourceTree = "<group>"; };
 		5E9A2670A3137EC8F1B3DA2B /* PickerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/PickerModel.swift"; sourceTree = "<group>"; };
 		0E2747A28A12B26BFA914521 /* NativeScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/NativeScreens.swift"; sourceTree = "<group>"; };
@@ -89,6 +111,17 @@
 			isa = PBXGroup;
 			children = (
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
+				D67DF9DE91409844BEBA6886 /* TitleCells.swift */,
+				A8D5EA86109CF360A944A72F /* Sections.swift */,
+				ABCB883CEA6B430C706DD51F /* Search.swift */,
+				77F708692D48FE6DB7253429 /* RowCell.swift */,
+				7DB94A5B962D5E95ADB4305B /* QueueCell.swift */,
+				69A758BF3684AC620EEC00DA /* Overlays.swift */,
+				7E7F34866D1CF5B31FBCCC75 /* ListCells.swift */,
+				60485BA93790C1FD02DF1EAD /* Kit.swift */,
+				5C1A302C670887D7BE067102 /* HeroCell.swift */,
+				3BA4A8B87C98EC80DF72C1DE /* CriticCard.swift */,
+				DA6E3396A2E5888132EEC1AB /* Cards.swift */,
 				37DBB408E4F06F58FA73D9DB /* Ui.swift */,
 				5E9A2670A3137EC8F1B3DA2B /* PickerModel.swift */,
 				0E2747A28A12B26BFA914521 /* NativeScreens.swift */,
@@ -196,6 +229,17 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				E605DD953C8A6501AC3C7DAB /* TitleCells.swift in Sources */,
+				3F352633DA550BDC97D62DD4 /* Sections.swift in Sources */,
+				47B161A7F9F1EBDA890C7759 /* Search.swift in Sources */,
+				4063222A1F26B097DB2A96F3 /* RowCell.swift in Sources */,
+				C755FF77108C0A8AC5C2561E /* QueueCell.swift in Sources */,
+				924B1C8F200C9A09DF58E5D1 /* Overlays.swift in Sources */,
+				6B3D6F7517F3FE64030E9C2B /* ListCells.swift in Sources */,
+				483923D1BFF21A09E0510FD8 /* Kit.swift in Sources */,
+				747FD9A7B2DE8321D6CA7CEC /* HeroCell.swift in Sources */,
+				12B593387196B328B0B93A4C /* CriticCard.swift in Sources */,
+				1522D2189372EACD196A5FF8 /* Cards.swift in Sources */,
 				4ED4F260B2221B7E6BAD64A9 /* Ui.swift in Sources */,
 				F5B674A22002A2138C73671F /* PickerModel.swift in Sources */,
 				7F158B4734F70AE193BFD8BE /* NativeScreens.swift in Sources */,

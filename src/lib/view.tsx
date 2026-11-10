@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { Meta } from "./cinemeta";
 import { runAndroidBackHandlers, visiblePopups } from "./android";
+import { isIOSApp } from "./platform";
 import { profileFromMeta, trackEvent } from "./discover";
 import type { StreamingService } from "./settings";
 import { useTogether } from "./together/provider";
@@ -371,13 +372,14 @@ export function ViewProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Android app: the hardware/gesture back button closes an open dialog first, then pops
-  // the view stack; returning false lets the shell send the app to the background.
+  // the view stack; returning false lets the shell send the app to the background. The iPhone
+  // app's swipe from the screen's edge does the same.
   const stackDepthRef = useRef(stack.length);
   stackDepthRef.current = stack.length;
   const rootKindRef = useRef(stack[0].kind);
   rootKindRef.current = stack[0].kind;
   useEffect(() => {
-    if (typeof window === "undefined" || !window.HarborAndroid) return;
+    if (typeof window === "undefined" || (!window.HarborAndroid && !isIOSApp())) return;
     let lastModal: Element | null = null;
     window.__harborAndroidBack = () => {
       if (runAndroidBackHandlers()) return true;

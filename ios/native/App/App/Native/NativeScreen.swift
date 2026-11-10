@@ -1,5 +1,22 @@
 import UIKit
 
+/// What a screen remembers between models (Android: NativeHome's maps and sets).
+final class ScreenMemory {
+    /// How far along each row was scrolled (from its start).
+    var rowScroll: [String: CGFloat] = [:]
+    /// The row lengths the page was already asked to load more for.
+    var askedMore: [String: Int] = [:]
+    /// Which review each Critics' Pick shows.
+    var criticReview: [String: Int] = [:]
+    /// Which titles' synopses / headings' paragraphs are open in full.
+    var synopsisOpen = Set<String>()
+    var headerBodyOpen = Set<String>()
+    /// The hero's slide.
+    var heroPage = 0
+    /// Each line's height once drawn (the list's guesses, so it doesn't jump on a new model).
+    var heights: [String: CGFloat] = [:]
+}
+
 /**
  * One native screen (Android: NativeHome): the page's model drawn as a list of sections (the hero,
  * rows of cards, a title's page…), with Back and Watch together at the top. Each section type is
@@ -14,6 +31,14 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
     private(set) var model: HomeModel?
     var colors: HomeColors { model?.colors ?? .standard }
     var rtl: Bool { model?.rtl ?? false }
+    let memory = ScreenMemory()
+
+    /// Sizes that follow this screen's size.
+    var metrics: Metrics {
+        let b = bounds.size
+        let s = UIScreen.main.bounds.size
+        return Metrics(width: b.width > 0 ? b.width : s.width, height: b.height > 0 ? b.height : s.height)
+    }
 
     let table = UITableView(frame: .zero, style: .plain)
     private(set) var items: [ScreenItem] = []
@@ -26,9 +51,12 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
     private let topScrim = ShadeView()
     /// The overlays: menus, toasts, prompts, full-screen steps (Overlays.swift).
     lazy var overlays = ScreenOverlays(screen: self)
+    /// The search field held at the top (Search.swift).
+    lazy var search = ScreenSearch(screen: self)
 
     private var lastJson: String?
     private var lastTop = Int.min
+    private var lastWidth: CGFloat = 0
     private var wanted = false
     private var lingering = false
     private var hideWork: DispatchWorkItem?
@@ -52,6 +80,7 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
         table.estimatedRowHeight = 240
         table.rowHeight = UITableView.automaticDimension
         table.keyboardDismissMode = .onDrag
+        table.delaysContentTouches = false
         if #available(iOS 15.0, *) { table.sectionHeaderTopPadding = 0 }
         Sections.register(in: table)
         addSubview(table)
@@ -110,6 +139,19 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // A new width (rotation, split view): card sizes follow it.
+        if bounds.width > 0 && abs(bounds.width - lastWidth) > 1 {
+            let first = lastWidth == 0
+            lastWidth = bounds.width
+            if !first && model != nil {
+                memory.heights.removeAll()
+                table.reloadData()
+            }
+        }
+    }
+
     // MARK: - The page's model
 
     /// A new description from the page. Nothing changed = nothing redrawn.
@@ -134,6 +176,7 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
         }
         setDirection(rtl: m.rtl)
 
+        search.bind(m)
         items = Sections.build(m, screen: self)
         table.reloadData()
         if lastTop != Int.min && m.top != lastTop {
@@ -141,8 +184,24 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
         }
         lastTop = m.top
         overlays.apply(m)
+        // What floats at the top stays over the list.
+        bringSubviewToFront(topScrim)
+        bringSubviewToFront(search.bar)
+        bringSubviewToFront(backButton)
+        bringSubviewToFront(togetherButton)
         applyVisibility()
-        DispatchQueue.main.async { self.placeScrim() }
+        DispatchQueue.main.async {
+            self.placeScrim()
+            self.search.place(table: self.table, items: self.items, model: self.model)
+        }
+    }
+
+    /// A line changed its height in place (a paragraph opened): the list makes room.
+    func refreshHeights() {
+        UIView.performWithoutAnimation {
+            table.beginUpdates()
+            table.endUpdates()
+        }
     }
 
     // MARK: - On screen or not
@@ -164,7 +223,6 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
         if !(wanted && model != nil) {
             isHidden = true
             alpha = 0
-            overlays.hidden()
         }
     }
 
@@ -175,18 +233,25 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
             // Back before it left (a quick Back): on top again.
             hideWork?.cancel()
             lingering = false
+            alpha = 1
+            superview?.bringSubviewToFront(self)
+            return
         }
         if want {
             guard isHidden || alpha < 1 else { return }
             isHidden = false
+            overlays.shown()
             UIView.animate(withDuration: 0.14, animations: { self.alpha = 1 }, completion: { _ in self.onRevealed?() })
         } else if !isHidden {
+            // The screen stepping aside closes its menu and keyboard (and the page hears it).
+            search.endEditing()
+            overlays.hidden()
             if linger {
                 // Stays under the one coming in until that one is fully in (or a moment).
                 lingering = true
                 let work = DispatchWorkItem { [weak self] in self?.hideNow() }
                 hideWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
             } else {
                 hideNow()
             }
@@ -217,22 +282,36 @@ final class NativeScreen: UIView, UITableViewDataSource, UITableViewDelegate {
         return cell
     }
 
+    func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
+        guard indexPath.row < items.count else { return 240 }
+        let item = items[indexPath.row]
+        if let h = memory.heights[item.id] { return h }
+        switch item.kind {
+        case .top, .gap, .search, .end: return Swift.max(item.height, 1)
+        case .hero, .detail: return metrics.hero
+        default: return 240
+        }
+    }
+
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
+        guard indexPath.row < items.count else { return }
         Sections.willDisplay(items[indexPath.row], cell: cell, screen: self)
     }
 
+    func tableView(_ tableView: UITableView, didEndDisplaying cell: UITableViewCell, forRowAt indexPath: IndexPath) {
+        guard indexPath.row < items.count, cell.bounds.height > 0 else { return }
+        memory.heights[items[indexPath.row].id] = cell.bounds.height
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === table else { return }
         placeScrim()
+        search.place(table: table, items: items, model: model)
         overlays.scrolled()
     }
 
     /// The top shade: none at the top of the page, full once it has scrolled a little.
     private func placeScrim() {
-        topScrim.alpha = min(1, max(0, table.contentOffset.y / 64))
-    }
-
-    /// Room a fixed bar at the top takes (the search field held there): the list starts under it.
-    func setTopInset(_ inset: CGFloat) {
-        if table.contentInset.top != inset { table.contentInset.top = inset }
+        topScrim.alpha = Swift.min(1, Swift.max(0, table.contentOffset.y / 64))
     }
 }
