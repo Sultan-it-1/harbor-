@@ -134,6 +134,7 @@ export function PhoneTabBar() {
                 return (
                   <button
                     key={it.view}
+                    data-more-view={it.view}
                     onClick={() => go(it)}
                     className={`flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-[12px] font-medium transition-colors active:scale-[0.97] ${
                       active ? "bg-accent-soft text-ink" : "bg-elevated/60 text-ink-muted"

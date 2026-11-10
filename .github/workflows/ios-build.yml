@@ -135,6 +135,40 @@ jobs:
           grep "harbor player" "$GITHUB_WORKSPACE/simulator/player.log" | tail -n 30 || true
           grep -iE "subtitle|subsdec|freetype|slave|srt" "$GITHUB_WORKSPACE/simulator/player.log" | grep -v "harbor player" | tail -n 40 || true
 
+      # The screens in English and in Arabic: the app opens each one by itself (-HarborTour, test
+      # builds only) and names it in a file once it has filled; a screenshot each time the name changes.
+      - name: Screens tour in the simulator
+        continue-on-error: true
+        run: |
+          UDID="$SIM_UDID"
+          OUT="$GITHUB_WORKSPACE/simulator/tour"
+          mkdir -p "$OUT"
+          DATA=$(xcrun simctl get_app_container "$UDID" app.harbor.ios data)
+          for L in en ar; do
+            xcrun simctl terminate "$UDID" app.harbor.ios || true
+            rm -f "$DATA/Documents/tour/step.txt"
+            xcrun simctl launch --console-pty "$UDID" app.harbor.ios -HarborTour "$L" > "$GITHUB_WORKSPACE/simulator/tour-$L.log" 2>&1 &
+            last=""
+            for i in $(seq 1 600); do
+              step=$(cat "$DATA/Documents/tour/step.txt" 2>/dev/null || true)
+              if [ -n "$step" ] && [ "$step" != "$last" ]; then
+                last="$step"
+                [ "$step" = "done" ] && break
+                xcrun simctl io "$UDID" screenshot "$OUT/$L-$step.png" >/dev/null 2>&1
+                sips -Z 1434 "$OUT/$L-$step.png" >/dev/null 2>&1 || true
+                echo "$L $step"
+              fi
+              sleep 0.5
+            done
+            xcrun simctl terminate "$UDID" app.harbor.ios || true
+          done
+          sleep 2
+          xcrun simctl spawn "$UDID" log show --last 12m --style compact \
+            --predicate 'process == "App"' > "$GITHUB_WORKSPACE/simulator/tour-app.log" || true
+          grep -E "\[error\]|\[warn\]|JS Eval|Unhandled|TypeError|ReferenceError|harbor native" \
+            "$GITHUB_WORKSPACE/simulator/tour-app.log" | grep -v "com.apple.WebKit" | tail -n 80 || true
+          ls "$OUT"
+
       - name: Publish (pre-release)
         uses: softprops/action-gh-release@v3
         with:
@@ -153,3 +187,5 @@ jobs:
             simulator/4-player-later.png
             simulator/app.log
             simulator/player.log
+            simulator/tour/*.png
+            simulator/tour-*.log

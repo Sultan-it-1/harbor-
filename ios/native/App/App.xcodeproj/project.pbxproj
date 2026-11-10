@@ -16,6 +16,7 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		9B1B99A985E1D3939A7BC111 /* HarborTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EFAB9DFE7CCCEEA6893FC9C /* HarborTour.swift */; };
 		1E8E255BCB88AD1F0C9DC257 /* PlayerExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D7A39903C2AC04F9C44CEA1 /* PlayerExtras.swift */; };
 		4E4E41061A6FBFBD3531ACF9 /* HarborSystemPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1B1AA8B229A560FF242E5D /* HarborSystemPlugin.swift */; };
 		59924828963273DFB258251F /* Downloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F9ECCF0A6AC42EF9B813C2 /* Downloads.swift */; };
@@ -60,6 +61,7 @@
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		0EFAB9DFE7CCCEEA6893FC9C /* HarborTour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarborTour.swift; sourceTree = "<group>"; };
 		1D7A39903C2AC04F9C44CEA1 /* PlayerExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerExtras.swift; sourceTree = "<group>"; };
 		1D1B1AA8B229A560FF242E5D /* HarborSystemPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarborSystemPlugin.swift; sourceTree = "<group>"; };
 		A2F9ECCF0A6AC42EF9B813C2 /* Downloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Downloads.swift; sourceTree = "<group>"; };
@@ -127,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
+				0EFAB9DFE7CCCEEA6893FC9C /* HarborTour.swift */,
 				1D7A39903C2AC04F9C44CEA1 /* PlayerExtras.swift */,
 				1D1B1AA8B229A560FF242E5D /* HarborSystemPlugin.swift */,
 				A2F9ECCF0A6AC42EF9B813C2 /* Downloads.swift */,
@@ -253,6 +256,7 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				9B1B99A985E1D3939A7BC111 /* HarborTour.swift in Sources */,
 				1E8E255BCB88AD1F0C9DC257 /* PlayerExtras.swift in Sources */,
 				4E4E41061A6FBFBD3531ACF9 /* HarborSystemPlugin.swift in Sources */,
 				59924828963273DFB258251F /* Downloads.swift in Sources */,

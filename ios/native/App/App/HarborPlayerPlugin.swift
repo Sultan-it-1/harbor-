@@ -8,6 +8,9 @@ final class HarborBridgeViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(HarborPlayerPlugin())
         bridge?.registerPluginInstance(HarborNativePlugin())
         bridge?.registerPluginInstance(HarborSystemPlugin())
+        #if DEBUG
+        if let lang = HarborTour.lang, let web = webView { HarborTour.start(web, lang: lang) }
+        #endif
     }
 }
 
