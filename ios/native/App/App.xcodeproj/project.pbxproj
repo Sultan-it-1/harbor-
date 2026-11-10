@@ -16,6 +16,7 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		8F1C89DC09297A172921C044 /* Addons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 732BEC2ED11126F2E926F653 /* Addons.swift */; };
 		290BEAD5961D09158125341D /* Picker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFEB355E5CB841E849083AB /* Picker.swift */; };
 		0E1B49B8171C5642AB8B0C0B /* Match.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B75751B38867C554958EBD4 /* Match.swift */; };
 		7A4422BACBFD13A4D9633E1E /* Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D6DC5EABE7870C15C1876 /* Live.swift */; };
@@ -56,6 +57,7 @@
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		732BEC2ED11126F2E926F653 /* Addons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Addons.swift"; sourceTree = "<group>"; };
 		0FFEB355E5CB841E849083AB /* Picker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Picker.swift"; sourceTree = "<group>"; };
 		9B75751B38867C554958EBD4 /* Match.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Match.swift"; sourceTree = "<group>"; };
 		2B2D6DC5EABE7870C15C1876 /* Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/Live.swift"; sourceTree = "<group>"; };
@@ -119,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
+				732BEC2ED11126F2E926F653 /* Addons.swift */,
 				0FFEB355E5CB841E849083AB /* Picker.swift */,
 				9B75751B38867C554958EBD4 /* Match.swift */,
 				2B2D6DC5EABE7870C15C1876 /* Live.swift */,
@@ -241,6 +244,7 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				8F1C89DC09297A172921C044 /* Addons.swift in Sources */,
 				290BEAD5961D09158125341D /* Picker.swift in Sources */,
 				0E1B49B8171C5642AB8B0C0B /* Match.swift in Sources */,
 				7A4422BACBFD13A4D9633E1E /* Live.swift in Sources */,

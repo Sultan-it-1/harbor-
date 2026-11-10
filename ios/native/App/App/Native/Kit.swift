@@ -397,7 +397,7 @@ enum Paint {
     }
 
     /// A round-ended button in one of the page's looks (Android's pkButtonView).
-    static func pkButton(_ b: PkButton, height: CGFloat, radius: CGFloat, colors: HomeColors, rtl: Bool, onTap: @escaping () -> Void) -> TapButton {
+    static func pkButton(_ b: PkButton, height: CGFloat, radius: CGFloat, padding: CGFloat = 25, colors: HomeColors, rtl: Bool, onTap: @escaping () -> Void) -> TapButton {
         let white = UIColor.white
         var bg: UIColor?
         var stroke: UIColor?
@@ -456,10 +456,10 @@ enum Paint {
             button.heightAnchor.constraint(greaterThanOrEqualToConstant: height),
             row.centerYAnchor.constraint(equalTo: button.centerYAnchor),
             row.centerXAnchor.constraint(equalTo: button.centerXAnchor),
-            row.leadingAnchor.constraint(greaterThanOrEqualTo: button.leadingAnchor, constant: 24),
+            row.leadingAnchor.constraint(greaterThanOrEqualTo: button.leadingAnchor, constant: padding - 1),
             row.topAnchor.constraint(greaterThanOrEqualTo: button.topAnchor, constant: 4),
         ])
-        let lead = button.widthAnchor.constraint(equalTo: row.widthAnchor, constant: 50)
+        let lead = button.widthAnchor.constraint(equalTo: row.widthAnchor, constant: 2 * padding)
         lead.priority = .defaultHigh
         lead.isActive = true
         button.isEnabled = enabled

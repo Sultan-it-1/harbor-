@@ -79,6 +79,16 @@ enum Sections {
         case .pkDiag: return PkDiagCell.self
         case .pkPanel: return PkPanelCell.self
         case .pkLoader: return PkLoaderCell.self
+        case .adCard: return AdCardCell.self
+        case .adTiles: return AdTilesCell.self
+        case .adHero: return AdHeroCell.self
+        case .adComm: return AdCommunityCell.self
+        case .adHead: return AdHeadCell.self
+        case .adCats: return AdCatsCell.self
+        case .adInst: return AdInstalledCell.self
+        case .adDetail: return AdDetailCell.self
+        case .adInfo: return AdInfoCell.self
+        case .adDoc: return AdDocCell.self
         default: return PendingCell.self
         }
     }

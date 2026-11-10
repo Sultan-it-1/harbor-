@@ -38,7 +38,7 @@ Then: build, fix what the compiler finds, check every screen in the simulator, I
 - [x] **5. Calendar, Downloads page, Live TV** (live hero, channels, TV guide ruler and rows),
   **match pages** (match, versus, pitch).
 - [x] **6. Play picker** (pick, quality tiers, streams, drawer, diagnostics, panel, loader).
-- [ ] **7. Addons pages** (cards, tiles, hero, community, categories, install, detail, info, doc).
+- [x] **7. Addons pages** (cards, tiles, hero, community, categories, install, detail, info, doc).
 - [ ] **8. Player and system**: downloads engine (background URLSession, pause / resume / retry,
   subtitles saved, offline playback) behind the same `dl*` calls; player extras (source list in
   the player, subtitle style: size / colour / background / position / delay, swipe gestures);

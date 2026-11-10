@@ -34,6 +34,7 @@ final class BarView: UIView {
 func flexSpace() -> UIView {
     let v = UIView()
     v.translatesAutoresizingMaskIntoConstraints = false
+    v.isUserInteractionEnabled = false
     v.setContentHuggingPriority(UILayoutPriority(1), for: .vertical)
     v.setContentHuggingPriority(UILayoutPriority(1), for: .horizontal)
     v.setContentCompressionResistancePriority(UILayoutPriority(1), for: .vertical)
