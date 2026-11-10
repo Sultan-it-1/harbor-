@@ -28,7 +28,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
     /// Told when something the page shows changed.
     var onChange: (() -> Void)?
 
-    private struct Task: Codable {
+    private struct Job: Codable {
         let id: String
         var url: String
         var headers: [String: String]
@@ -54,7 +54,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
         let label: String?
     }
 
-    private var tasks: [String: Task] = [:]
+    private var tasks: [String: Job] = [:]
     private var live: [String: URLSessionDownloadTask] = [:]
     /// Tasks being stopped on purpose (pause, Wi-Fi only, delete): their cancel isn't a failure.
     private var stopping: [String: String] = [:]
@@ -164,7 +164,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
             if k.lowercased() == "user-agent" { ua = s } else { headers[k] = s }
         }
         let title = [j.str("title"), j.str("description")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-        let t = Task(
+        let t = Job(
             id: id, url: url, headers: headers, ua: ua,
             file: Downloads.safeFileName(j.str("fileName") ?? "video.mp4"),
             title: title.isEmpty ? "Harbor" : title,
@@ -593,7 +593,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
 
     // MARK: - What the page shows
 
-    private func code(_ t: Task) -> String {
+    private func code(_ t: Job) -> String {
         switch t.state {
         case Self.QUEUED: return "queued"
         case Self.WAITING:
@@ -608,7 +608,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    private func note(_ t: Task, _ now: Double) -> String {
+    private func note(_ t: Job, _ now: Double) -> String {
         switch t.state {
         case Self.QUEUED: return "Queued"
         case Self.WAITING:
@@ -635,7 +635,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
     }
 
     private func restore() {
-        guard let data = try? Data(contentsOf: stateFile), let list = try? JSONDecoder().decode([Task].self, from: data) else { return }
+        guard let data = try? Data(contentsOf: stateFile), let list = try? JSONDecoder().decode([Job].self, from: data) else { return }
         for var t in list {
             // It was downloading when the app went away: carry on (or reattach, see start()).
             if t.state == Self.WAITING { t.state = Self.QUEUED }
@@ -660,7 +660,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    private func notifyFinished(_ t: Task, ok: Bool) {
+    private func notifyFinished(_ t: Job, ok: Bool) {
         guard UIApplication.shared.applicationState != .active else { return }
         let ar = (Locale.preferredLanguages.first ?? "").hasPrefix("ar")
         let c = UNMutableNotificationContent()

@@ -471,7 +471,7 @@ final class HarborPlayerViewController: UIViewController, UIGestureRecognizerDel
                 self.knownSubTracks = Set((self.player.videoSubTitlesIndexes as? [NSNumber] ?? []).map { $0.int32Value })
                 self.pendingExternal = sub.url
                 let added = self.player.addPlaybackSlave(file, type: .subtitle, enforce: true)
-                self.log("subtitle: saved \(file.path), addPlaybackSlave -> \(added), tracks \(self.player.videoSubTitlesIndexes ?? []) names \(self.player.videoSubTitlesNames ?? [])")
+                self.log("subtitle: saved \(file.path), addPlaybackSlave -> \(added), tracks \(self.player.videoSubTitlesIndexes) names \(self.player.videoSubTitlesNames)")
             }
         }.resume()
     }

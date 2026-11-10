@@ -7,7 +7,7 @@ import UIKit
  * ringed, those already passed faded). The card turns to the next / previous title with a swipe:
  * forward is toward the reading side's start (to the left; to the right in Arabic).
  */
-final class QueueCell: SectionCell, UIGestureRecognizerDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+final class QueueCell: SectionCell, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     private static let dark = UIColor(red: 10 / 255, green: 12 / 255, blue: 19 / 255, alpha: 1)
 
     private let wrap = UIView()

@@ -316,6 +316,8 @@ final class CardView: TapButton {
                 bigTitle.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 8),
                 bigTitle.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -8),
             ])
+        case .live, .guide, .channel, .sport:
+            break // drawn by LiveFaces (see above)
         case .poster, .rank:
             badge.translatesAutoresizingMaskIntoConstraints = false
             box.addSubview(badge)
@@ -561,6 +563,8 @@ final class CardView: TapButton {
         case .logo:
             bigTitle.text = c.title
             bigTitle.textColor = colors.ink
+        case .live, .guide, .channel, .sport:
+            break // drawn by LiveFaces (see above)
         case .poster:
             kicker.font = Fonts.bold(10)
             kicker.text = c.kicker
