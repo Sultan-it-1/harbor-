@@ -52,10 +52,17 @@ extension UIView {
     /// Right to left (Arabic) or left to right, for this view and everything in it: iOS doesn't
     /// pass the direction down by itself, and the app's language isn't the phone's.
     func setDirection(rtl: Bool) {
+        // A scoreboard keeps home on the left whatever the language.
+        if self is LTRStack {
+            semanticContentAttribute = .forceLeftToRight
+            return
+        }
         let attr: UISemanticContentAttribute = rtl ? .forceRightToLeft : .forceLeftToRight
         if semanticContentAttribute != attr { semanticContentAttribute = attr }
-        // Text starts at the reading side too (centred text stays centred).
-        if let l = self as? UILabel, l.textAlignment != .center {
+        // Text starts at the reading side too (centred text stays centred, end text at the end).
+        if let l = self as? EndLabel {
+            l.textAlignment = rtl ? .left : .right
+        } else if let l = self as? UILabel, l.textAlignment != .center {
             l.textAlignment = rtl ? .right : .left
         } else if let f = self as? UITextField, f.textAlignment != .center {
             f.textAlignment = rtl ? .right : .left
@@ -133,6 +140,23 @@ extension UIStackView {
         addArrangedSubview(v)
     }
 }
+
+/// A label that sits at the end of its line (the left in Arabic).
+final class EndLabel: UILabel {
+    convenience init(_ text: String?, size: CGFloat, color: UIColor, weight: UIFont.Weight = .regular) {
+        self.init(frame: .zero)
+        self.text = text
+        font = Fonts.body(size, weight)
+        textColor = color
+        numberOfLines = 1
+        lineBreakMode = .byTruncatingTail
+        textAlignment = .right
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+}
+
+/// A stack that stays left to right in Arabic too (a match's home and away sides).
+final class LTRStack: UIStackView {}
 
 /// A view that lets touches through where it has nothing of its own (the screens' layer over the
 /// page: with no screen up, every tap goes to the page).

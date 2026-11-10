@@ -30,15 +30,14 @@ Then: build, fix what the compiler finds, check every screen in the simulator, I
   Watching, tiles, logos, feature, lead, live, channel), header, chips, notes / messages / empty,
   search bar, "See all" grid, customize mode, Critics' Pick, Discovery Queue, award winners.
   Covers Home, Discover, Movies, Shows, Anime, Library, Search, See all, Collections, Awards.
-  (Live TV's own card faces in rows come with phase 5; until then those rows show posters.)
 - [x] **3. Title pages**: detail, seasons + episodes, list items / actions, person, episode
   detail, "Watch on".
 - [x] **4. Overlays**: long-press menus (sheet), toast, prompt, full-screen steps (stage), top
   shade, Back / Watch together buttons, edge swipe back (the page's own Back handler, now
   registered on iOS too), stills full screen, row rename.
-- [ ] **5. Calendar, Downloads page, Live TV** (live hero, channels, TV guide ruler and rows),
+- [x] **5. Calendar, Downloads page, Live TV** (live hero, channels, TV guide ruler and rows),
   **match pages** (match, versus, pitch).
-- [ ] **6. Play picker** (pick, quality tiers, streams, drawer, diagnostics, panel, loader).
+- [x] **6. Play picker** (pick, quality tiers, streams, drawer, diagnostics, panel, loader).
 - [ ] **7. Addons pages** (cards, tiles, hero, community, categories, install, detail, info, doc).
 - [ ] **8. Player and system**: downloads engine (background URLSession, pause / resume / retry,
   subtitles saved, offline playback) behind the same `dl*` calls; player extras (source list in

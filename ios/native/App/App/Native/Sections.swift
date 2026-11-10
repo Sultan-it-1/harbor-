@@ -62,6 +62,23 @@ enum Sections {
         case .source: return SourceCell.self
         case .detail: return DetailCell.self
         case .episode: return EpisodeCell.self
+        case .calbar: return CalendarBarCell.self
+        case .calendar: return CalendarCell.self
+        case .dlTop: return DownloadsTopCell.self
+        case .dlGroup: return DownloadGroupCell.self
+        case .match: return MatchCell.self
+        case .versus: return VersusCell.self
+        case .pitch: return PitchCell.self
+        case .guideRuler: return GuideRulerCell.self
+        case .guideRow: return GuideRowCell.self
+        case .liveHero: return LiveHeroCell.self
+        case .pkPick: return PkPickCell.self
+        case .pkTiers: return PkTiersCell.self
+        case .pkStream: return PkStreamCell.self
+        case .pkDrawer: return PkDrawerCell.self
+        case .pkDiag: return PkDiagCell.self
+        case .pkPanel: return PkPanelCell.self
+        case .pkLoader: return PkLoaderCell.self
         default: return PendingCell.self
         }
     }

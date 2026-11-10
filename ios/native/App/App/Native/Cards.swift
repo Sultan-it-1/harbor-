@@ -8,9 +8,11 @@ final class PassthroughStack: UIStackView {
     }
 }
 
-/// The looks a card can have (Android: C_POSTER … C_LEAD). Live TV's cards come with its phase.
+/// The looks a card can have (Android: C_POSTER … C_SPORT).
 enum CardKind: String, CaseIterable {
     case poster, rank, cw, tile, logo, feature, lead
+    /// Live TV's: a channel now, On now, the channel grid, a game's score.
+    case live, guide, channel, sport
 
     init(_ k: HomeRow.Kind) {
         switch k {
@@ -19,9 +21,16 @@ enum CardKind: String, CaseIterable {
         case .tile: self = .tile
         case .logo: self = .logo
         case .feature: self = .feature
+        case .live: self = .live
+        case .guide: self = .guide
+        case .channel: self = .channel
+        case .sports: self = .sport
         default: self = .poster
         }
     }
+
+    /// Drawn by Live TV's own faces (LiveFaces).
+    var isLive: Bool { self == .live || self == .guide || self == .channel || self == .sport }
 
     /// The title is under the picture (not on it).
     var titleBelow: Bool { self == .poster || self == .rank || self == .cw }
@@ -36,6 +45,8 @@ enum CardKind: String, CaseIterable {
         case .feature: return m.feature
         case .lead: return 280
         case .poster: return m.poster
+        case .live, .guide, .channel: return m.live
+        case .sport: return 260
         }
     }
 
@@ -48,6 +59,10 @@ enum CardKind: String, CaseIterable {
         case .logo: return 80
         case .feature: return Swift.max(Swift.min(floor(w * 10 / 16), 440), 300)
         case .poster, .rank: return floor(w * 3 / 2)
+        case .live: return floor(w * 9 / 16)
+        case .guide: return 132
+        case .sport: return 96
+        case .channel: return row.items.map { LiveFaces.channelHeight($0) }.max() ?? 160
         }
     }
 
@@ -112,6 +127,8 @@ final class CardView: TapButton {
     private let featurePlay = TapButton()
     private let featurePlayText = makeLabel(size: 14, weight: .bold)
     private let featurePlayIcon = UIImageView()
+    /// Live TV's face, in the poster's place.
+    private let liveBox = UIView()
 
     static func rankFont(_ w: CGFloat) -> UIFont {
         let size = Swift.min(Swift.max(w * 0.3, 26), 48)
@@ -139,6 +156,18 @@ final class CardView: TapButton {
     }
 
     private func build() {
+        if kind.isLive {
+            liveBox.isUserInteractionEnabled = false
+            addSubview(liveBox)
+            liveBox.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                liveBox.topAnchor.constraint(equalTo: topAnchor),
+                liveBox.leadingAnchor.constraint(equalTo: leadingAnchor),
+                liveBox.trailingAnchor.constraint(equalTo: trailingAnchor),
+                liveBox.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+            ])
+            return
+        }
         col.isUserInteractionEnabled = false
         addSubview(col)
         col.translatesAutoresizingMaskIntoConstraints = false
@@ -352,6 +381,10 @@ final class CardView: TapButton {
 
     /// Lets go of the picture (the card is reused for another).
     func clear() {
+        if kind.isLive {
+            liveBox.removeAllSubviews()
+            return
+        }
         ImageLoader.shared.clear(image)
         Paint.uncrop(image)
     }
@@ -377,6 +410,23 @@ final class CardView: TapButton {
         screen = s
         let colors = s.colors
         let rtl = s.rtl
+        if kind.isLive {
+            liveBox.removeAllSubviews()
+            let face = LiveFaces.make(kind, c, width: w, colors: colors, model: s.model)
+            liveBox.addSubview(face)
+            face.translatesAutoresizingMaskIntoConstraints = false
+            let fh = kind == .channel ? LiveFaces.channelHeight(c) : kind.boxHeight(w, row: r)
+            NSLayoutConstraint.activate([
+                face.topAnchor.constraint(equalTo: liveBox.topAnchor),
+                face.leadingAnchor.constraint(equalTo: liveBox.leadingAnchor),
+                face.trailingAnchor.constraint(equalTo: liveBox.trailingAnchor),
+                face.bottomAnchor.constraint(equalTo: liveBox.bottomAnchor),
+                face.heightAnchor.constraint(equalToConstant: fh),
+            ])
+            accessibilityLabel = [c.sub, c.title].compactMap { $0 }.joined(separator: " · ")
+            setDirection(rtl: rtl)
+            return
+        }
         let h = kind.boxHeight(w, row: r)
         bw.constant = w
         bh.constant = h
@@ -590,7 +640,7 @@ final class GridLineCell: SectionCell {
 
     override func bind(_ item: ScreenItem, _ m: HomeModel) {
         guard let row = item.row, let screen else { return }
-        let kind: CardKind = item.kind == .gridTile ? .tile : .poster
+        let kind: CardKind = item.kind == .gridTile ? .tile : item.kind == .gridChannel ? .channel : .poster
         bottom?.constant = kind == .poster ? -22 : -16
         let met = metrics
         let cols = met.gridCols(row)

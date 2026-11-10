@@ -15,6 +15,14 @@ final class ScreenMemory {
     var heroPage = 0
     /// Each line's height once drawn (the list's guesses, so it doesn't jump on a new model).
     var heights: [String: CGFloat] = [:]
+    /// Live TV's guide: how far its hours are scrolled (shared by the ruler and every row), for
+    /// which window, and the channel count more were asked for at.
+    var guideX: CGFloat = -1
+    var guideKey: Int64 = 0
+    var guideAskedMore = -1
+    let guideStrips = NSHashTable<GuideStripView>.weakObjects()
+    /// The play picker's quality note is open.
+    var pkInfoOpen = false
 }
 
 /**

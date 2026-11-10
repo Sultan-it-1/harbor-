@@ -102,7 +102,12 @@ final class ScreenOverlays {
         guard let t, t.id != toastShown else { return }
         toastShown = t.id
         guard screen.isShowing else { return }
-        let l = PadLabel(t.text, size: 14, color: colors.ink, insets: UIEdgeInsets(top: 10, left: 16, bottom: 10, right: 16), lines: 3)
+        showToast(t.text)
+    }
+
+    /// A short message near the bottom, gone after a moment.
+    func showToast(_ text: String) {
+        let l = PadLabel(text, size: 14, color: colors.ink, insets: UIEdgeInsets(top: 10, left: 16, bottom: 10, right: 16), lines: 3)
         l.textAlignment = .center
         l.rounded(colors.surface.alpha(0.96), radius: 18, stroke: 1, strokeColor: colors.ink.alpha(0.1))
         l.clipsToBounds = true
