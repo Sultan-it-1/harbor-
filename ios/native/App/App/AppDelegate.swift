@@ -10,7 +10,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Video plays with sound even with the ring switch on silent, and keeps playing in the background.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        // Downloads carry on (or finish) from where the app left them.
+        Downloads.shared.start()
         return true
+    }
+
+    /// iOS woke the app for its downloads (finished or needing attention while it was away).
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        guard identifier == Downloads.sessionId else {
+            completionHandler()
+            return
+        }
+        Downloads.shared.backgroundCompletion = completionHandler
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
@@ -28,6 +39,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        Downloads.shared.kick()
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
     }
 

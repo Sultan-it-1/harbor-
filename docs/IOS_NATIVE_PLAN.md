@@ -39,10 +39,14 @@ Then: build, fix what the compiler finds, check every screen in the simulator, I
   **match pages** (match, versus, pitch).
 - [x] **6. Play picker** (pick, quality tiers, streams, drawer, diagnostics, panel, loader).
 - [x] **7. Addons pages** (cards, tiles, hero, community, categories, install, detail, info, doc).
-- [ ] **8. Player and system**: downloads engine (background URLSession, pause / resume / retry,
+- [x] **8. Player and system**: downloads engine (background URLSession, pause / resume / retry,
   subtitles saved, offline playback) behind the same `dl*` calls; player extras (source list in
   the player, subtitle style: size / colour / background / position / delay, swipe gestures);
   `stremio://` links; open externally; save file; image cache size / clear.
+  The page calls Android's shell synchronously, so the iPhone app keeps a copy of its state in
+  the page (`window.__harborIosState`, src/lib/ios-system.ts) and the calls answer from it.
+  Not like Android: a fresh link (relink) starts the file over; the screenshot block is a cover
+  in the app switcher only.
 - [ ] **9. Build and test** (Actions from here on): compile, fix, simulator screenshots of every
   screen in Arabic and English with real data, IPA.
 - [ ] **10. Move to Harbor-App.**

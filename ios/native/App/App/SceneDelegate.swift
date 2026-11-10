@@ -13,6 +13,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.makeKeyAndVisible()
 
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+        // Opened by a stremio:// link (an addon's Install button): the page takes it once it's up.
+        for ctx in connectionOptions.urlContexts where ctx.url.scheme?.lowercased() == "stremio" {
+            HarborSystemPlugin.receiveLink(ctx.url.absoluteString)
+        }
 
         #if DEBUG
         // Test builds: `-HarborPlayerTest <video URL> [<Arabic subtitle URL>]` opens the player
@@ -33,7 +37,28 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
+        let stremio = URLContexts.filter { $0.url.scheme?.lowercased() == "stremio" }
+        for ctx in stremio { HarborSystemPlugin.receiveLink(ctx.url.absoluteString) }
+        let rest = URLContexts.subtracting(stremio)
+        if !rest.isEmpty { SceneDelegateProxy.shared.scene(scene, openURLContexts: rest) }
+    }
+
+    /// A screen with secrets on it (PIN, sign-in): covered in the app switcher's preview.
+    private var privacyCover: UIView?
+
+    func sceneWillResignActive(_ scene: UIScene) {
+        guard HarborSystemPlugin.secure, let w = window, privacyCover == nil else { return }
+        let cover = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+        cover.frame = w.bounds
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        w.addSubview(cover)
+        privacyCover = cover
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        privacyCover?.removeFromSuperview()
+        privacyCover = nil
+        Downloads.shared.kick()
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {

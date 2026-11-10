@@ -1,4 +1,5 @@
 import { androidApi } from "@/lib/android";
+import { iosSystemApi } from "@/lib/ios-system";
 
 const EVENT = "harbor:deeplink-install";
 const OPEN_EVENT = "harbor:deeplink-open";
@@ -96,7 +97,7 @@ function routeDeepLink(u: string, trusted = false): void {
  */
 function startAndroidDeepLinks(): () => void {
   const take = () => {
-    const u = androidApi()?.takeLink?.();
+    const u = (androidApi() ?? iosSystemApi())?.takeLink?.();
     if (u) routeDeepLink(u, true);
   };
   window.__harborDeepLinkCheck = take;
@@ -109,7 +110,7 @@ function startAndroidDeepLinks(): () => void {
 }
 
 export async function startDeepLinkBridge(): Promise<() => void> {
-  if (typeof window !== "undefined" && typeof androidApi()?.takeLink === "function") {
+  if (typeof window !== "undefined" && typeof (androidApi() ?? iosSystemApi())?.takeLink === "function") {
     return startAndroidDeepLinks();
   }
   const isTauri =

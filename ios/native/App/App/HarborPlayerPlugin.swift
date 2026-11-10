@@ -7,6 +7,7 @@ final class HarborBridgeViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
         bridge?.registerPluginInstance(HarborPlayerPlugin())
         bridge?.registerPluginInstance(HarborNativePlugin())
+        bridge?.registerPluginInstance(HarborSystemPlugin())
     }
 }
 
@@ -95,6 +96,10 @@ struct PlayerSource {
     let title: String
     let isLive: Bool
     let uiLang: String
+    /// The download this title is (its saved subtitles; the player can save more to it).
+    let downloadId: String?
+    /// The page's subtitle look (Settings), for the first time the player shows one.
+    let subStyle: [String: Any]?
 
     init?(json: String) {
         guard let data = json.data(using: .utf8),
@@ -111,6 +116,8 @@ struct PlayerSource {
         title = (o["title"] as? String) ?? ""
         isLive = (o["isLive"] as? Bool) ?? false
         uiLang = (o["uiLang"] as? String) ?? Locale.preferredLanguages.first ?? "en"
+        downloadId = (o["downloadId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        subStyle = o["subStyle"] as? [String: Any]
     }
 
     static func subs(_ value: Any?) -> [Subtitle] {

@@ -3,6 +3,7 @@
 // background) plus the subtitle gathering that saves addon subtitles next to each video
 // for offline viewing.
 import { androidApi } from "@/lib/android";
+import { iosSystemApi } from "@/lib/ios-system";
 import type { Meta } from "@/lib/cinemeta";
 import type { PlayEpisode } from "@/lib/view";
 import { searchSubtitles } from "@/lib/subtitles/search";
@@ -25,8 +26,13 @@ export type NativeStatus = {
   subs?: number;
 };
 
+/** The app's downloader: Android's shell, or the iPhone app's (the same calls and answers). */
+function dlApi() {
+  return androidApi() ?? iosSystemApi();
+}
+
 export function androidDownloadsAvailable(): boolean {
-  return typeof androidApi()?.dlStart === "function";
+  return typeof dlApi()?.dlStart === "function";
 }
 
 function parse<T>(raw: string | undefined | null, fallback: T): T {
@@ -47,26 +53,26 @@ export function nativeStart(args: {
   description?: string | null;
   subtitles?: { url: string; lang?: string; label?: string }[];
 }): { ok: boolean; error?: string } {
-  const api = androidApi();
+  const api = dlApi();
   if (!api?.dlStart) return { ok: false, error: "downloads unavailable" };
   return parse(api.dlStart(JSON.stringify(args)), { ok: false, error: "bad response" });
 }
 
 export function nativeStatus(): Record<string, NativeStatus> {
-  return parse(androidApi()?.dlStatus?.(), {});
+  return parse(dlApi()?.dlStatus?.(), {});
 }
 
 export function nativeDelete(id: string): void {
-  androidApi()?.dlDelete?.(id);
+  dlApi()?.dlDelete?.(id);
 }
 
 export function nativeRelink(id: string, url: string, headers?: Record<string, string>): boolean {
-  return androidApi()?.dlRelink?.(id, url, JSON.stringify(headers ?? {})) === true;
+  return dlApi()?.dlRelink?.(id, url, JSON.stringify(headers ?? {})) === true;
 }
 
 /** null on shells without the setting. */
 export function nativeWifiOnly(): boolean | null {
-  const api = androidApi();
+  const api = dlApi();
   if (!api?.dlWifiOnly) return null;
   try {
     return api.dlWifiOnly();
@@ -76,37 +82,37 @@ export function nativeWifiOnly(): boolean | null {
 }
 
 export function nativeSetWifiOnly(on: boolean): void {
-  androidApi()?.dlSetWifiOnly?.(on);
+  dlApi()?.dlSetWifiOnly?.(on);
 }
 
 export function nativePause(id: string): boolean {
-  return androidApi()?.dlPause?.(id) === true;
+  return dlApi()?.dlPause?.(id) === true;
 }
 
 /** Resume a paused download, or retry a failed one. */
 export function nativeResume(id: string): boolean {
-  return androidApi()?.dlResume?.(id) === true;
+  return dlApi()?.dlResume?.(id) === true;
 }
 
 /** Adds subtitles to a download that already started (saved next to the video). */
 export function nativeAddSubs(id: string, subs: { url: string; lang?: string; label?: string }[]): boolean {
-  const api = androidApi();
+  const api = dlApi();
   if (!api?.dlAddSubs || subs.length === 0) return false;
   return api.dlAddSubs(id, JSON.stringify(subs)) === true;
 }
 
 export function nativeFiles(id: string): { video?: string; subtitles: { url: string; lang?: string; label?: string }[] } {
-  return parse(androidApi()?.dlFiles?.(id), { subtitles: [] });
+  return parse(dlApi()?.dlFiles?.(id), { subtitles: [] });
 }
 
 export function nativeStorage(): { free?: number; used?: number } {
-  return parse(androidApi()?.dlStorage?.(), {});
+  return parse(dlApi()?.dlStorage?.(), {});
 }
 
 /** Tells the app the page has background work, so it keeps running after you leave it. */
 export function nativeKeepAlive(on: boolean): void {
   try {
-    androidApi()?.dlKeepAlive?.(on);
+    dlApi()?.dlKeepAlive?.(on);
   } catch {
     /* older shell */
   }
@@ -114,7 +120,7 @@ export function nativeKeepAlive(on: boolean): void {
 
 /** null when the shell can't tell (older version). */
 export function nativeBgAllowed(): boolean | null {
-  const api = androidApi();
+  const api = dlApi();
   if (typeof api?.bgAllowed !== "function") return null;
   try {
     return api.bgAllowed() === true;
@@ -124,7 +130,7 @@ export function nativeBgAllowed(): boolean | null {
 }
 
 export function nativeBgRequest(): void {
-  androidApi()?.bgRequest?.();
+  dlApi()?.bgRequest?.();
 }
 
 function readSettings(): { preferredSubLangs?: string[]; preferredLanguages?: string[]; tmdbKey?: string } {

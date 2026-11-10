@@ -1,10 +1,12 @@
+import AVFoundation
+import MediaPlayer
 import MobileVLCKit
 import UIKit
 
 /// The iPhone app's video player (VLC: MKV, HEVC, Dolby / DTS audio, ASS / SRT subtitles), full
 /// screen over the page. It reports to the page like the Android player does (state every second,
 /// ended, error, closed) and takes the same commands (play, pause, seek, rate, addSubs, meta…).
-final class HarborPlayerViewController: UIViewController {
+final class HarborPlayerViewController: UIViewController, UIGestureRecognizerDelegate {
     private var source: PlayerSource
     private let send: (String) -> Void
     private var player: VLCMediaPlayer
@@ -21,6 +23,9 @@ final class HarborPlayerViewController: UIViewController {
     private let audioButton = UIButton(type: .system)
     private let subsButton = UIButton(type: .system)
     private let moreButton = UIButton(type: .system)
+    private let sourcesButton = UIButton(type: .system)
+    /// What a swipe is changing (the time, the brightness, the volume).
+    private let hud = PaddedLabel()
     private let playButton = UIButton(type: .system)
     private let backButton = UIButton(type: .system)
     private let forwardButton = UIButton(type: .system)
@@ -53,21 +58,42 @@ final class HarborPlayerViewController: UIViewController {
     private var downloadingExternal: String?
     private var userPickedSub = false
     private var lastKnownMs: Int32 = 0
+    /// The subtitle look (VLC's text options) and the delay (milliseconds, + = later).
+    private var style: SubStyle
+    private var subDelayMs = 0
+    /// The sources list: the open menu waiting for them, and the one being switched to.
+    private var streamsWaiter: (([UIMenuElement]) -> Void)?
+    private var pickingStream: String?
+    /// A swipe: 1 the time, 2 the brightness, 3 the volume.
+    private var panMode = 0
+    private var panStartMs = 0
+    private var panTargetMs = 0
+    private var panStartValue: Float = 0
+    private var hudWork: DispatchWorkItem?
+    /// The phone's volume, set through the system's own (hidden) volume slider.
+    private lazy var volumeSlider: UISlider? = {
+        let v = MPVolumeView(frame: CGRect(x: -2000, y: -2000, width: 10, height: 10))
+        v.alpha = 0.01
+        view.addSubview(v)
+        return v.subviews.compactMap { $0 as? UISlider }.first
+    }()
 
-    private static let sizeKey = "harbor.ios.subSize"
     /// Test builds (the simulator check): VLC's own log and the subtitle steps in the console.
     static var verbose = false
 
     private func log(_ message: @autoclosure () -> String) {
         if Self.verbose { NSLog("[harbor player] %@", message()) }
     }
-    private static let sizes: [Int] = [20, 18, 16, 12, 6] // VLC's relative sizes: smaller number = bigger text
+    /// Text sizes offered (1 = normal).
+    private static let scales: [Double] = [0.75, 0.875, 1, 1.25, 1.5]
 
     init(source: PlayerSource, send: @escaping (String) -> Void) {
         self.source = source
         self.send = send
         text = PlayerText(lang: source.uiLang)
-        player = HarborPlayerViewController.makePlayer()
+        let look = SubStyle.load() ?? SubStyle.fromHarbor(source.subStyle)
+        style = look
+        player = HarborPlayerViewController.makePlayer(look)
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
         modalTransitionStyle = .crossDissolve
@@ -75,13 +101,8 @@ final class HarborPlayerViewController: UIViewController {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    private static func makePlayer() -> VLCMediaPlayer {
-        let size = UserDefaults.standard.object(forKey: sizeKey) as? Int ?? 16
-        let made = VLCMediaPlayer(options: [
-            "--freetype-rel-fontsize=\(size)",
-            "--freetype-outline-thickness=4",
-            "--freetype-background-opacity=0",
-        ])
+    private static func makePlayer(_ look: SubStyle) -> VLCMediaPlayer {
+        let made = VLCMediaPlayer(options: look.vlcOptions)
         if verbose {
             made.libraryInstance.debugLogging = true
             made.libraryInstance.debugLoggingLevel = 3
@@ -119,6 +140,7 @@ final class HarborPlayerViewController: UIViewController {
     /// A new source while on screen (next episode, another stream).
     func load(_ next: PlayerSource) {
         source = next
+        pickingStream = nil
         sentEnded = false
         sentError = false
         userPickedSub = false
@@ -151,6 +173,7 @@ final class HarborPlayerViewController: UIViewController {
         player.drawable = videoView
         player.media = media
         player.play()
+        player.currentVideoSubTitleDelay = subDelayMs * 1000
         userPaused = false
     }
 
@@ -208,7 +231,15 @@ final class HarborPlayerViewController: UIViewController {
             let n = (cmd["count"] as? NSNumber)?.intValue ?? 0
             if (cmd["manual"] as? Bool) == true || n == 0 { showToast(n > 0 ? text.foundSubs(n) : text.noSubs) }
         case "streamFailed":
-            if let m = cmd["message"] as? String, !m.isEmpty { showToast(m) }
+            pickingStream = nil
+            showToast((cmd["message"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? text.cantPlay)
+        case "streams":
+            if let done = streamsWaiter {
+                streamsWaiter = nil
+                done(streamsMenu(cmd))
+            }
+        case "volume":
+            if let v = (cmd["volume"] as? NSNumber)?.doubleValue { player.audio?.volume = Int32(Swift.min(Swift.max(v, 0), 1) * 100) }
         default:
             break
         }
@@ -465,9 +496,23 @@ final class HarborPlayerViewController: UIViewController {
             })
         }
         if !embedded.isEmpty { items.append(UIMenu(title: text.embedded, options: .displayInline, children: embedded)) }
+        // Saved with the download: files on the phone, so they work offline too.
+        let saved = source.downloadId.map { Downloads.shared.savedSubtitleFiles($0) } ?? []
+        let savedUrls = Set(saved.map { $0.file.absoluteString } + saved.map { $0.src })
+        if !saved.isEmpty {
+            let list: [UIMenuElement] = saved.map { f in
+                let sub = PlayerSource.Subtitle(url: f.file.absoluteString, lang: f.lang, label: f.label)
+                let on = externalTrack[sub.url].map { $0 == current } ?? false
+                return UIAction(title: f.label ?? text.language(f.lang ?? "und"), state: on ? .on : .off) { [weak self] _ in
+                    self?.userPickedSub = true
+                    self?.loadExternal(sub, announce: true)
+                }
+            }
+            items.append(UIMenu(title: text.savedOnDevice, options: .displayInline, children: list))
+        }
         // From the addons, by language (preferred ones first).
         var byLang: [String: [PlayerSource.Subtitle]] = [:]
-        for s in source.subtitles { byLang[(s.lang ?? "und").lowercased(), default: []].append(s) }
+        for s in source.subtitles where !savedUrls.contains(s.url) { byLang[(s.lang ?? "und").lowercased(), default: []].append(s) }
         let order = byLang.keys.sorted { a, b in
             let ia = source.prefSubLangs.firstIndex(of: a) ?? Int.max
             let ib = source.prefSubLangs.firstIndex(of: b) ?? Int.max
@@ -486,6 +531,21 @@ final class HarborPlayerViewController: UIViewController {
             groups.append(UIMenu(title: "\(text.language(lang)) (\(subs.count))", children: children))
         }
         if !groups.isEmpty { items.append(UIMenu(title: text.fromAddons, options: .displayInline, children: groups)) }
+        // A downloaded title: an addon subtitle can be saved with the video (for offline).
+        if let id = source.downloadId {
+            let online = source.subtitles.filter { !savedUrls.contains($0.url) && !$0.url.hasPrefix("file:") }
+            if !online.isEmpty {
+                let list: [UIMenuElement] = online.map { s in
+                    UIAction(title: s.label ?? text.language(s.lang ?? "und"), image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in
+                        Downloads.shared.saveSubtitle(id, url: s.url, lang: s.lang, label: s.label) { ok in
+                            guard let self else { return }
+                            self.showToast(ok ? self.text.subSaved : self.text.subSaveFailed)
+                        }
+                    }
+                }
+                items.append(UIMenu(title: text.saveWithDownload, image: UIImage(systemName: "square.and.arrow.down"), children: list))
+            }
+        }
         items.append(UIAction(title: text.searchSubs, image: UIImage(systemName: "magnifyingglass")) { [weak self] _ in
             self?.sendEvent(["type": "subSearch"])
             self?.showToast(self?.text.searching ?? "")
@@ -514,35 +574,197 @@ final class HarborPlayerViewController: UIViewController {
                 self?.player.rate = r
             }
         })
-        let currentSize = UserDefaults.standard.object(forKey: Self.sizeKey) as? Int ?? 16
-        let size = UIMenu(title: text.subSize, image: UIImage(systemName: "textformat.size"), children: Self.sizes.enumerated().map { i, s in
-            UIAction(title: text.sizeNames[i], state: s == currentSize ? .on : .off) { [weak self] _ in
-                self?.setSubtitleSize(s)
-            }
-        })
         let fillAction = UIAction(title: fill ? text.fit : text.fill, image: UIImage(systemName: fill ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")) { [weak self] _ in
             self?.fill.toggle()
             self?.applyFill()
         }
-        return [fillAction, speed, size]
+        return [fillAction, speed, styleMenu(), delayMenu()]
     }
 
-    /// VLC sets the text size when the player is made: a new player, at the same point.
-    private func setSubtitleSize(_ size: Int) {
-        UserDefaults.standard.set(size, forKey: Self.sizeKey)
+    /// The subtitle look: size, colour, background, bold, position.
+    private func styleMenu() -> UIMenu {
+        let s = style
+        func pick(_ change: @escaping (inout SubStyle) -> Void) -> (UIAction) -> Void {
+            { [weak self] _ in
+                guard let self else { return }
+                var next = self.style
+                change(&next)
+                self.applyStyle(next)
+            }
+        }
+        let size = UIMenu(title: text.subSize, image: UIImage(systemName: "textformat.size"), children: Self.scales.enumerated().map { i, sc in
+            UIAction(title: text.sizeNames[i], state: abs(s.scale - sc) < 0.06 ? .on : .off, handler: pick { $0.scale = sc })
+        })
+        let colour = UIMenu(title: text.colour, image: UIImage(systemName: "paintpalette"), children: text.colourNames.map { hex, name in
+            UIAction(title: name, state: s.color.uppercased() == hex ? .on : .off, handler: pick { $0.color = hex })
+        })
+        let background = UIMenu(title: text.backgroundTitle, image: UIImage(systemName: "rectangle.fill"), children: text.backgroundNames.map { id, name in
+            UIAction(title: name, state: s.background == id ? .on : .off, handler: pick { $0.background = id })
+        })
+        let bold = UIAction(title: text.bold, image: UIImage(systemName: "bold"), state: s.bold ? .on : .off, handler: pick { $0.bold.toggle() })
+        let position = UIMenu(title: text.position, image: UIImage(systemName: "arrow.up.and.down"), children: text.positionNames.map { at, name in
+            UIAction(title: name, state: abs(s.bottom - at) < 0.04 ? .on : .off, handler: pick { $0.bottom = at })
+        })
+        return UIMenu(title: text.subStyle, image: UIImage(systemName: "captions.bubble"), children: [size, colour, background, bold, position])
+    }
+
+    /// The subtitles earlier or later (half a second a step); applies at once.
+    private func delayMenu() -> UIMenu {
+        let steps = [-1000, -500, 500, 1000]
+        var items: [UIMenuElement] = steps.map { d in
+            UIAction(title: text.seconds(d)) { [weak self] _ in self?.setDelay((self?.subDelayMs ?? 0) + d) }
+        }
+        items.append(UIAction(title: text.resetDelay, state: subDelayMs == 0 ? .on : .off) { [weak self] _ in self?.setDelay(0) })
+        return UIMenu(title: "\(text.delay): \(text.seconds(subDelayMs))", image: UIImage(systemName: "clock.arrow.2.circlepath"), children: items)
+    }
+
+    private func setDelay(_ ms: Int) {
+        subDelayMs = Swift.max(-30_000, Swift.min(30_000, ms))
+        player.currentVideoSubTitleDelay = subDelayMs * 1000
+        showToast("\(text.delay): \(text.seconds(subDelayMs))")
+    }
+
+    // MARK: - Sources
+
+    /// Every source for this title (the page sends them); a tap switches to it.
+    private func sourcesElement() -> UIMenuElement {
+        UIDeferredMenuElement.uncached { [weak self] done in
+            guard let self else {
+                done([])
+                return
+            }
+            self.streamsWaiter?([])
+            self.streamsWaiter = done
+            self.sendEvent(["type": "requestStreams"])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
+                guard let self, let waiting = self.streamsWaiter else { return }
+                self.streamsWaiter = nil
+                waiting([UIAction(title: self.text.noSources, attributes: .disabled) { _ in }])
+            }
+        }
+    }
+
+    private func streamsMenu(_ data: [String: Any]) -> [UIMenuElement] {
+        let items = (data["items"] as? [[String: Any]]) ?? []
+        guard !items.isEmpty else {
+            let m = (data["message"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? text.noSources
+            return [UIAction(title: m, attributes: .disabled) { _ in }]
+        }
+        func action(_ it: [String: Any]) -> UIAction {
+            let key = it["key"] as? String ?? ""
+            let current = it["current"] as? Bool ?? false
+            let cached = it["cached"] as? Bool ?? false
+            let name = (cached ? "⚡ " : "") + (it["name"] as? String ?? "")
+            let a = UIAction(title: name, state: current ? .on : .off) { [weak self] _ in
+                guard let self, !current, self.pickingStream == nil else { return }
+                self.pickingStream = key
+                self.showToast(self.text.switching)
+                self.sendEvent(["type": "pickStream", "key": key])
+            }
+            let sub = [it["desc"] as? String, it["badges"] as? String].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            if !sub.isEmpty { a.subtitle = sub }
+            return a
+        }
+        var qualities: [String] = []
+        for it in items {
+            if let q = it["quality"] as? String, !q.isEmpty, !qualities.contains(q) { qualities.append(q) }
+        }
+        guard qualities.count > 1 else { return items.map(action) }
+        // Several qualities: one list each.
+        return qualities.map { q in
+            UIMenu(title: q, children: items.filter { ($0["quality"] as? String) == q }.map(action))
+        }
+    }
+
+    /// VLC takes the subtitle look when the player is made: a new player, at the same point.
+    private func applyStyle(_ next: SubStyle) {
+        guard next != style else { return }
+        style = next
+        next.save()
         let at = currentMs()
         let pickedUrl = externalTrack.first(where: { $0.value == player.currentVideoSubTitleIndex })?.key
         player.stop()
         player.drawable = nil
-        player = Self.makePlayer()
+        player = Self.makePlayer(next)
         externalTrack = [:]
         knownSubTracks = []
         pendingExternal = nil
         downloadingExternal = nil
         start(at: at)
-        if let url = pickedUrl, let sub = source.subtitles.first(where: { $0.url == url }) {
+        if let url = pickedUrl {
+            let sub = source.subtitles.first(where: { $0.url == url }) ?? PlayerSource.Subtitle(url: url, lang: nil, label: nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.loadExternal(sub, announce: false) }
         }
+    }
+
+    // MARK: - Swipes
+
+    /// Buttons and the time bar keep their own touches.
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if g is UIPanGestureRecognizer, touch.view is UIControl { return false }
+        return true
+    }
+
+    /// Sideways: the time (two minutes across the screen); up and down: the brightness on the
+    /// left half, the volume on the right.
+    @objc private func panned(_ g: UIPanGestureRecognizer) {
+        let t = g.translation(in: view)
+        let w = Swift.max(view.bounds.width, 1)
+        let h = Swift.max(view.bounds.height, 1)
+        switch g.state {
+        case .began:
+            let v = g.velocity(in: view)
+            if abs(v.x) > abs(v.y) {
+                guard durationMs() > 0, player.isSeekable else {
+                    panMode = 0
+                    return
+                }
+                panMode = 1
+                panStartMs = currentMs()
+                panTargetMs = panStartMs
+            } else {
+                panMode = g.location(in: view).x < w / 2 ? 2 : 3
+                panStartValue = panMode == 2 ? Float(UIScreen.main.brightness) : (volumeSlider?.value ?? AVAudioSession.sharedInstance().outputVolume)
+            }
+        case .changed:
+            switch panMode {
+            case 1:
+                let delta = Int(t.x / w * 120_000)
+                panTargetMs = Swift.min(Swift.max(0, panStartMs + delta), Swift.max(0, durationMs() - 1000))
+                let shown = (panTargetMs - panStartMs) / 1000
+                showHud("\(shown >= 0 ? "+" : "−")\(abs(shown))s  ·  \(format(panTargetMs))")
+            case 2:
+                let v = Swift.min(Swift.max(panStartValue - Float(t.y / (h * 0.8)), 0), 1)
+                UIScreen.main.brightness = CGFloat(v)
+                showHud("\(text.brightness) \(Int(v * 100))%")
+            case 3:
+                let v = Swift.min(Swift.max(panStartValue - Float(t.y / (h * 0.8)), 0), 1)
+                volumeSlider?.value = v
+                showHud("\(text.volume) \(Int(v * 100))%")
+            default:
+                break
+            }
+        case .ended:
+            if panMode == 1 { seek(to: panTargetMs) }
+            panMode = 0
+            hideHud()
+        default:
+            panMode = 0
+            hideHud()
+        }
+    }
+
+    private func showHud(_ s: String) {
+        hud.text = s
+        hud.isHidden = false
+        hudWork?.cancel()
+    }
+
+    private func hideHud() {
+        hudWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.hud.isHidden = true }
+        hudWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
     // MARK: - Layout
@@ -559,6 +781,9 @@ final class HarborPlayerViewController: UIViewController {
         tap.require(toFail: doubleTap)
         view.addGestureRecognizer(tap)
         view.addGestureRecognizer(doubleTap)
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
+        pan.delegate = self
+        view.addGestureRecognizer(pan)
 
         controls.backgroundColor = .clear
         view.addSubview(controls)
@@ -582,12 +807,16 @@ final class HarborPlayerViewController: UIViewController {
         style(audioButton, "waveform", 20)
         style(subsButton, "captions.bubble", 20)
         style(moreButton, "ellipsis.circle", 20)
+        style(sourcesButton, "rectangle.stack", 20)
+        sourcesButton.menu = UIMenu(title: text.sources, children: [sourcesElement()])
+        sourcesButton.showsMenuAsPrimaryAction = true
+        sourcesButton.accessibilityLabel = text.sources
         audioButton.menu = UIMenu(title: text.audio, children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.audioMenu() ?? []) }])
         subsButton.menu = UIMenu(title: text.subtitles, children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.subtitleMenu() ?? []) }])
         moreButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.moreMenu() ?? []) }])
         [audioButton, subsButton, moreButton].forEach { $0.showsMenuAsPrimaryAction = true }
 
-        let top = UIStackView(arrangedSubviews: [closeButton, titles, UIView(), audioButton, subsButton, moreButton])
+        let top = UIStackView(arrangedSubviews: [closeButton, titles, UIView(), sourcesButton, audioButton, subsButton, moreButton])
         top.alignment = .center
         top.spacing = 14
         top.translatesAutoresizingMaskIntoConstraints = false
@@ -640,6 +869,20 @@ final class HarborPlayerViewController: UIViewController {
         spinner.translatesAutoresizingMaskIntoConstraints = false
         spinner.hidesWhenStopped = false
         view.addSubview(spinner)
+
+        hud.font = .monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
+        hud.textColor = .white
+        hud.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        hud.layer.cornerRadius = 14
+        hud.clipsToBounds = true
+        hud.textAlignment = .center
+        hud.isHidden = true
+        hud.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hud)
+        NSLayoutConstraint.activate([
+            hud.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            hud.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -60),
+        ])
 
         toast.font = .systemFont(ofSize: 14, weight: .medium)
         toast.textColor = .white
@@ -767,7 +1010,31 @@ private final class PaddedLabel: UILabel {
 
 /// Subtitle files saved for VLC: always UTF-8 (Arabic files are often Windows-1256).
 enum SubtitleFile {
+    /// For the player: a temporary file.
     static func save(_ data: Data, lang: String?) -> URL? {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("subs", isDirectory: true)
+        return save(data, lang: lang, in: dir, name: UUID().uuidString)
+    }
+
+    /// A gzipped subtitle (OpenSubtitles' .gz) unpacked; anything else as it is.
+    static func unpack(_ data: Data) -> Data {
+        let b = [UInt8](data.prefix(10))
+        guard b.count >= 10, b[0] == 0x1F, b[1] == 0x8B, b[2] == 8 else { return data }
+        let flags = b[3]
+        var i = 10
+        let bytes = [UInt8](data)
+        if flags & 0x04 != 0, bytes.count > i + 2 { i += 2 + Int(bytes[i]) + Int(bytes[i + 1]) << 8 }
+        if flags & 0x08 != 0 { while i < bytes.count && bytes[i] != 0 { i += 1 }; i += 1 }
+        if flags & 0x10 != 0 { while i < bytes.count && bytes[i] != 0 { i += 1 }; i += 1 }
+        if flags & 0x02 != 0 { i += 2 }
+        guard i < bytes.count - 8 else { return data }
+        let deflated = Data(bytes[i..<(bytes.count - 8)])
+        return (try? (deflated as NSData).decompressed(using: .zlib) as Data) ?? data
+    }
+
+    /// Saved as UTF-8 in [dir] as [name] plus the format's extension (sniffed: SRT, VTT, ASS).
+    static func save(_ raw: Data, lang: String?, in dir: URL, name: String) -> URL? {
+        let data = unpack(raw)
         guard !data.isEmpty else { return nil }
         var text = String(data: data, encoding: .utf8)
         if text == nil {
@@ -790,9 +1057,8 @@ enum SubtitleFile {
         if body.hasPrefix("\u{FEFF}") { body.removeFirst() }
         let head = body.prefix(200)
         let ext = head.hasPrefix("WEBVTT") ? "vtt" : head.contains("[Script Info]") ? "ass" : "srt"
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("subs", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appendingPathComponent("\(UUID().uuidString).\(ext)")
+        let file = dir.appendingPathComponent("\(name).\(ext)")
         do {
             try body.data(using: .utf8)?.write(to: file)
             return file

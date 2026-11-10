@@ -112,6 +112,51 @@ final class ImageLoader {
         try? FileManager.default.createDirectory(at: diskDir, withIntermediateDirectories: true)
     }
 
+    /// Free space on the phone.
+    func freeBytes() -> Int64 {
+        let v = try? diskDir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return v?.volumeAvailableCapacityForImportantUsage ?? -1
+    }
+
+    /// How much the saved pictures may take: 250 MB with 5 GB or more free, 150 MB under 5 GB,
+    /// 100 MB under 2 GB (as on Android).
+    func limitBytes() -> Int64 {
+        let free = freeBytes()
+        let gb: Int64 = 1024 * 1024 * 1024
+        let mb: Int64 = 1024 * 1024
+        if free >= 0 && free < 2 * gb { return 100 * mb }
+        if free >= 0 && free < 5 * gb { return 150 * mb }
+        return 250 * mb
+    }
+
+    /// {"used","limit","free"} in bytes (Settings).
+    func cacheInfo() -> [String: Int64] {
+        ["used": diskBytes(), "limit": limitBytes(), "free": freeBytes()]
+    }
+
+    private var savesSinceTrim = 0
+
+    /// Over the limit: the oldest pictures go first.
+    private func trimIfNeeded() {
+        savesSinceTrim += 1
+        guard savesSinceTrim >= 40 else { return }
+        savesSinceTrim = 0
+        let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(at: diskDir, includingPropertiesForKeys: keys) else { return }
+        var entries = files.compactMap { f -> (URL, Int64, Date)? in
+            guard let v = try? f.resourceValues(forKeys: Set(keys)) else { return nil }
+            return (f, Int64(v.fileSize ?? 0), v.contentModificationDate ?? .distantPast)
+        }
+        var total = entries.reduce(0) { $0 + $1.1 }
+        let limit = limitBytes()
+        guard total > limit else { return }
+        entries.sort { $0.2 < $1.2 }
+        for e in entries where total > limit * 9 / 10 {
+            try? FileManager.default.removeItem(at: e.0)
+            total -= e.1
+        }
+    }
+
     // MARK: - Loading
 
     private func attempt(_ urls: [String], index: Int, maxPixels: CGFloat, done: @escaping (UIImage?) -> Void) {
@@ -224,6 +269,9 @@ final class ImageLoader {
     private func saveDisk(_ url: String, _ data: Data) {
         guard !url.hasPrefix("data:"), !url.hasPrefix(Self.appOrigin) else { return }
         try? data.write(to: diskFile(url), options: .atomic)
+        lock.lock()
+        trimIfNeeded()
+        lock.unlock()
     }
 
     /// Decoded at [maxPixels] on its longest side at most (SVGs aren't supported by ImageIO: nil).

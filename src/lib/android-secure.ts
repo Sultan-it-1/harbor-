@@ -2,11 +2,12 @@
 // show secrets. While a password field or an element marked data-secure-screen (the PIN pad)
 // is on screen, the window gets FLAG_SECURE; it is lifted again when they are gone.
 import { androidApi } from "@/lib/android";
+import { iosSystemApi } from "@/lib/ios-system";
 
 const SELECTOR = 'input[type="password"], [data-secure-screen]';
 
 export function watchSecureScreens(): void {
-  const api = androidApi();
+  const api = androidApi() ?? iosSystemApi();
   if (!api?.setSecure || typeof MutationObserver === "undefined") return;
   // Unknown at first: the first check always tells the shell, so a reloaded page (or a rebuilt
   // WebView) clears a FLAG_SECURE the previous page left on.

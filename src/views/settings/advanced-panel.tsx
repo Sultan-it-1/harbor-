@@ -13,6 +13,7 @@ import {
 } from "@/lib/providers/omdb";
 import { useSettings } from "@/lib/settings";
 import { androidApi } from "@/lib/android";
+import { iosSystemApi } from "@/lib/ios-system";
 import { repairStremioLibrary, type RepairProgress, type RepairResult } from "@/lib/stremio-library-repair";
 import { openUrl } from "@/lib/window";
 import {
@@ -140,7 +141,7 @@ export function AdvancedPanel() {
 
       <CustomCodeCard />
 
-      {androidApi()?.imageCache && (
+      {(androidApi() ?? iosSystemApi())?.imageCache && (
         <Section
           title={t("Storage")}
           subtitle={t("Covers and pictures kept on the phone, so they show at once and don't use your data again.")}
@@ -613,14 +614,14 @@ function SavedImagesRow() {
   const [info, setInfo] = useState<ImageCacheInfo | null>(null);
   const [cleared, setCleared] = useState(false);
   useEffect(() => {
-    const read = () => setInfo(readImageCache(androidApi()?.imageCache?.()));
+    const read = () => setInfo(readImageCache((androidApi() ?? iosSystemApi())?.imageCache?.()));
     read();
     window.addEventListener("harbor:resume", read);
     return () => window.removeEventListener("harbor:resume", read);
   }, []);
   const mb = (n: number) => Math.max(0, Math.round(n / (1024 * 1024)));
   const clear = () => {
-    const next = readImageCache(androidApi()?.imageCacheClear?.());
+    const next = readImageCache((androidApi() ?? iosSystemApi())?.imageCacheClear?.());
     if (next) setInfo(next);
     setCleared(true);
   };

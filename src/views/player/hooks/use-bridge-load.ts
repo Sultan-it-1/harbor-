@@ -5,8 +5,9 @@ import { cloudWriteId, episodeFromVideoId, libraryGetOne } from "@/lib/stremio";
 import type { PlayerSrc } from "@/lib/view";
 import { videoIdFor } from "./use-stremio-sync";
 import { useSettings } from "@/lib/settings";
-import { hasNativePlayer, isAndroidApp } from "@/lib/android";
+import { hasNativePlayer } from "@/lib/android";
 import { androidDownloadIdFor } from "@/lib/download/downloads-store";
+import { androidDownloadsAvailable } from "@/lib/download/android-downloads";
 
 const RESUME_PROMPT_MIN_SEC = 30;
 const RESTART_THRESHOLD = 0.8;
@@ -107,7 +108,7 @@ export function useBridgeLoad(params: {
           isLive,
           headers: src.headers,
           contentKey: `${src.meta.id}|${season ?? ""}|${episode ?? ""}`,
-          downloadId: isAndroidApp()
+          downloadId: androidDownloadsAvailable()
             ? (androidDownloadIdFor(src.meta.id, src.episode?.season, src.episode?.episode) ?? undefined)
             : undefined,
           startAtSec: guestInRoom
