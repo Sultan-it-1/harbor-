@@ -77,7 +77,34 @@ extension Dictionary where Key == String, Value == Any {
 /// A model's JSON text as an object (nil when it isn't one).
 func parseObject(_ json: String) -> JObj? {
     guard let data = json.data(using: .utf8) else { return nil }
-    return (try? JSONSerialization.jsonObject(with: data)) as? JObj
+    do {
+        return try JSONSerialization.jsonObject(with: data) as? JObj
+    } catch {
+        // Text cut in the middle of an emoji leaves half of it, which the page's JSON.stringify
+        // writes as an escape ("\ud83c"): Android's parser takes it, iOS's refuses the whole
+        // model. Such halves become "�" and the rest stays.
+        let fixed = fixLoneSurrogates(json)
+        if fixed != json, let d = fixed.data(using: .utf8),
+           let o = (try? JSONSerialization.jsonObject(with: d)) as? JObj {
+            return o
+        }
+        let ns = error as NSError
+        NSLog("[harbor json] %@ (%ld chars)", (ns.userInfo["NSDebugDescription"] as? String) ?? ns.localizedDescription, json.count)
+        return nil
+    }
+}
+
+private let loneHigh = try? NSRegularExpression(pattern: #"\\u[dD][89abAB][0-9a-fA-F]{2}(?!\\u[dD][c-fC-F][0-9a-fA-F]{2})"#)
+private let loneLow = try? NSRegularExpression(pattern: #"(?<!\\u[dD][89abAB][0-9a-fA-F]{2})\\u[dD][c-fC-F][0-9a-fA-F]{2}"#)
+
+/// JSON text with each escaped half of a surrogate pair that has no other half made "�".
+func fixLoneSurrogates(_ json: String) -> String {
+    guard json.contains("\\u"), let loneHigh, let loneLow else { return json }
+    var s = json
+    for re in [loneHigh, loneLow] {
+        s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "\\\\ufffd")
+    }
+    return s
 }
 
 /// An object as JSON text (for actions sent back to the page).

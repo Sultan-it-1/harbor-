@@ -35,7 +35,7 @@ enum HarborTour {
     private static func more(_ view: String) -> String {
         """
         (function(){var b=\(tabs)[4];if(b)b.click();setTimeout(function(){
-        var x=document.querySelector('[data-more-view="\(view)"]');if(x)x.click();},500);})()
+        var x=document.querySelector('[data-more-view="\(view)"]');if(x)x.click();else{var m=\(tabs)[4];if(m)m.click();}},500);})()
         """
     }
 
@@ -47,13 +47,12 @@ enum HarborTour {
         Step(name: "shows", js: more("shows"), settle: 9),
         Step(name: "anime", js: more("anime"), settle: 9),
         Step(name: "calendar", js: more("calendar"), settle: 8),
-        Step(name: "live", js: more("live"), settle: 9),
-        Step(name: "playlists", js: more("vod"), settle: 6),
+        Step(name: "live", js: more("live"), settle: 8),
         Step(name: "downloads", js: more("downloads"), settle: 6),
-        Step(name: "addons", js: more("addons"), settle: 7),
-        Step(name: "search", js: tab(2), settle: 5),
+        Step(name: "addons", js: more("addons"), settle: 14),
         Step(name: "title-movie", js: "", link: "stremio:///detail/movie/tt0111161", settle: 12),
         Step(name: "title-series", js: "", link: "stremio:///detail/series/tt0903747", settle: 12),
+        Step(name: "search", js: tab(2), settle: 5),
     ]
 
     private static var marker: URL {

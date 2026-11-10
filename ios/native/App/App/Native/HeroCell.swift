@@ -303,8 +303,9 @@ final class SlideCell: UICollectionViewCell {
     }
 
     private func stat(_ name: String, _ value: String, _ colors: HomeColors) -> UIView {
-        UIStackView(axis: .horizontal, spacing: 0, alignment: .center, views: [
-            makeLabel("\(name): ", size: 13, color: colors.subtle),
+        // A gap rather than a trailing space: in Arabic the label drops the space at its end.
+        UIStackView(axis: .horizontal, spacing: 4, alignment: .center, views: [
+            makeLabel("\(name):", size: 13, color: colors.subtle),
             makeLabel(value, size: 13, color: colors.ink),
         ])
     }
