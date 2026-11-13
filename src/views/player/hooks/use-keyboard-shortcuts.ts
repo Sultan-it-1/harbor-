@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import type { PlayerBridge, PlayerSnapshot } from "@/lib/player/bridge";
 import { writePlayerPrefs } from "@/lib/player-prefs";
 import { writePlayerVolume } from "@/lib/player-volume";
 import { effectiveBinding, eventToBinding, isTypingTarget, type HotkeyId } from "@/lib/hotkeys";
 import { useSettings } from "@/lib/settings";
 import { round2 } from "../player-utils";
+import type { HoldSpeed } from "./use-hold-speed";
 
 export function useKeyboardShortcuts(params: {
   bridgeRef: RefObject<PlayerBridge | null>;
@@ -41,6 +42,8 @@ export function useKeyboardShortcuts(params: {
   onToggleAnime4k?: () => void;
   onAnime4kOn?: () => void;
   onAnime4kOff?: () => void;
+  /** Hold-for-speed, shared with holding the mouse button on the video. */
+  holdSpeed: Pick<HoldSpeed, "engage" | "release">;
 }) {
   const {
     bridgeRef,
@@ -77,16 +80,17 @@ export function useKeyboardShortcuts(params: {
     onToggleAnime4k,
     onAnime4kOn,
     onAnime4kOff,
+    holdSpeed,
   } = params;
+  // Both are stable, so the listeners below can keep the ones they were made with.
+  const { engage: engageHoldSpeed, release: releaseHoldSpeed } = holdSpeed;
   const { settings } = useSettings();
   const overrides = settings.hotkeys ?? {};
   const holdRef = useRef<{
     key: string | null;
     timer: number | null;
     engaged: boolean;
-    baseRate: number;
-  }>({ key: null, timer: null, engaged: false, baseRate: 1 });
-  const [holdSpeedActive, setHoldSpeedActive] = useState(false);
+  }>({ key: null, timer: null, engaged: false });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -126,13 +130,12 @@ export function useKeyboardShortcuts(params: {
         e.preventDefault();
         if (e.repeat) return;
         const h = holdRef.current;
+        if (h.timer != null) window.clearTimeout(h.timer);
         h.key = e.key;
-        h.baseRate = snap.rate;
         h.timer = window.setTimeout(() => {
           h.timer = null;
           h.engaged = true;
-          setHoldSpeedActive(true);
-          bridgeRef.current?.setRate(Math.max(2, h.baseRate));
+          engageHoldSpeed("key");
         }, 350);
         return;
       }
@@ -364,8 +367,7 @@ export function useKeyboardShortcuts(params: {
       }
       if (h.engaged) {
         h.engaged = false;
-        setHoldSpeedActive(false);
-        bridgeRef.current?.setRate(h.baseRate);
+        releaseHoldSpeed("key");
       }
       return "held" as const;
     };
@@ -386,7 +388,5 @@ export function useKeyboardShortcuts(params: {
       window.removeEventListener("blur", onBlur);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closePlayer, togglePip, drawMode, snap.muted, snap.volume, snap.rate, snap.durationSec, snap.subDelaySec, overrides, seekTo, toggleSwitcher, toggleEpisodePanel, toggleGuide, toggleDvr, toggleSleep, onScreenshot, onGifRecord, onClipRecord, onToggleCrop, onPanscanUp, onPanscanDown, onPrevChannel, onToggleAnime4k, onAnime4kOn, onAnime4kOff, onFrameStep]);
-
-  return { holdSpeedActive };
+  }, [closePlayer, togglePip, drawMode, snap.muted, snap.volume, snap.rate, snap.durationSec, snap.subDelaySec, overrides, seekTo, toggleSwitcher, toggleEpisodePanel, toggleGuide, toggleDvr, toggleSleep, onScreenshot, onGifRecord, onClipRecord, onToggleCrop, onPanscanUp, onPanscanDown, onPrevChannel, onToggleAnime4k, onAnime4kOn, onAnime4kOff, onFrameStep, engageHoldSpeed, releaseHoldSpeed]);
 }

@@ -75,6 +75,7 @@ export type TransportStremioProps = {
   onDownloadReveal?: () => void;
   onDownloadReset?: () => void;
   onOpenDvr?: () => void;
+  onOpenExternal?: (player: import("@/lib/external-player").ExternalPlayer) => void | Promise<void>;
   sleep?: import("@/views/player/hooks/use-sleep-timer").SleepTimerState;
 };
 
@@ -136,6 +137,7 @@ export function TransportStremio(p: TransportStremioProps) {
     onDownloadReveal,
     onDownloadReset,
     onOpenDvr,
+    onOpenExternal,
     sleep,
   } = p;
 
@@ -146,6 +148,7 @@ export function TransportStremio(p: TransportStremioProps) {
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
   const [anime4kMenuOpen, setAnime4kMenuOpen] = useState(false);
+  const [externalMenuOpen, setExternalMenuOpen] = useState(false);
   const [castModalOpen, setCastModalOpen] = useState(false);
   const [showRemaining, setShowRemaining] = useState(false);
   const [config, setConfig] = useState<PlayerChromeConfig>(() => readPlayerChromeConfig("stremio"));
@@ -154,8 +157,10 @@ export function TransportStremio(p: TransportStremioProps) {
   const controlsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    onMenuOpenChange?.(audioMenuOpen || subtitleMenuOpen || speedMenuOpen || aspectMenuOpen || anime4kMenuOpen);
-  }, [audioMenuOpen, subtitleMenuOpen, speedMenuOpen, aspectMenuOpen, anime4kMenuOpen, onMenuOpenChange]);
+    onMenuOpenChange?.(
+      audioMenuOpen || subtitleMenuOpen || speedMenuOpen || aspectMenuOpen || anime4kMenuOpen || externalMenuOpen,
+    );
+  }, [audioMenuOpen, subtitleMenuOpen, speedMenuOpen, aspectMenuOpen, anime4kMenuOpen, externalMenuOpen, onMenuOpenChange]);
 
   useEffect(() => {
     const refresh = () => setConfig(readPlayerChromeConfig("stremio"));
@@ -212,6 +217,8 @@ export function TransportStremio(p: TransportStremioProps) {
     setSubtitleMenuOpen,
     setSpeedMenuOpen,
     setAspectMenuOpen,
+    onOpenExternal,
+    setExternalMenuOpen,
     cropMode,
     onCropMode,
     setAnime4kMenuOpen,
@@ -260,7 +267,8 @@ export function TransportStremio(p: TransportStremioProps) {
           {renderSlot("top-left")}
         </div>
         <div className="flex items-center gap-2">
-          {download?.url && (
+          {/* The desktop app has the "Open in another player" button instead. */}
+          {download?.url && !onOpenExternal && (
             <a
               href={`vlc://${download.url}`}
               className="pointer-events-auto flex items-center justify-center rounded-full bg-orange-500/80 px-3 py-1 text-[13px] font-bold text-white shadow-lg transition-transform hover:scale-105 active:scale-95"

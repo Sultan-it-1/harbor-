@@ -93,6 +93,7 @@ function TransportDefault({
   onDownloadReveal,
   onDownloadReset,
   onOpenDvr,
+  onOpenExternal,
   sleep,
 }: {
   snap: PlayerSnapshot;
@@ -155,6 +156,7 @@ function TransportDefault({
   onDownloadReveal?: () => void;
   onDownloadReset?: () => void;
   onOpenDvr?: () => void;
+  onOpenExternal?: (player: import("@/lib/external-player").ExternalPlayer) => void | Promise<void>;
   sleep?: import("@/views/player/hooks/use-sleep-timer").SleepTimerState;
 }) {
   const t = useT();
@@ -166,6 +168,7 @@ function TransportDefault({
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
   const [anime4kMenuOpen, setAnime4kMenuOpen] = useState(false);
+  const [externalMenuOpen, setExternalMenuOpen] = useState(false);
   const [castModalOpen, setCastModalOpen] = useState(false);
   const [chromeConfig, setChromeConfig] = useState<PlayerChromeConfig>(() =>
     readPlayerChromeConfig("default"),
@@ -177,8 +180,10 @@ function TransportDefault({
   const [compact, setCompact] = useState(false);
   const [tight, setTight] = useState(false);
   useEffect(() => {
-    onMenuOpenChange?.(audioMenuOpen || subtitleMenuOpen || speedMenuOpen || aspectMenuOpen || anime4kMenuOpen);
-  }, [audioMenuOpen, subtitleMenuOpen, speedMenuOpen, aspectMenuOpen, anime4kMenuOpen, onMenuOpenChange]);
+    onMenuOpenChange?.(
+      audioMenuOpen || subtitleMenuOpen || speedMenuOpen || aspectMenuOpen || anime4kMenuOpen || externalMenuOpen,
+    );
+  }, [audioMenuOpen, subtitleMenuOpen, speedMenuOpen, aspectMenuOpen, anime4kMenuOpen, externalMenuOpen, onMenuOpenChange]);
   useEffect(() => {
     const refresh = () => setChromeConfig(readPlayerChromeConfig("default"));
     const onStorage = (e: StorageEvent) => {
@@ -294,6 +299,8 @@ function TransportDefault({
     onDownloadReveal,
     onDownloadReset,
     onOpenDvr,
+    onOpenExternal,
+    setExternalMenuOpen,
     setAudioMenuOpen,
     setSubtitleMenuOpen,
     setSpeedMenuOpen,

@@ -34,6 +34,8 @@ import { StremioBtn } from "./stremio-btn";
 import { StremioVolume } from "./stremio-volume";
 import { renderCustomIconControlStremio } from "./custom-icon-renderer";
 import { WindowControlButtons } from "./window-control-buttons";
+import { ExternalPlayerMenu } from "./external-player-menu";
+import type { ExternalPlayer } from "@/lib/external-player";
 
 function qualityInfoOn(): boolean {
   try {
@@ -87,6 +89,9 @@ export type StremioRenderCtx = {
   setSubtitleMenuOpen: (v: boolean) => void;
   setSpeedMenuOpen: (v: boolean) => void;
   setAspectMenuOpen: (v: boolean) => void;
+  /** Desktop only: opens the stream in another installed player. Unset hides the button. */
+  onOpenExternal?: (player: ExternalPlayer) => void | Promise<void>;
+  setExternalMenuOpen?: (v: boolean) => void;
   cropMode?: string;
   onCropMode?: (id: string) => void;
   setAnime4kMenuOpen: (v: boolean) => void;
@@ -333,6 +338,9 @@ export function RenderedStremioControl({
       return <HdrToggleStremioBtn />;
     case "cast":
       return <CastButton onClick={ctx.onCast} capabilities={ctx.capabilities} />;
+    case "external-player":
+      if (!ctx.onOpenExternal) return null;
+      return <ExternalPlayerMenu stremio onOpen={ctx.onOpenExternal} onOpenChange={ctx.setExternalMenuOpen} />;
     case "subtitle-menu":
       if (ctx.isLiveChannel && ctx.snap.subtitleTracks.length === 0) return null;
       return (

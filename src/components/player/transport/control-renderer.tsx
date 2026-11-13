@@ -46,6 +46,8 @@ import { SeekStepBtn } from "./seek-step-btn";
 import { EpisodeNavBtn } from "./episode-nav-btn";
 import { TimeStart, TimeEnd } from "./time-display";
 import { WindowControlButtons } from "./window-control-buttons";
+import { ExternalPlayerMenu } from "./external-player-menu";
+import type { ExternalPlayer } from "@/lib/external-player";
 
 export type ControlContext = {
   t?: (key: string, vars?: Record<string, string | number>) => string;
@@ -113,6 +115,9 @@ export type ControlContext = {
   onDownloadReveal?: () => void;
   onDownloadReset?: () => void;
   onOpenDvr?: () => void;
+  /** Desktop only: opens the stream in another installed player. Unset hides the button. */
+  onOpenExternal?: (player: ExternalPlayer) => void | Promise<void>;
+  setExternalMenuOpen?: (v: boolean) => void;
   setAudioMenuOpen: (v: boolean) => void;
   setSubtitleMenuOpen: (v: boolean) => void;
   setSpeedMenuOpen: (v: boolean) => void;
@@ -417,6 +422,10 @@ export function renderControl(id: PlayerControlId, ctx: ControlContext): ReactNo
     case "cast": {
       if (ctx.tight) return null;
       return <CastButton onClick={ctx.onCast} capabilities={ctx.capabilities} />;
+    }
+    case "external-player": {
+      if (ctx.tight || !ctx.onOpenExternal) return null;
+      return <ExternalPlayerMenu onOpen={ctx.onOpenExternal} onOpenChange={ctx.setExternalMenuOpen} />;
     }
     case "fullscreen": {
       return (

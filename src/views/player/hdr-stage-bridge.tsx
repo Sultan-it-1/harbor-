@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { hdrOverlayEmitProps } from "@/lib/hdr-overlay";
 import type { SecondSubControls } from "@/lib/player/second-sub-context";
+import type { ExternalPlayer } from "@/lib/external-player";
 import type { HdrStagePayload } from "../hdr-overlay-app";
 import type { SubChoice } from "./hooks/use-playback-controls";
 
@@ -21,6 +22,9 @@ export type HdrStageHandlers = {
   screenshot: () => void;
   menuOpen: (open: boolean) => void;
   activity: () => void;
+  /** The mouse button is held on the video in the HDR window (true) or let go (false). */
+  holdSpeed: (on: boolean) => void;
+  openExternal: (player: ExternalPlayer) => void;
 };
 
 export function HdrStageBridge({
@@ -53,6 +57,7 @@ export function HdrStageBridge({
     const isTauri = "__TAURI__" in window || "__TAURI_INTERNALS__" in window;
     if (!isTauri) return;
     let cancelled = false;
+    let holding = false;
     const offs: Array<() => void> = [];
     void (async () => {
       const { listen } = await import("@tauri-apps/api/event");
@@ -89,11 +94,21 @@ export function HdrStageBridge({
       await bind("hdr-stage://screenshot", () => h().screenshot());
       await bind("hdr-stage://menu-open", (p) => h().menuOpen((p as { open: boolean }).open));
       await bind("hdr-stage://activity", () => h().activity());
+      await bind("hdr-stage://hold-speed", (p) => {
+        holding = (p as { on: boolean }).on === true;
+        h().holdSpeed(holding);
+      });
+      await bind("hdr-stage://open-external", (p) => {
+        const player = (p as { player?: ExternalPlayer }).player;
+        if (player && typeof player.id === "string") h().openExternal(player);
+      });
       await bind("hdr-stage://request", () => void hdrOverlayEmitProps(payloadRef.current));
     })();
     return () => {
       cancelled = true;
       for (const off of offs) off();
+      // The HDR window went away mid-hold: its button-up will never come.
+      if (holding) handlersRef.current.holdSpeed(false);
     };
   }, [active]);
 

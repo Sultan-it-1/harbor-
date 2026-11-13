@@ -4,6 +4,7 @@ import type { PlayEpisode } from "@/lib/view";
 import { useClipRecorder } from "./use-clip-recorder";
 import { useFrameGrab } from "./use-frame-grab";
 import { useGifRecorder } from "./use-gif-recorder";
+import { useHoldSpeed } from "./use-hold-speed";
 import { useKeyboardShortcuts } from "./use-keyboard-shortcuts";
 import { useLiveChannelOverlay } from "./use-live-channel-overlay";
 import { useSleepTimer } from "./use-sleep-timer";
@@ -73,7 +74,9 @@ export function usePlayerHotkeys(params: {
   } = params;
 
   const [showStats, setShowStats] = useState(false);
-  const { holdSpeedActive } = useKeyboardShortcuts({
+  // One hold-for-speed for the keyboard and the mouse (holding the button on the video).
+  const holdSpeed = useHoldSpeed(bridgeRef, snap.rate);
+  useKeyboardShortcuts({
     bridgeRef,
     snap,
     drawMode,
@@ -113,7 +116,8 @@ export function usePlayerHotkeys(params: {
     onAnime4kOn,
     onAnime4kOff,
     onFrameStep: (dir) => bridgeRef.current?.frameStep?.(dir),
+    holdSpeed,
   });
 
-  return { holdSpeedActive, showStats };
+  return { holdSpeedActive: holdSpeed.active, holdSpeed, showStats };
 }

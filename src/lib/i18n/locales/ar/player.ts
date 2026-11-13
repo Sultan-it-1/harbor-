@@ -468,6 +468,15 @@ const player: Record<string, string> = {
   "Side by side": "جنبًا إلى جنب",
   "Swap sides": "تبديل الجانبين",
   "Stacked while the player is taller than wide": "تظهران فوق بعضهما ما دام المشغّل أطول من عرضه",
+  // Desktop player: opening the stream in another app ("System default" is in settings.ts).
+  "Open in another player": "فتح في مشغّل آخر",
+  "Windows default": "تطبيق Windows الافتراضي",
+  "last used": "آخر استخدام",
+  "Looking for players…": "جارٍ البحث عن المشغّلات…",
+  "No other player found. Install VLC or mpv and it shows up here.": "لم يُعثر على مشغّل آخر. ثبّت VLC أو mpv وسيظهر هنا.",
+  "Opened in {name}": "فُتح في {name}",
+  "Opened in the default app": "فُتح في التطبيق الافتراضي",
+  "Could not open in {name}": "تعذّر الفتح في {name}",
 };
 
 export default player;

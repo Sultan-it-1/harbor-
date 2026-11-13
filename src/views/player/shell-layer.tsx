@@ -59,6 +59,7 @@ export function ShellLayer({
   episode,
   download,
   onOpenDvr,
+  onOpenExternal,
   sleep,
 }: {
   shellId: string;
@@ -112,6 +113,7 @@ export function ShellLayer({
   episode: number | null;
   download: ReturnType<typeof useVideoDownload>;
   onOpenDvr?: () => void;
+  onOpenExternal?: PlayerShellProps["onOpenExternal"];
   sleep: PlayerShellProps["sleep"];
 }) {
   const ActiveShell = getPlayerShell(shellId).Component;
@@ -214,6 +216,7 @@ export function ShellLayer({
       onDownloadReveal={download.reveal}
       onDownloadReset={download.reset}
       onOpenDvr={onOpenDvr}
+      onOpenExternal={onOpenExternal}
       sleep={sleep}
     />
   );

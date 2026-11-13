@@ -54,6 +54,8 @@ import { usePlaybackPresence } from "./player/hooks/use-playback-presence";
 import { usePlayerExit } from "./player/hooks/use-player-exit";
 import { usePendingSeekApply } from "./player/hooks/use-pending-seek-apply";
 import { usePlayerHotkeys } from "./player/hooks/use-player-hotkeys";
+import { useExternalPlayer } from "./player/hooks/use-external-player";
+import { getSeekHovering } from "@/lib/player/playback-clock";
 import { usePlayerMedia } from "./player/hooks/use-player-media";
 import { useTrickplay } from "./player/hooks/use-trickplay";
 import { useStreamPill } from "./player/hooks/use-stream-pill";
@@ -506,7 +508,7 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
 
   const videoFill = useVideoFill(bridgeRef, src.url);
   const anime4k = useAnime4k(bridgeRef, src.url, src);
-  const { holdSpeedActive, showStats } = usePlayerHotkeys({
+  const { holdSpeedActive, holdSpeed, showStats } = usePlayerHotkeys({
     bridgeRef,
     snap,
     metaId: src.meta.id,
@@ -602,6 +604,20 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     reloadLive,
     closePlayer,
   });
+
+  const openExternal = useExternalPlayer({
+    bridgeRef,
+    liveSourceRef,
+    src,
+    isLive: isLiveLike,
+    notify: showSyncToast,
+  });
+  // Holding the mouse button on the video speeds it up only while it really plays: not while
+  // it loads, is paused or buffering, the seek bar is in use, or the video is on a TV.
+  const canHoldSpeed = useCallback(() => {
+    const s = snapRef.current;
+    return s.status === "playing" && !s.buffering && !getSeekHovering() && !cast.castActiveRef.current;
+  }, [cast.castActiveRef]);
 
   const isLocalSrc = isLocalUrl(src.url);
   const streamPillVariant = useStreamPill({
@@ -703,6 +719,9 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     secondSub,
     showStats,
     holdSpeedActive,
+    onHoldSpeedStart: () => holdSpeed.engage("mouse"),
+    onHoldSpeedEnd: () => holdSpeed.release("mouse"),
+    canHoldSpeed,
     videoFillPill: videoFill.pill,
     cropMode: videoFill.mode,
     onCropMode: videoFill.setMode,
@@ -781,6 +800,7 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     liveOverlay,
     setDvrOpen,
     openDvr: liveOverlay.isLive ? () => setDvrOpen(true) : undefined,
+    onOpenExternal: openExternal,
     sleep,
     adjacentPrev: adjacent.prev,
     adjacentNext: adjacent.next,
@@ -894,6 +914,8 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
           screenshot: () => frameGrab.trigger(),
           menuOpen: setAnyMenuOpen,
           activity: wakeChrome,
+          holdSpeed: (on) => (on ? holdSpeed.engage("mouse") : holdSpeed.release("mouse")),
+          openExternal: (player) => void openExternal?.(player),
         }}
       />
     </main>
