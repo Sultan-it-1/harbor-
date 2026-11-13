@@ -18,7 +18,8 @@ import { TextSyncOverlay } from "./text-sync-overlay";
 import { Toaster } from "@/views/addons/toaster";
 import type { ToastInfo } from "@/views/addons/addons-types";
 import type { usePlayerCast } from "./hooks/use-player-cast";
-import type { useTextSync } from "./hooks/use-text-sync";
+import type { SyncTarget, useTextSync } from "./hooks/use-text-sync";
+import { SecondSubProvider, type SecondSubControls } from "@/lib/player/second-sub-context";
 
 type Room = ComponentProps<typeof RoomLayer>;
 type Shell = ComponentProps<typeof ShellLayer>;
@@ -35,6 +36,11 @@ export type PlayerOverlayLayersProps = {
   src: PlayerSrc;
   subShowInPip: boolean;
   subAssNative: boolean;
+  firstSubNative: boolean;
+  secondSubNative: boolean;
+  syncTarget: SyncTarget | null;
+  /** Changing the second subtitle (null where there can't be one). */
+  secondSub: SecondSubControls | null;
   showStats: boolean;
   holdSpeedActive: boolean;
   videoFillPill: string | null;
@@ -161,7 +167,7 @@ export type PlayerOverlayLayersProps = {
   noAudioVlcUrl: string | null;
   onDismissNoAudio: () => void;
   // Text-sync feature
-  onEnterSync?: () => void;
+  onEnterSync?: (target?: SyncTarget) => void;
   syncMode: ReturnType<typeof useTextSync>["syncMode"];
   syncApi: ReturnType<typeof useTextSync>;
   syncToast: ToastInfo | null;
@@ -170,18 +176,22 @@ export type PlayerOverlayLayersProps = {
 
 export function PlayerOverlayLayers(p: PlayerOverlayLayersProps) {
   return (
-    <>
+    <SecondSubProvider value={p.secondSub}>
       <StageOverlays
         snap={p.snap}
         engine={p.engine}
         pipMode={p.pipMode}
         subShowInPip={p.subShowInPip}
         subAssNative={p.subAssNative}
+        firstSubNative={p.firstSubNative}
+        secondSubNative={p.secondSubNative}
+        syncTarget={p.syncTarget}
         showStats={p.showStats}
         holdSpeedActive={p.holdSpeedActive}
         videoFillPill={p.videoFillPill}
         subDropToast={p.subDropToast}
         onSubDelay={(s) => { p.bridgeRef.current?.setSubDelay(s); }}
+        onSecondSubDelay={p.secondSub?.onDelay}
         onEnterSync={p.onEnterSync}
         chromeVisible={p.showChrome}
       />
@@ -425,6 +435,6 @@ export function PlayerOverlayLayers(p: PlayerOverlayLayersProps) {
         onDismissNoAudio={p.onDismissNoAudio}
         onPickAnother={p.pickAnotherOrGuide}
       />
-    </>
+    </SecondSubProvider>
   );
 }

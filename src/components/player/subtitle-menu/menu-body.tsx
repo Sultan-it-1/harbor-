@@ -1,9 +1,12 @@
-import { Check, FolderOpen, Languages, Loader2, Search as SearchIcon, SlidersHorizontal, Sparkles, Timer, X } from "lucide-react";
+import { ArrowLeftRight, Check, FolderOpen, Languages, Loader2, Search as SearchIcon, SlidersHorizontal, Sparkles, Timer, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Flag } from "@/components/flag";
 import { markImportedSub } from "@/lib/player/imported-subs";
+import type { SecondSubControls } from "@/lib/player/second-sub-context";
+import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
 import { openSyncBar } from "@/lib/player/sub-sync";
+import { useTallPlayerArea } from "../dual-subtitles";
 import { Tooltip } from "../transport/tooltip";
 import { SearchSection } from "./search-section";
 import { VariantRow } from "./variant-row";
@@ -13,10 +16,22 @@ import { groupByLang, isVeryNewRelease } from "./utils";
 type SourceFilter = "all" | "embedded" | "external";
 const ALL_LANGS = "__all__";
 
-export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
+export function MenuBody(props: SubtitleMenuProps & { onClose: () => void; second?: SecondSubControls | null }) {
   const tr = useT();
   const { tracks, selectedId, onSelect, onClose, delaySec, metaReleaseDate, onOpenStyleBar } = props;
+  const { settings, update } = useSettings();
+  const tall = useTallPlayerArea();
   const groups = useMemo(() => groupByLang(tracks), [tracks]);
+
+  // "Second subtitle": the same list, picking the subtitle shown together with the first.
+  // Only where the player can show two (desktop), and only while a first one is on.
+  const second = props.second ?? null;
+  const [mode, setMode] = useState<"first" | "second">("first");
+  const canSecond = !!second && selectedId != null;
+  const secondMode = mode === "second" && canSecond;
+  const secondId = tracks.find((t) => t.secondarySelected)?.id ?? null;
+  // The pick the open list shows and changes.
+  const activeId = secondMode ? secondId : selectedId;
   const [searchSettled, setSearchSettled] = useState(false);
   const [activeLang, setActiveLang] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
@@ -33,16 +48,44 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
   }, [tracks.length]);
 
   useEffect(() => {
+    if (!canSecond) setMode("first");
+  }, [canSecond]);
+
+  useEffect(() => {
     if (groups.length === 0) {
       setActiveLang(null);
       return;
     }
     if (activeLang === ALL_LANGS) return;
     if (!activeLang || !groups.some((g) => g.langKey === activeLang)) {
-      const sel = groups.find((g) => g.variants.some((v) => v.id === selectedId));
-      setActiveLang(sel?.langKey ?? groups[0].langKey);
+      const sel = groups.find((g) => g.variants.some((v) => v.id === activeId));
+      // No second subtitle yet: open on a language other than the first subtitle's.
+      const other = secondMode ? groups.find((g) => !g.variants.some((v) => v.id === selectedId)) : undefined;
+      setActiveLang(sel?.langKey ?? other?.langKey ?? groups[0].langKey);
     }
-  }, [groups, activeLang, selectedId]);
+  }, [groups, activeLang, activeId, selectedId, secondMode]);
+
+  const switchMode = (next: "first" | "second") => {
+    if (next === mode) return;
+    setMode(next);
+    setActiveLang(null);
+    setLocalError(null);
+    setJustImported(null);
+  };
+  const pick = (id: string | null) => {
+    if (secondMode) second?.onSelect(id);
+    else onSelect(id);
+  };
+  // Adding a subtitle (search result or file): as the second one while on that tab.
+  const addSubtitle = async (url: string, lang?: string, title?: string): Promise<boolean> => {
+    if (!secondMode || !second) {
+      const ok = await props.onAddSubtitle(url, lang, title);
+      return ok !== false;
+    }
+    const ok = await second.onAdd(url, lang, title);
+    if (!ok) setLocalError(tr("Couldn't add that as the second subtitle. Try another."));
+    return ok;
+  };
 
   const veryNewMovie = useMemo(() => isVeryNewRelease(metaReleaseDate), [metaReleaseDate]);
   const allLangs = activeLang === ALL_LANGS;
@@ -63,7 +106,7 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
 
   const totalEmbedded = tracks.filter((t) => !t.external).length;
   const totalExternal = tracks.filter((t) => t.external).length;
-  const offSelected = selectedId == null;
+  const offSelected = activeId == null;
   const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const [localError, setLocalError] = useState<string | null>(null);
   const delayNonZero = delaySec !== 0;
@@ -78,9 +121,9 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
       });
       if (typeof path !== "string") return;
       const name = path.split(/[\\\/]/).pop() || tr("Local subtitle");
-      const ok = await props.onAddSubtitle(path, undefined, name);
+      const ok = await addSubtitle(path, undefined, name);
       if (ok === false) {
-        setLocalError(tr("Couldn't load that subtitle file. Try another."));
+        if (!secondMode) setLocalError(tr("Couldn't load that subtitle file. Try another."));
         return;
       }
       markImportedSub(name);
@@ -151,6 +194,41 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
         </div>
       </header>
 
+      {/* ── First / second subtitle ── */}
+      {canSecond && (
+        <div className="flex items-center gap-1 border-b border-edge-soft px-3 py-1.5">
+          <Tab active={!secondMode} onClick={() => switchMode("first")}>
+            {tr("First subtitle")}
+          </Tab>
+          <Tab active={secondMode} onClick={() => switchMode("second")}>
+            {tr("Second subtitle")}
+            {secondId && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-accent" />}
+          </Tab>
+        </div>
+      )}
+      {secondMode && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-edge-soft bg-canvas/15 px-3 py-1.5">
+          <span className="me-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
+            {tr("Layout")}
+          </span>
+          <Tab active={settings.sub2Layout !== "side"} onClick={() => update({ sub2Layout: "stacked" })}>
+            {tr("Stacked")}
+          </Tab>
+          <Tab active={settings.sub2Layout === "side"} onClick={() => update({ sub2Layout: "side" })}>
+            {tr("Side by side")}
+          </Tab>
+          {settings.sub2Layout === "side" && (
+            <Tab active={false} onClick={() => update({ sub2SwapSides: !settings.sub2SwapSides })}>
+              <ArrowLeftRight size={12} strokeWidth={2.2} />
+              {tr("Swap sides")}
+            </Tab>
+          )}
+          {settings.sub2Layout === "side" && tall && (
+            <span className="text-[11px] text-ink-subtle">{tr("Stacked while the player is taller than wide")}</span>
+          )}
+        </div>
+      )}
+
       {/* ── Body ── */}
       <div className="flex min-h-0 flex-1">
         {/* Language sidebar */}
@@ -158,7 +236,7 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
           <button
             onClick={() => {
               if (offSelected) return;
-              onSelect(null);
+              pick(null);
               onClose();
             }}
             disabled={offSelected}
@@ -175,7 +253,7 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
             >
               {offSelected ? null : <Check size={9} strokeWidth={3} />}
             </span>
-            {offSelected ? tr("Off") : tr("On")}
+            {offSelected ? (secondMode ? tr("None") : tr("Off")) : tr("On")}
           </button>
 
           {groups.length > 0 && (
@@ -199,7 +277,7 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
           )}
           {groups.map((g) => {
             const isActive = activeLang === g.langKey;
-            const hasSelected = g.variants.some((v) => v.id === selectedId);
+            const hasSelected = g.variants.some((v) => v.id === activeId);
             return (
               <button
                 key={g.langKey}
@@ -262,7 +340,7 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
 
           {searchOpen ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <SearchSection {...props} />
+              <SearchSection {...props} onAddSubtitle={addSubtitle} />
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
@@ -279,9 +357,20 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
                     <VariantRow
                       key={t.id}
                       track={t}
-                      selected={t.id === selectedId}
+                      selected={t.id === activeId}
+                      // The same track can't be both subtitles.
+                      disabled={secondMode && t.id === selectedId}
+                      note={
+                        secondMode
+                          ? t.id === selectedId
+                            ? tr("First subtitle")
+                            : undefined
+                          : t.secondarySelected
+                            ? tr("Second subtitle")
+                            : undefined
+                      }
                       onPick={() => {
-                        onSelect(t.id);
+                        pick(t.id);
                       }}
                     />
                   ))}

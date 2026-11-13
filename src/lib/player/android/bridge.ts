@@ -373,6 +373,12 @@ export function createAndroidBridge(): PlayerBridge {
     setSubtitleTrack() {},
     setSubVisible() {},
     setSubDelay() {},
+    // Two subtitles at once is a desktop (mpv) feature; the native player has its own menu.
+    setSecondarySubtitleTrack() {},
+    setSecondarySubDelay() {},
+    async addSecondarySubtitle() {
+      return false;
+    },
     setAudioDelay() {},
     setPanscan() {},
     setVideoZoom() {},

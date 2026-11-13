@@ -18,7 +18,8 @@ export type TextSyncApi = {
   baseOffset: number;
   dirty: boolean;
   sourceFormat: "srt" | "vtt";
-  enterSync: () => Promise<{ ok: true } | { ok: false; reason: string }>;
+  target: "primary" | "secondary";
+  enterSync: (target?: "primary" | "secondary") => Promise<{ ok: true } | { ok: false; reason: string }>;
   pickCue: (cueIndex: number) => void;
   selectSlot: (slot: 0 | 1) => void;
   setMode: (mode: "easy" | "normal") => void;

@@ -37,7 +37,8 @@ import { useLiveChannelOverlay } from "./player/hooks/use-live-channel-overlay";
 import { useStreamSwitcher } from "./player/hooks/use-stream-switcher";
 import { useMpvEmbed } from "./player/hooks/use-mpv-embed";
 import { usePlayerBridge } from "./player/hooks/use-player-bridge";
-import { useTextSync } from "./player/hooks/use-text-sync";
+import { useTextSync, type SyncTarget } from "./player/hooks/use-text-sync";
+import { useSecondSubtitle } from "./player/hooks/use-second-subtitle";
 import { useT } from "@/lib/i18n";
 import { useEpisodeNavigation } from "./player/hooks/use-episode-navigation";
 import { useAbLoop } from "./player/hooks/use-ab-loop";
@@ -283,7 +284,18 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
   const gif = useGifRecorder({ src });
   const clip = useClipRecorder({ src });
 
-  const { resolvedImdbId, subAssNative, captureExitSnapshot, download, subDropToast } = usePlayerMedia({
+  // Before usePlayerMedia: while one subtitle is being synced, the other is hidden.
+  const textSync = useTextSync(bridgeRef.current, src.meta.id, season, episode);
+  const syncTarget: SyncTarget | null = textSync.syncMode === "active" ? textSync.target : null;
+  const {
+    resolvedImdbId,
+    subAssNative,
+    firstSubNative,
+    secondSubNative,
+    captureExitSnapshot,
+    download,
+    subDropToast,
+  } = usePlayerMedia({
     src,
     snap,
     engine,
@@ -297,6 +309,8 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     castActiveRef: cast.castActiveRef,
     season,
     episode,
+    pipMode,
+    syncTarget,
   });
 
   useAndroidPlayerExtras({
@@ -446,6 +460,8 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     bridgeRef,
     snapRef,
     metaId: src.meta.id,
+    season,
+    episode,
     inRoom,
     isHost,
     hasStarted,
@@ -457,7 +473,16 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     sendCommand,
   });
 
-  const textSync = useTextSync(bridgeRef.current, src.meta.id);
+  const secondSub = useSecondSubtitle({
+    bridgeRef,
+    snap,
+    engine,
+    metaId: src.meta.id,
+    season,
+    episode,
+    srcUrl: src.url,
+  });
+
   const [syncToast, setSyncToast] = useState<ToastInfo | null>(null);
   const syncToastTimerRef = useRef<number | null>(null);
   const showSyncToast = useCallback((kind: "ok" | "error", text: string) => {
@@ -465,8 +490,8 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     setSyncToast({ kind, text });
     syncToastTimerRef.current = window.setTimeout(() => setSyncToast(null), kind === "error" ? 5000 : 3000);
   }, []);
-  const handleEnterSync = useCallback(async () => {
-    const res = await textSync.enterSync();
+  const handleEnterSync = useCallback(async (target?: SyncTarget) => {
+    const res = await textSync.enterSync(target === "secondary" ? "secondary" : "primary");
     if (!res.ok) {
       const reason = res.reason === "no-cues"
         ? t("No subtitle cues available")
@@ -672,6 +697,10 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     src,
     subShowInPip: settings.subShowInPip,
     subAssNative,
+    firstSubNative,
+    secondSubNative,
+    syncTarget,
+    secondSub,
     showStats,
     holdSpeedActive,
     videoFillPill: videoFill.pill,
@@ -855,6 +884,7 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
           seek: seekTo,
           seekStep,
           rememberSub: rememberSubChoice,
+          sub2: secondSub,
           pip: togglePipMode,
           cast: () => cast.openCastMenu(null),
           back: closePlayer,

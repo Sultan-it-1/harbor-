@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { modalOverlayClose, modalOverlayEmitState, modalOverlayOpen } from "@/lib/modal-overlay";
 import { openStyleBar } from "@/lib/player/sub-presets";
+import { useSecondSubControls } from "@/lib/player/second-sub-context";
 import { useT } from "@/lib/i18n";
 import { MenuBody } from "./subtitle-menu/menu-body";
 import type { SubtitleMenuProps } from "./subtitle-menu/types";
@@ -15,6 +16,8 @@ type Props = SubtitleMenuProps;
 
 export function SubtitleMenu(props: Props) {
   const t = useT();
+  // Given by the player where a second subtitle is possible (desktop).
+  const second = useSecondSubControls();
   const [open, setOpen] = useState(false);
   const [forceInline, setForceInline] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -127,7 +130,7 @@ export function SubtitleMenu(props: Props) {
       </Tooltip>
       {open && (forceInline || !useOverlay) && (
         <div className="absolute bottom-[calc(100%+10px)] end-0 flex h-[400px] max-h-[72vh] w-[500px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-2xl border border-edge bg-elevated shadow-[0_24px_60px_-18px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-          <MenuBody {...props} onClose={() => setOpen(false)} onOpenStyleBar={openStyleBar} />
+          <MenuBody {...props} second={second} onClose={() => setOpen(false)} onOpenStyleBar={openStyleBar} />
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Layers, Minus, Plus, X } from "lucide-react";
+import { ArrowUpToLine, Check, ChevronDown, ChevronLeft, ChevronRight, Layers, Minus, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ColorPopoverTrigger } from "@/views/settings/color-picker";
@@ -12,6 +12,8 @@ import {
   useStyleBarOpen,
   type SubPreset,
 } from "@/lib/player/sub-presets";
+import { pickLookKeys, resolveSecondLook, SUB_MARGIN_MAX } from "@/lib/player/dual-subs";
+import type { SecondPlacementMode } from "./dual-subtitles";
 import { useT } from "@/lib/i18n";
 
 const SWATCHES = ["#FFFFFF", "#FFE45E", "#9AE6B4", "#93C5FD", "#FCA5A5", "#C4B5FD"];
@@ -21,10 +23,22 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-export function SubStyleBar() {
+export function SubStyleBar({
+  second,
+}: {
+  /** Set while a second subtitle is on screen: the bar then edits the one picked in its
+   *  First/Second switch. `placement` says whether the second's position is automatic. */
+  second?: { placement: SecondPlacementMode } | null;
+} = {}) {
   const t = useT();
   const open = useStyleBarOpen();
   const { settings, update } = useSettings();
+  const [target, setTarget] = useState<"first" | "second">("first");
+  const hasSecond = !!second;
+
+  useEffect(() => {
+    if (open || !hasSecond) setTarget("first");
+  }, [open, hasSecond]);
 
   useEffect(() => {
     if (!open) return;
@@ -55,6 +69,15 @@ export function SubStyleBar() {
 
   if (!open) return null;
 
+  // Editing the second subtitle: the same controls, shown with its look and saving into its
+  // own settings (sub2Style), so the first subtitle's look stays as it is.
+  const editingSecond = target === "second" && hasSecond;
+  const view: Settings = editingSecond ? { ...settings, ...resolveSecondLook(settings) } : settings;
+  const edit = editingSecond
+    ? (p: Partial<Settings>) => update({ sub2Style: { ...settings.sub2Style, ...pickLookKeys(p) } })
+    : update;
+  const autoPlacement = editingSecond && second && second.placement !== "own" ? second.placement : null;
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center px-7 pt-[68px] animate-in fade-in slide-in-from-top-2 duration-200">
       <div
@@ -62,23 +85,33 @@ export function SubStyleBar() {
         aria-label={t("Subtitle appearance")}
         className="pointer-events-auto flex max-w-[calc(100vw-56px)] items-stretch gap-1.5 overflow-x-auto rounded-[14px] border border-edge bg-elevated px-1.5 py-1.5 shadow-[0_18px_44px_-22px_rgba(0,0,0,0.85)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        <FontMenu value={settings.subFontFamily} fonts={settings.customFonts} onChange={(f) => update({ subFontFamily: f })} />
+        {hasSecond && (
+          <>
+            <TargetSwitch value={target} onChange={setTarget} />
+            <Divider />
+          </>
+        )}
+        <FontMenu value={view.subFontFamily} fonts={settings.customFonts} onChange={(f) => edit({ subFontFamily: f })} />
         <Divider />
-        <SizeStepper value={settings.subFontSize} onChange={(n) => update({ subFontSize: clamp(n, 16, 120) })} />
+        <SizeStepper value={view.subFontSize} onChange={(n) => edit({ subFontSize: clamp(n, 16, 120) })} />
         <Divider />
-        <BoldToggle settings={settings} update={update} />
+        <BoldToggle settings={view} update={edit} />
         <Divider />
-        <ColorRow value={settings.subFontColor} onChange={(c) => update({ subFontColor: c })} portal />
+        <ColorRow value={view.subFontColor} onChange={(c) => edit({ subFontColor: c })} portal />
         <Divider />
-        <OutlineToggle settings={settings} update={update} />
+        <OutlineToggle settings={view} update={edit} />
         <Divider />
-        <SpacingStepper value={settings.subLineSpacing ?? 0} onChange={(n) => update({ subLineSpacing: clamp(n, 0, 12) })} />
+        <SpacingStepper value={view.subLineSpacing ?? 0} onChange={(n) => edit({ subLineSpacing: clamp(n, 0, 12) })} />
         <Divider />
-        <PlacementPad settings={settings} update={update} />
+        <PlacementPad settings={view} update={edit} auto={autoPlacement} />
+        {!editingSecond && (
+          <>
+            <Divider />
+            <AssOverrideToggle settings={settings} update={update} />
+          </>
+        )}
         <Divider />
-        <AssOverrideToggle settings={settings} update={update} />
-        <Divider />
-        <PresetCluster settings={settings} update={update} />
+        <PresetCluster key={target} settings={view} update={edit} />
         <button
           type="button"
           onClick={closeStyleBar}
@@ -330,19 +363,71 @@ function SpacingStepper({ value, onChange }: { value: number; onChange: (n: numb
   );
 }
 
-function PlacementPad({ settings, update }: { settings: Settings; update: (p: Partial<Settings>) => void }) {
+function TargetSwitch({ value, onChange }: { value: "first" | "second"; onChange: (v: "first" | "second") => void }) {
+  const t = useT();
+  return (
+    <div role="radiogroup" aria-label={t("Subtitle appearance")} className="flex h-11 shrink-0 items-stretch gap-0.5 rounded-[10px] bg-raised p-[3px]">
+      {(["first", "second"] as const).map((k) => (
+        <button
+          key={k}
+          type="button"
+          role="radio"
+          aria-checked={value === k}
+          onClick={() => onChange(k)}
+          className={`flex items-center rounded-[8px] px-3 text-[13px] font-semibold transition-colors ${
+            value === k ? "bg-elevated text-ink ring-1 ring-edge" : "text-ink-muted hover:text-ink"
+          }`}
+        >
+          {k === "first" ? t("First") : t("Second")}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PlacementPad({
+  settings,
+  update,
+  auto,
+}: {
+  settings: Settings;
+  update: (p: Partial<Settings>) => void;
+  /** The second subtitle's position is set for it ("follow": right by the first one, "top":
+   *  at the top of the picture), so there is nothing to raise or lower. */
+  auto?: "follow" | "top" | null;
+}) {
   const t = useT();
   const aligns: Array<"left" | "center" | "right"> = ["left", "center", "right"];
   return (
     <div className="flex h-11 shrink-0 items-center gap-1.5 rounded-[10px] bg-raised px-2">
-      <div className="flex flex-col">
-        <button aria-label={t("Raise subtitles")} onClick={() => update({ subMarginY: clamp(settings.subMarginY + 2, 0, 40) })} className="flex h-[18px] w-7 items-center justify-center text-ink-muted transition-colors hover:text-ink">
-          <ChevronLeft size={13} className="rotate-90" />
-        </button>
-        <button aria-label={t("Lower subtitles")} onClick={() => update({ subMarginY: clamp(settings.subMarginY - 2, 0, 40) })} className="flex h-[18px] w-7 items-center justify-center text-ink-muted transition-colors hover:text-ink">
-          <ChevronRight size={13} className="rotate-90" />
-        </button>
-      </div>
+      {auto ? (
+        <span className="max-w-[170px] px-1 text-[12px] font-medium leading-tight text-ink-muted">
+          {auto === "top" ? t("Shown at the top automatically") : t("Follows the first subtitle automatically")}
+        </span>
+      ) : (
+        <>
+          <div className="flex flex-col">
+            <button aria-label={t("Raise subtitles")} onClick={() => update({ subMarginY: clamp(settings.subMarginY + 2, 0, SUB_MARGIN_MAX) })} className="flex h-[18px] w-7 items-center justify-center text-ink-muted transition-colors hover:text-ink">
+              <ChevronLeft size={13} className="rotate-90" />
+            </button>
+            <button aria-label={t("Lower subtitles")} onClick={() => update({ subMarginY: clamp(settings.subMarginY - 2, 0, SUB_MARGIN_MAX) })} className="flex h-[18px] w-7 items-center justify-center text-ink-muted transition-colors hover:text-ink">
+              <ChevronRight size={13} className="rotate-90" />
+            </button>
+          </div>
+          <button
+            type="button"
+            aria-label={t("Top")}
+            title={t("Top")}
+            aria-pressed={settings.subMarginY >= SUB_MARGIN_MAX}
+            onClick={() => update({ subMarginY: SUB_MARGIN_MAX })}
+            className={`flex h-7 w-7 items-center justify-center rounded-[7px] transition-colors ${
+              settings.subMarginY >= SUB_MARGIN_MAX ? "bg-elevated text-ink" : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            <ArrowUpToLine size={14} strokeWidth={2.2} />
+          </button>
+        </>
+      )}
       <div className="flex items-center gap-1">
         {aligns.map((a) => (
           <button

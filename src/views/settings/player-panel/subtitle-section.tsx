@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import godfatherStill from "@/assets/godfather-offer.svg";
 import { MAX_FONT_BYTES, customFontsHaveRoom } from "@/lib/custom-fonts";
 import { useSettings } from "@/lib/settings";
+import { SUB_MARGIN_MAX } from "@/lib/player/dual-subs";
 import { useT } from "@/lib/i18n";
 import { ColorPopoverTrigger } from "../color-picker";
 import { ToggleRow } from "../shared";
@@ -42,10 +43,13 @@ export function SubtitleStylePanel() {
     (settings.subBoxOpacity ?? 0.6) === 0.6 &&
     (settings.subBoxColor || "#000000").toUpperCase() === "#000000" &&
     (settings.subOpacity ?? 1) === 1 &&
-    !settings.subBold;
+    !settings.subBold &&
+    Object.keys(settings.sub2Style ?? {}).length === 0;
 
   const resetDefaults = () => {
     update({
+      // The second subtitle's own look goes too: it follows the first one again.
+      sub2Style: {},
       subStyle: "shadow",
       subFontFamily: "inter",
       subFontSize: 32,
@@ -187,7 +191,7 @@ export function SubtitleStylePanel() {
         <input
           type="range"
           min={0}
-          max={40}
+          max={SUB_MARGIN_MAX}
           step={1}
           value={settings.subMarginY}
           onChange={(e) => update({ subMarginY: parseInt(e.target.value, 10) })}

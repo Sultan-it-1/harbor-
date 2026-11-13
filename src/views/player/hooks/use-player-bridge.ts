@@ -22,6 +22,9 @@ function snapChangedIgnoringClock(a: PlayerSnapshot, b: PlayerSnapshot): boolean
     a.audioDelaySec !== b.audioDelaySec ||
     a.subText !== b.subText ||
     a.subStartSec !== b.subStartSec ||
+    a.secondarySubText !== b.secondarySubText ||
+    a.secondarySubTrackId !== b.secondarySubTrackId ||
+    a.secondarySubDelaySec !== b.secondarySubDelaySec ||
     a.audioNormalize !== b.audioNormalize ||
     a.videoWidth !== b.videoWidth ||
     a.videoHeight !== b.videoHeight ||

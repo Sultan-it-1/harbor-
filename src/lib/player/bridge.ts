@@ -16,6 +16,9 @@ export type TrackInfo = {
   default?: boolean;
   hearingImpaired?: boolean;
   url?: string;
+  /** This subtitle track is the second subtitle (shown with the first). `selected` stays
+   *  false for it, so lists of the first subtitle never show it as picked. */
+  secondarySelected?: boolean;
 };
 
 export type Chapter = {
@@ -41,6 +44,11 @@ export type PlayerSnapshot = {
   audioDelaySec: number;
   subText: string;
   subStartSec: number;
+  /** The second subtitle: its current line, its track id (null when there is none) and its
+   *  own delay. Only the desktop player (mpv) has one. */
+  secondarySubText: string;
+  secondarySubTrackId: string | null;
+  secondarySubDelaySec: number;
   audioNormalize: boolean;
   videoWidth: number;
   videoHeight: number;
@@ -79,12 +87,20 @@ export type PlayerBridge = {
   setSubtitleTrack: (id: string | null) => void;
   setSubVisible: (on: boolean) => void;
   setSubDelay: (sec: number) => void;
+  /** The second subtitle: a track to show together with the first one, or null for none.
+   *  The first subtitle's track can't also be the second. */
+  setSecondarySubtitleTrack: (id: string | null) => void;
+  setSecondarySubDelay: (sec: number) => void;
+  /** Whether the player itself draws the second subtitle (only when the page can't). */
+  setSecondarySubVisible?: (on: boolean) => void;
   setAudioDelay: (sec: number) => void;
   setPanscan: (value: number) => void;
   setVideoZoom: (log2: number) => void;
   setAspectOverride: (ratio: string) => void;
   setAnime4kShaders: (shaders: string[]) => void;
   addSubtitle: (url: string, lang?: string, title?: string, select?: boolean) => Promise<boolean>;
+  /** Adds a subtitle file and shows it as the second subtitle (the first one stays). */
+  addSecondarySubtitle: (url: string, lang?: string, title?: string) => Promise<boolean>;
   getSelectedTrackCues: () => SubCue[] | null;
   getSelectedTrackUrl: () => string | null;
   setAudioNormalize: (on: boolean) => void;
@@ -126,6 +142,9 @@ export const emptySnapshot: PlayerSnapshot = {
   audioDelaySec: 0,
   subText: "",
   subStartSec: 0,
+  secondarySubText: "",
+  secondarySubTrackId: null,
+  secondarySubDelaySec: 0,
   audioNormalize: false,
   videoWidth: 0,
   videoHeight: 0,

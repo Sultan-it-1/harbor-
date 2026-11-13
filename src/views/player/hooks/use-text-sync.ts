@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import type { PlayerBridge } from "@/lib/player/bridge";
+import type { PlayerBridge, PlayerSnapshot } from "@/lib/player/bridge";
 import { getPlaybackPosition } from "@/lib/player/playback-clock";
 import { fetchAndParse, type SubCue } from "@/lib/subtitles/parser";
 import { toSrt, toVtt } from "@/lib/subtitles/serialize";
 import { computeSyncMap, applySync, type SyncAnchor } from "@/lib/subtitles/text-sync";
 import { writePlayerPrefs } from "@/lib/player-prefs";
+import { episodeSubsKey, writeEpisodeSubs } from "@/lib/player/sub-memory";
 
 type Phase = "listen" | "review";
+
+/** Which subtitle is being synced: the first one, or the second one shown with it. */
+export type SyncTarget = "primary" | "secondary";
 
 interface TextSyncState {
   syncMode: "idle" | "active";
@@ -20,6 +24,7 @@ interface TextSyncState {
   baseOffset: number;
   dirty: boolean;
   sourceFormat: "srt" | "vtt";
+  target: SyncTarget;
 }
 
 const INITIAL_STATE: TextSyncState = {
@@ -33,33 +38,49 @@ const INITIAL_STATE: TextSyncState = {
   baseOffset: 0,
   dirty: false,
   sourceFormat: "srt",
+  target: "primary",
 };
 
 export type EnterSyncResult = { ok: true } | { ok: false; reason: string };
 export type SaveResult = { ok: true } | { ok: false; reason: string };
 
-export function useTextSync(bridge: PlayerBridge | null, metaId: string) {
+export function useTextSync(
+  bridge: PlayerBridge | null,
+  metaId: string,
+  season?: number | null,
+  episode?: number | null,
+) {
   const [state, setState] = useState<TextSyncState>(INITIAL_STATE);
 
   const bridgeRef = useRef(bridge);
   bridgeRef.current = bridge;
   const metaIdRef = useRef(metaId);
   metaIdRef.current = metaId;
+  const episodeKeyRef = useRef("");
+  episodeKeyRef.current = episodeSubsKey(metaId, season, episode);
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // The live preview moves the subtitle being synced (each has its own delay in mpv).
   useEffect(() => {
     if (state.syncMode !== "active") return;
-    bridgeRef.current?.setSubDelay(state.previewOffset);
-  }, [state.syncMode, state.previewOffset]);
+    if (state.target === "secondary") bridgeRef.current?.setSecondarySubDelay(state.previewOffset);
+    else bridgeRef.current?.setSubDelay(state.previewOffset);
+  }, [state.syncMode, state.previewOffset, state.target]);
 
-  const enterSync = useCallback(async (): Promise<EnterSyncResult> => {
+  const enterSync = useCallback(async (target: SyncTarget = "primary"): Promise<EnterSyncResult> => {
     const b = bridgeRef.current;
     if (!b) return { ok: false, reason: "no-bridge" };
 
-    let cues: SubCue[] | null = b.getSelectedTrackCues();
+    // The player's state right now (subscribe hands it over at once).
+    const now: { snap: PlayerSnapshot | null } = { snap: null };
+    b.subscribe((snap) => {
+      now.snap = snap;
+    })();
+
+    let cues: SubCue[] | null = target === "primary" ? b.getSelectedTrackCues() : null;
     let sourceFormat: "srt" | "vtt" = "srt";
-    const rawUrl = b.getSelectedTrackUrl();
+    const rawUrl = target === "primary" ? b.getSelectedTrackUrl() : secondaryTrackUrl(now.snap);
 
     if ((!cues || cues.length === 0) && rawUrl) {
       const readableUrl = await resolveReadableUrl(rawUrl);
@@ -82,11 +103,8 @@ export function useTextSync(bridge: PlayerBridge | null, metaId: string) {
 
     if (rawUrl) sourceFormat = detectFormatFromUrl(rawUrl);
 
-    let baseOffset = 0;
-    const unsub = b.subscribe((snap) => {
-      baseOffset = snap.subDelaySec;
-    });
-    unsub();
+    const baseOffset =
+      (target === "secondary" ? now.snap?.secondarySubDelaySec : now.snap?.subDelaySec) ?? 0;
 
     setState({
       syncMode: "active",
@@ -99,6 +117,7 @@ export function useTextSync(bridge: PlayerBridge | null, metaId: string) {
       baseOffset,
       dirty: false,
       sourceFormat,
+      target,
     });
     return { ok: true };
   }, []);
@@ -209,7 +228,12 @@ export function useTextSync(bridge: PlayerBridge | null, metaId: string) {
           const fileName = `synced-${Date.now()}.${ext}`;
           const filePath = await pathMod.join(harborSubsDir, fileName);
           await invoke("save_text_file", { path: filePath, contents: text });
-          const ok = await b?.addSubtitle(filePath, undefined, `Synced (${ext.toUpperCase()})`, true);
+          const label = `Synced (${ext.toUpperCase()})`;
+          // The synced second subtitle stays the second one; the first stays as it is.
+          const ok =
+            cur.target === "secondary"
+              ? await b?.addSecondarySubtitle(filePath, undefined, label)
+              : await b?.addSubtitle(filePath, undefined, label, true);
           applied = ok === true;
         } catch (e) {
           console.warn("[text-sync] silent apply failed, falling back to download", e);
@@ -224,8 +248,13 @@ export function useTextSync(bridge: PlayerBridge | null, metaId: string) {
         }
       }
 
-      b?.setSubDelay(0);
-      if (mid) writePlayerPrefs(mid, { subDelaySec: 0 });
+      if (cur.target === "secondary") {
+        b?.setSecondarySubDelay(0);
+        writeEpisodeSubs(episodeKeyRef.current, { secondDelaySec: 0 });
+      } else {
+        b?.setSubDelay(0);
+        if (mid) writePlayerPrefs(mid, { subDelaySec: 0 });
+      }
       exitSync();
       return { ok: true };
     } catch (e) {
@@ -239,9 +268,14 @@ export function useTextSync(bridge: PlayerBridge | null, metaId: string) {
   const discard = useCallback(() => {
     const b = bridgeRef.current;
     const mid = metaIdRef.current;
-    const baseOffset = stateRef.current.baseOffset;
-    b?.setSubDelay(baseOffset);
-    if (mid) writePlayerPrefs(mid, { subDelaySec: baseOffset });
+    const { baseOffset, target } = stateRef.current;
+    if (target === "secondary") {
+      b?.setSecondarySubDelay(baseOffset);
+      writeEpisodeSubs(episodeKeyRef.current, { secondDelaySec: baseOffset });
+    } else {
+      b?.setSubDelay(baseOffset);
+      if (mid) writePlayerPrefs(mid, { subDelaySec: baseOffset });
+    }
     exitSync();
   }, [exitSync]);
 
@@ -258,6 +292,13 @@ export function useTextSync(bridge: PlayerBridge | null, metaId: string) {
     discard,
     exitSync,
   };
+}
+
+// The second subtitle's file, as getSelectedTrackUrl gives the first one's.
+function secondaryTrackUrl(snap: PlayerSnapshot | null): string | null {
+  const t = snap?.subtitleTracks.find((x) => x.secondarySelected);
+  if (!t || !t.external) return null;
+  return t.url ?? t.externalFilename ?? null;
 }
 
 async function resolveReadableUrl(url: string): Promise<string | null> {

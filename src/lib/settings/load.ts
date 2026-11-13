@@ -122,6 +122,12 @@ export function loadStoredSettings(): Settings {
         wyzie: false,
         opensubtitles: true,
       },
+      sub2Style:
+        parsed.sub2Style && typeof parsed.sub2Style === "object" && !Array.isArray(parsed.sub2Style)
+          ? parsed.sub2Style
+          : DEFAULT.sub2Style,
+      sub2Layout: parsed.sub2Layout === "side" ? "side" : "stacked",
+      sub2SwapSides: parsed.sub2SwapSides === true,
       hideContent: {
         ...DEFAULT.hideContent,
         ...(parsed.hideContent ?? {}),

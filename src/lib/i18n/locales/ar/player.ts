@@ -455,6 +455,19 @@ const player: Record<string, string> = {
   // Live TV: exporting a playlist.
   "The playlist was not saved.": "لم يُحفظ ملف قائمة التشغيل.",
   "Couldn't export the playlist.": "تعذّر تصدير قائمة التشغيل.",
+  // Two subtitles at once. "First" / "Second" stand for the subtitle (feminine: الترجمة).
+  First: "الأولى",
+  Second: "الثانية",
+  "First subtitle": "الترجمة الأولى",
+  "Second subtitle": "الترجمة الثانية",
+  "Shown at the top automatically": "تظهر في الأعلى تلقائيًا",
+  "Follows the first subtitle automatically": "تتبع الترجمة الأولى تلقائيًا",
+  "Couldn't add that as the second subtitle. Try another.": "تعذّرت إضافتها كترجمة ثانية. جرّب غيرها.",
+  Layout: "طريقة العرض",
+  Stacked: "فوق بعضهما",
+  "Side by side": "جنبًا إلى جنب",
+  "Swap sides": "تبديل الجانبين",
+  "Stacked while the player is taller than wide": "تظهران فوق بعضهما ما دام المشغّل أطول من عرضه",
 };
 
 export default player;

@@ -3,9 +3,17 @@ import { SvpIndicator } from "@/components/player/svp-indicator";
 import { StatsOverlay } from "@/components/player/stats-overlay";
 import { SubStyleBar } from "@/components/player/sub-style-bar";
 import { SubSyncBar } from "@/components/player/sub-sync-bar";
-import { SubtitleOverlay } from "@/components/player/subtitle-overlay";
-import type { PlayerSnapshot } from "@/lib/player/bridge";
+import { DualSubtitles, secondPlacementMode, useTallPlayerArea } from "@/components/player/dual-subtitles";
+import type { PlayerSnapshot, TrackInfo } from "@/lib/player/bridge";
+import { useSettings } from "@/lib/settings";
 import { useT } from "@/lib/i18n";
+import type { SyncTarget } from "./hooks/use-text-sync";
+
+// Guided text sync reads the subtitle file, so it needs an external subtitle.
+function textSyncable(t: TrackInfo | undefined): boolean {
+  if (!t) return false;
+  return t.external || !!t.url;
+}
 
 export function StageOverlays({
   snap,
@@ -13,11 +21,15 @@ export function StageOverlays({
   pipMode,
   subShowInPip,
   subAssNative,
+  firstSubNative,
+  secondSubNative,
+  syncTarget,
   showStats,
   holdSpeedActive,
   videoFillPill,
   subDropToast,
   onSubDelay,
+  onSecondSubDelay,
   onEnterSync,
   chromeVisible,
 }: {
@@ -26,20 +38,41 @@ export function StageOverlays({
   pipMode: boolean;
   subShowInPip: boolean;
   subAssNative: boolean;
+  /** The video player draws the first subtitle itself (styled ASS, picture subtitles, HDR). */
+  firstSubNative: boolean;
+  /** The video player draws the second subtitle itself (the page can't show over the HDR picture). */
+  secondSubNative: boolean;
+  /** Which subtitle guided text sync is working on (the other one is hidden meanwhile). */
+  syncTarget: SyncTarget | null;
   showStats: boolean;
   holdSpeedActive: boolean;
   videoFillPill: string | null;
   subDropToast: string | null;
   onSubDelay: (sec: number) => void;
-  onEnterSync?: () => void;
+  onSecondSubDelay?: (sec: number) => void;
+  onEnterSync?: (target: SyncTarget) => void;
   chromeVisible: boolean;
 }) {
   const t = useT();
+  const { settings } = useSettings();
+  const tall = useTallPlayerArea();
+  const secondTrack = snap.secondarySubTrackId
+    ? snap.subtitleTracks.find((x) => x.secondarySelected)
+    : undefined;
+  const hasSecond = !!snap.secondarySubTrackId;
+  const secondOnPage = hasSecond && !secondSubNative;
+  const firstTrack = snap.subtitleTracks.find((x) => x.selected);
   return (
     <>
-      {(!pipMode || subShowInPip) && !subAssNative && (
-        <SubtitleOverlay text={snap.subText} startSec={snap.subStartSec} scale={pipMode ? 0.45 : 1} />
-      )}
+      <DualSubtitles
+        snap={snap}
+        pipMode={pipMode}
+        showFirst={(!pipMode || subShowInPip) && !subAssNative && syncTarget !== "secondary"}
+        // Picture-in-picture shows only the first subtitle; the second comes back after.
+        showSecond={secondOnPage && !pipMode && syncTarget !== "primary"}
+        firstDrawnByPlayer={firstSubNative}
+        portrait={tall}
+      />
       {showStats && !pipMode && <StatsOverlay snap={snap} engine={engine} />}
       {!pipMode && <Anime4kIndicator engine={engine} chromeVisible={chromeVisible} />}
       {!pipMode && <SvpIndicator engine={engine} chromeVisible={chromeVisible} />}
@@ -59,13 +92,30 @@ export function StageOverlays({
           {subDropToast}
         </div>
       )}
-      {!pipMode && <SubStyleBar />}
+      {!pipMode && (
+        <SubStyleBar
+          second={
+            secondOnPage
+              ? { placement: secondPlacementMode(settings.sub2Layout, tall, firstSubNative) }
+              : null
+          }
+        />
+      )}
       {!pipMode && (
         <SubSyncBar
           delaySec={snap.subDelaySec}
           onDelay={onSubDelay}
           onEnterSync={onEnterSync}
-          syncAvailable={snap.subtitleTracks.some((t) => t.selected && (t.external || !!(t as { url?: string }).url))}
+          syncAvailable={textSyncable(firstTrack)}
+          second={
+            hasSecond && onSecondSubDelay
+              ? {
+                  delaySec: snap.secondarySubDelaySec,
+                  onDelay: onSecondSubDelay,
+                  syncAvailable: textSyncable(secondTrack),
+                }
+              : null
+          }
         />
       )}
     </>

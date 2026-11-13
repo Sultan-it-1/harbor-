@@ -29,6 +29,23 @@ export type ContentCategory = "anime" | "liveTv" | "sports" | "adult";
 
 export type ContentFilters = Record<ContentCategory, boolean>;
 
+/** The parts of a subtitle's look, named as the first subtitle's settings are. */
+export type SubLook = Partial<{
+  subFontSize: number;
+  subFontColor: string;
+  subBorderColor: string;
+  subBorderSize: number;
+  subMarginY: number;
+  subAlignX: "left" | "center" | "right";
+  subStyle: "shadow" | "outline" | "box";
+  subFontFamily: string;
+  subBold: boolean;
+  subBoxOpacity: number;
+  subBoxColor: string;
+  subOpacity: number;
+  subLineSpacing: number;
+}>;
+
 export type Settings = {
   translatePosters: boolean;
   blurComments: boolean;
@@ -161,6 +178,13 @@ export type Settings = {
   subLineSpacing: number;
   subProvidersEnabled: { wyzie: boolean; opensubtitles: boolean; jimaku: boolean; addons: boolean };
   subShowInPip: boolean;
+  /** The second subtitle's own look. A value left out follows the first subtitle's (its size
+   *  starts at 90% of the first's and its colour at yellow, see resolveSecondLook). */
+  sub2Style: SubLook;
+  /** Two subtitles at once: the second right above the first, or each in its own half. */
+  sub2Layout: "stacked" | "side";
+  /** Side by side: the two halves change places. */
+  sub2SwapSides: boolean;
   subtitlesOffByDefault: boolean;
   preferEmbeddedSubs: boolean;
   betaUpdates: boolean;

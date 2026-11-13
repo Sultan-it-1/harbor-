@@ -7,6 +7,9 @@ export type PerShowPrefs = {
   audioLang?: string;
   subLang?: string;
   subsOff?: boolean;
+  /** The second subtitle's language, used for episodes that have no exact second subtitle
+   *  remembered (see sub-memory.ts). Empty: no second subtitle. */
+  sub2Lang?: string;
   updatedAt: number;
 };
 

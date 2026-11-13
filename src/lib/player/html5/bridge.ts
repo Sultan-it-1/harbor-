@@ -528,6 +528,9 @@ export function createHtml5Bridge(): PlayerBridge {
       tickCues();
     },
     setSubVisible() {},
+    // Two subtitles at once is a desktop (mpv) feature.
+    setSecondarySubtitleTrack() {},
+    setSecondarySubDelay() {},
     setSubDelay(sec) {
       subDelaySec = sec;
       lastCueId = "";
@@ -568,6 +571,9 @@ export function createHtml5Bridge(): PlayerBridge {
       }
       refreshSnapshot();
       return true;
+    },
+    async addSecondarySubtitle() {
+      return false;
     },
     getSelectedTrackCues() {
       const track = subTracks.find((t) => t.id === activeSubId);

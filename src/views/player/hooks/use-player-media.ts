@@ -40,6 +40,9 @@ export function usePlayerMedia(params: {
   castActiveRef: RefObject<boolean>;
   season: number | undefined;
   episode: number | undefined;
+  pipMode: boolean;
+  /** Which subtitle guided text sync is working on; the other one is hidden meanwhile. */
+  syncTarget: "primary" | "secondary" | null;
 }) {
   const {
     src,
@@ -55,6 +58,8 @@ export function usePlayerMedia(params: {
     castActiveRef,
     season,
     episode,
+    pipMode,
+    syncTarget,
   } = params;
 
   useWebviewMemory(engine === "mpv");
@@ -114,11 +119,23 @@ export function usePlayerMedia(params: {
     hdrNativeSurface || subAssNative || (subEmbed && isImageSubTrack(selectedSubTrack));
   const suppressHtmlSubs = subAssNative || hdrNativeSurface;
   useSubStyleApply({ engine, settings, subAssNative, bridgeReady, bridgeKey });
+  // Syncing the second subtitle hides the first; when mpv draws the first, mpv hides it.
+  const hideFirstForSync = syncTarget === "secondary";
   useEffect(() => {
     if (!subEmbed && !hdrNativeSurface) return;
     if (!bridgeReady) return;
-    bridgeRef.current?.setSubVisible(subNativeRender);
-  }, [subEmbed, hdrNativeSurface, subNativeRender, selectedSubTrack?.id, bridgeReady, bridgeKey]);
+    bridgeRef.current?.setSubVisible(subNativeRender && !hideFirstForSync);
+  }, [subEmbed, hdrNativeSurface, subNativeRender, hideFirstForSync, selectedSubTrack?.id, bridgeReady, bridgeKey]);
+  // The second subtitle is drawn by the page, except over the HDR picture, where the page
+  // can't show and mpv draws it (at the top of the picture). Not in picture-in-picture, and
+  // not while the first one is being synced.
+  const secondSubNative = hdrNativeSurface;
+  const hasSecondSub = snap.secondarySubTrackId != null;
+  useEffect(() => {
+    if (!subEmbed && !hdrNativeSurface) return;
+    if (!bridgeReady || !hasSecondSub) return;
+    bridgeRef.current?.setSecondarySubVisible?.(secondSubNative && !pipMode && syncTarget !== "primary");
+  }, [subEmbed, hdrNativeSurface, secondSubNative, pipMode, syncTarget, hasSecondSub, bridgeReady, bridgeKey]);
   useEffect(() => {
     clearImportedSubs();
   }, [src.meta.id]);
@@ -209,5 +226,13 @@ export function usePlayerMedia(params: {
     });
   }, [engine, src.url, src.meta.name, src.meta.poster, src.episode, snap.durationSec]);
 
-  return { resolvedImdbId, subAssNative: suppressHtmlSubs, captureExitSnapshot, download, subDropToast };
+  return {
+    resolvedImdbId,
+    subAssNative: suppressHtmlSubs,
+    firstSubNative: subNativeRender,
+    secondSubNative,
+    captureExitSnapshot,
+    download,
+    subDropToast,
+  };
 }

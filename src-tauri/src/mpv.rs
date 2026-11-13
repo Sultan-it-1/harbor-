@@ -106,6 +106,15 @@ const OBSERVED_PROPS: &[(&str, u64, PropertyKind)] = &[
     ("dwidth", 14, PropertyKind::Int64),
     ("dheight", 15, PropertyKind::Int64),
     ("video-params/gamma", 16, PropertyKind::String),
+    // The second subtitle (mpv's secondary-sid). The page draws its text like the first one's.
+    // Each event reaches the page under the property name observed here, so these names are
+    // what src/lib/player/mpv.ts looks for.
+    ("secondary-sub-text", 17, PropertyKind::String),
+    ("secondary-sub-delay", 18, PropertyKind::Double),
+    // Which track is the first and which the second, for an mpv whose track-list has no
+    // main-selection field (both tracks only say "selected" there).
+    ("sid", 19, PropertyKind::String),
+    ("secondary-sid", 20, PropertyKind::String),
 ];
 
 #[derive(Clone, Copy)]
@@ -1305,12 +1314,27 @@ pub async fn mpv_sub_add(
     lang: Option<String>,
     title: Option<String>,
     select: Option<bool>,
+    secondary: Option<bool>,
 ) -> Result<(), String> {
     let mpv = {
         let g = state.inner.lock().await;
         g.as_ref().map(|s| s.mpv.clone()).ok_or_else(|| "mpv not started".to_string())?
     };
-    let flag = if select.unwrap_or(true) { "select" } else { "auto" };
+    let as_secondary = secondary.unwrap_or(false);
+    // A second subtitle is added without selecting it (selecting would replace the first one)
+    // and is then made mpv's secondary-sid below.
+    let flag = if as_secondary {
+        "auto"
+    } else if select.unwrap_or(true) {
+        "select"
+    } else {
+        "auto"
+    };
+    let count_before = if as_secondary {
+        mpv.get_property::<i64>("track-list/count").unwrap_or(0)
+    } else {
+        0
+    };
     let title_input = title.filter(|s| !s.is_empty()).unwrap_or_default();
     let lang_owned = lang.filter(|s| !s.is_empty()).unwrap_or_default();
     let title_for_mpv = if !title_input.is_empty() {
@@ -1343,7 +1367,51 @@ pub async fn mpv_sub_add(
     if rc < 0 {
         return Err(format!("sub-add failed: mpv_command rc={}", rc));
     }
+    if as_secondary {
+        let id = find_added_sub_track(&mpv, count_before, &url)
+            .ok_or_else(|| "sub-add: the new subtitle track was not found".to_string())?;
+        mpv.set_property("secondary-sid", id)
+            .map_err(|e| format!("set secondary-sid={}: {}", id, e))?;
+    }
     Ok(())
+}
+
+// The subtitle track a sub-add just made. mpv puts new tracks after the ones it already had.
+// Other adds can run at the same time (the page keeps loading addon subtitles while the viewer
+// picks one), so the new track whose file is the one we added wins, and the newest new
+// subtitle track is only the fallback.
+fn find_added_sub_track(mpv: &Mpv, count_before: i64, url: &str) -> Option<i64> {
+    let count = mpv.get_property::<i64>("track-list/count").ok()?;
+    let mut newest: Option<i64> = None;
+    for i in (count_before.max(0)..count).rev() {
+        let kind = mpv
+            .get_property::<String>(&format!("track-list/{}/type", i))
+            .unwrap_or_default();
+        if kind != "sub" {
+            continue;
+        }
+        let Ok(id) = mpv.get_property::<i64>(&format!("track-list/{}/id", i)) else {
+            continue;
+        };
+        let file = mpv
+            .get_property::<String>(&format!("track-list/{}/external-filename", i))
+            .unwrap_or_default();
+        if same_sub_file(&file, url) {
+            return Some(id);
+        }
+        if newest.is_none() {
+            newest = Some(id);
+        }
+    }
+    newest
+}
+
+// mpv may write the path back with other slashes (Windows), so the two are compared loosely.
+fn same_sub_file(a: &str, b: &str) -> bool {
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    a == b || a.replace('\\', "/").eq_ignore_ascii_case(&b.replace('\\', "/"))
 }
 
 fn sub_cache_dir() -> PathBuf {

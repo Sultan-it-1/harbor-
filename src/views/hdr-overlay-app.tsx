@@ -6,6 +6,7 @@ import { DragClickStage } from "./player/drag-click-stage";
 import { emptySnapshot, type PlayerSnapshot } from "@/lib/player/bridge";
 import { createForwardingMpvBridge } from "@/lib/player/mpv-forward";
 import { hdrOverlayEmitAction, onHdrStageProps } from "@/lib/hdr-overlay";
+import { SecondSubProvider, type SecondSubControls } from "@/lib/player/second-sub-context";
 import type { PlayerSrc } from "@/lib/view";
 
 export type HdrStagePayload = {
@@ -70,6 +71,23 @@ function HdrOverlayChrome() {
   const bridgeRef = useRef(bridge);
   const snapRef = useRef<PlayerSnapshot>(emptySnapshot);
   const gotPayloadRef = useRef(false);
+  const engineIsMpv = payload?.engine === "mpv";
+  // The second subtitle is changed by the main window (it also remembers the choice); this
+  // window's menu only passes the request on.
+  const secondSub = useMemo<SecondSubControls | null>(
+    () =>
+      engineIsMpv
+        ? {
+            onSelect: (id) => void hdrOverlayEmitAction("hdr-stage://sub2-select", { id }),
+            onAdd: async (url, lang, title) => {
+              await hdrOverlayEmitAction("hdr-stage://sub2-add", { url, lang, title });
+              return true;
+            },
+            onDelay: (sec) => void hdrOverlayEmitAction("hdr-stage://sub2-delay", { sec }),
+          }
+        : null,
+    [engineIsMpv],
+  );
 
   useEffect(() => {
     const un = onHdrStageProps<HdrStagePayload>((p) => {
@@ -133,55 +151,74 @@ function HdrOverlayChrome() {
         onDoubleClick={() => act("hdr-stage://fullscreen")}
         onSeekStep={(delta) => act("hdr-stage://seek-step", { delta })}
       />
-      <ShellLayer
-        shellId={payload.shellId}
-        shellSnap={snap}
-        snapRef={snapRef}
-        bridgeRef={bridgeRef}
-        engine={payload.engine}
-        visible={payload.visible}
-        fullscreen={payload.fullscreen}
-        drawMode={false}
-        hideOthersDrawings={false}
-        pipMode={payload.pipMode}
-        showDraw={false}
-        metaId={src.meta.id}
-        onMenuOpenChange={(open) => act("hdr-stage://menu-open", { open })}
-        onBack={() => act("hdr-stage://back")}
-        onPlayPause={() => act("hdr-stage://play-pause")}
-        onSeek={(sec) => act("hdr-stage://seek", { sec })}
-        onSeekStep={(delta) => act("hdr-stage://seek-step", { delta })}
-        rememberSubChoice={(t) => act("hdr-stage://remember-sub", { lang: t?.lang ?? null })}
-        onPiP={() => act("hdr-stage://pip")}
-        onFullscreen={() => act("hdr-stage://fullscreen")}
-        openCastMenu={() => act("hdr-stage://cast")}
-        onToggleDraw={() => {}}
-        onToggleHideOthers={() => {}}
-        onScreenshot={() => act("hdr-stage://screenshot")}
-        onPickAnother={() => act("hdr-stage://pick-another")}
-        canPickAnother={false}
-        title={src.title}
-        subtitle={src.subtitle}
-        hoverTitle={src.meta.name}
-        hoverSub={
-          src.episode
-            ? `S${src.episode.imdbSeason ?? src.episode.season} · E${String(src.episode.imdbEpisode ?? src.episode.episode).padStart(2, "0")}`
-            : undefined
-        }
-        hasPrevEp={payload.hasPrevEp}
-        hasNextEp={payload.hasNextEp}
-        onPrevEp={() => act("hdr-stage://prev-ep")}
-        onNextEp={() => act("hdr-stage://next-ep")}
-        metaImdbId={payload.resolvedImdbId}
-        metaTitle={src.meta.name ?? null}
-        metaReleaseDate={src.meta.releaseDate ?? null}
-        meta={src.meta}
-        tmdbKey={payload.tmdbKey}
-        season={src.episode?.season ?? null}
-        episode={src.episode?.episode ?? null}
-        download={download}
-        sleep={undefined}
-      />
+      <SecondSubProvider value={secondSub}>
+        <ShellLayer
+          shellId={payload.shellId}
+          shellSnap={snap}
+          snapRef={snapRef}
+          bridgeRef={bridgeRef}
+          engine={payload.engine}
+          visible={payload.visible}
+          fullscreen={payload.fullscreen}
+          drawMode={false}
+          hideOthersDrawings={false}
+          pipMode={payload.pipMode}
+          showDraw={false}
+          metaId={src.meta.id}
+          onMenuOpenChange={(open) => act("hdr-stage://menu-open", { open })}
+          onBack={() => act("hdr-stage://back")}
+          onPlayPause={() => act("hdr-stage://play-pause")}
+          onSeek={(sec) => act("hdr-stage://seek", { sec })}
+          onSeekStep={(delta) => act("hdr-stage://seek-step", { delta })}
+          rememberSubChoice={(t) =>
+            act(
+              "hdr-stage://remember-sub",
+              t
+                ? {
+                    off: false,
+                    id: t.id,
+                    lang: t.lang ?? null,
+                    title: t.title,
+                    url: t.url,
+                    external: t.external,
+                    forced: t.forced,
+                    hearingImpaired: t.hearingImpaired,
+                    secondarySelected: t.secondarySelected,
+                  }
+                : { off: true, lang: null },
+            )
+          }
+          onPiP={() => act("hdr-stage://pip")}
+          onFullscreen={() => act("hdr-stage://fullscreen")}
+          openCastMenu={() => act("hdr-stage://cast")}
+          onToggleDraw={() => {}}
+          onToggleHideOthers={() => {}}
+          onScreenshot={() => act("hdr-stage://screenshot")}
+          onPickAnother={() => act("hdr-stage://pick-another")}
+          canPickAnother={false}
+          title={src.title}
+          subtitle={src.subtitle}
+          hoverTitle={src.meta.name}
+          hoverSub={
+            src.episode
+              ? `S${src.episode.imdbSeason ?? src.episode.season} · E${String(src.episode.imdbEpisode ?? src.episode.episode).padStart(2, "0")}`
+              : undefined
+          }
+          hasPrevEp={payload.hasPrevEp}
+          hasNextEp={payload.hasNextEp}
+          onPrevEp={() => act("hdr-stage://prev-ep")}
+          onNextEp={() => act("hdr-stage://next-ep")}
+          metaImdbId={payload.resolvedImdbId}
+          metaTitle={src.meta.name ?? null}
+          metaReleaseDate={src.meta.releaseDate ?? null}
+          meta={src.meta}
+          tmdbKey={payload.tmdbKey}
+          season={src.episode?.season ?? null}
+          episode={src.episode?.episode ?? null}
+          download={download}
+          sleep={undefined}
+        />
+      </SecondSubProvider>
     </div>
   );
 }

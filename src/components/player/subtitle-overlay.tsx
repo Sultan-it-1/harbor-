@@ -1,21 +1,37 @@
+import type { Ref } from "react";
 import { useSettings } from "@/lib/settings";
+import { SUB_MARGIN_MAX, type FullSubLook } from "@/lib/player/dual-subs";
+
+/** Where a subtitle sits. "bottom" is the usual place (its own distance from the bottom).
+ *  The others are used when a second subtitle shows with the first one. */
+export type SubPlacement =
+  | { kind: "bottom" }
+  | { kind: "above"; bottom: string }
+  | { kind: "below"; top: string }
+  | { kind: "top" }
+  | { kind: "half"; side: "left" | "right" };
 
 type Props = {
   text: string;
   startSec: number;
   scale?: number;
+  /** The look to draw with; the first subtitle's settings when left out. */
+  look?: FullSubLook;
+  placement?: SubPlacement;
+  boxRef?: Ref<HTMLDivElement>;
 };
 
-export function SubtitleOverlay({ text, startSec, scale = 1 }: Props) {
+export function SubtitleOverlay({ text, startSec, scale = 1, look, placement, boxRef }: Props) {
   const { settings } = useSettings();
   if (!text) return null;
 
-  const fontSize = Math.round(clamp(settings.subFontSize, 16, 120) * scale);
-  const marginY = clamp(settings.subMarginY, 0, 50);
-  const fontColor = settings.subFontColor || "#FFFFFF";
-  const align = settings.subAlignX || "center";
-  const family = fontFamilyFor(settings.subFontFamily);
-  const style = settings.subStyle ?? "shadow";
+  const s = look ?? settings;
+  const fontSize = Math.round(clamp(s.subFontSize, 16, 120) * scale);
+  const marginY = clamp(s.subMarginY, 0, SUB_MARGIN_MAX);
+  const fontColor = s.subFontColor || "#FFFFFF";
+  const align = s.subAlignX || "center";
+  const family = fontFamilyFor(s.subFontFamily);
+  const style = s.subStyle ?? "shadow";
   const lines = text.split("\n");
 
   const justify = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
@@ -23,25 +39,25 @@ export function SubtitleOverlay({ text, startSec, scale = 1 }: Props) {
   const baseTextStyle: React.CSSProperties = {
     color: fontColor,
     fontFamily: family,
-    fontWeight: settings.subBold ? 700 : 400,
+    fontWeight: s.subBold ? 700 : 400,
     fontSize: `${fontSize}px`,
     lineHeight: 1.2,
-    letterSpacing: `${(-0.005 + (settings.subLineSpacing ?? 0) * 0.06).toFixed(3)}em`,
+    letterSpacing: `${(-0.005 + (s.subLineSpacing ?? 0) * 0.06).toFixed(3)}em`,
     whiteSpace: "pre-wrap",
     textAlign: align as "left" | "center" | "right",
   };
 
   if (style === "outline") {
-    const borderSize = clamp(settings.subBorderSize, 1, 6) || 2;
-    const borderColor = settings.subBorderColor || "#000000";
+    const borderSize = clamp(s.subBorderSize, 1, 6) || 2;
+    const borderColor = s.subBorderColor || "#000000";
     baseTextStyle.textShadow = buildOutline(borderColor, borderSize);
   } else if (style === "shadow") {
     baseTextStyle.textShadow =
       "0 1px 2px rgba(0,0,0,0.95), 0 2px 6px rgba(0,0,0,0.85), 0 0 18px rgba(0,0,0,0.55)";
   }
 
-  const boxOpacity = clamp(settings.subBoxOpacity, 0, 1);
-  const boxRgb = hexToRgb(settings.subBoxColor || "#000000");
+  const boxOpacity = clamp(s.subBoxOpacity, 0, 1);
+  const boxRgb = hexToRgb(s.subBoxColor || "#000000");
   const boxStyle: React.CSSProperties | undefined =
     style === "box"
       ? {
@@ -52,15 +68,38 @@ export function SubtitleOverlay({ text, startSec, scale = 1 }: Props) {
         }
       : undefined;
 
-  const opacity = clamp(settings.subOpacity ?? 1, 0.1, 1);
+  const opacity = clamp(s.subOpacity ?? 1, 0.1, 1);
+
+  const where = placement ?? { kind: "bottom" };
+  const half = where.kind === "half";
+  const rowStyle: React.CSSProperties =
+    where.kind === "above"
+      ? { bottom: where.bottom, opacity }
+      : where.kind === "below"
+        ? { top: where.top, opacity }
+        : where.kind === "top"
+          ? { top: "5%", opacity }
+          : where.kind === "half"
+            ? {
+                bottom: `${marginY}%`,
+                opacity,
+                left: where.side === "left" ? 0 : "50%",
+                right: where.side === "left" ? "50%" : 0,
+              }
+            : { bottom: `${marginY}%`, opacity };
 
   return (
     <div
       key={startSec}
-      className={`pointer-events-none absolute inset-x-0 z-10 flex ${justify} px-[6%]`}
-      style={{ bottom: `${marginY}%`, opacity }}
+      ref={boxRef}
+      className={
+        half
+          ? `pointer-events-none absolute z-10 flex ${justify} px-[3%]`
+          : `pointer-events-none absolute inset-x-0 z-10 flex ${justify} px-[6%]`
+      }
+      style={rowStyle}
     >
-      <div className="max-w-[80%]" style={boxStyle}>
+      <div className={half ? "max-w-full" : "max-w-[80%]"} style={boxStyle}>
         <div style={baseTextStyle}>
           {lines.map((line, i) => (
             <div key={i}>{line}</div>
@@ -69,6 +108,14 @@ export function SubtitleOverlay({ text, startSec, scale = 1 }: Props) {
       </div>
     </div>
   );
+}
+
+/** The height of one line of a subtitle in this look, box padding included: where a second
+ *  subtitle sits above the first while the first has no line on screen. */
+export function oneLineHeight(look: FullSubLook): number {
+  const fontSize = Math.round(clamp(look.subFontSize, 16, 120));
+  const pad = look.subStyle === "box" ? 2 * Math.round(fontSize * 0.18) : 0;
+  return Math.round(fontSize * 1.2) + pad;
 }
 
 function fontFamilyFor(family: string | undefined): string {

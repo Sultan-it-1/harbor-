@@ -9,10 +9,16 @@ export function VariantRow({
   track,
   selected,
   onPick,
+  disabled,
+  note,
 }: {
   track: TrackInfo;
   selected: boolean;
   onPick: () => void;
+  /** Can't be picked here (it is already the other subtitle). */
+  disabled?: boolean;
+  /** A short tag such as "Second subtitle". */
+  note?: string;
 }) {
   const tr = useT();
   const imported = useImportedSubs();
@@ -22,6 +28,7 @@ export function VariantRow({
   if (track.hearingImpaired) tags.push({ label: tr("HI/SDH"), tone: "warn" });
   if (track.default) tags.push({ label: tr("Default"), tone: "default" });
   if (isImageSubTrack(track)) tags.push({ label: tr("No styling"), tone: "warn" });
+  if (note) tags.unshift({ label: note, tone: "info" });
   const sourceLabel = isImported ? tr("Imported") : track.external ? tr("External") : tr("Embedded");
   const codec = track.codec?.toUpperCase();
   const release = pickReleaseHint(track);
@@ -32,7 +39,8 @@ export function VariantRow({
   return (
     <button
       onClick={onPick}
-      className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-start transition-colors ${
+      disabled={disabled}
+      className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
         selected
           ? "bg-elevated ring-1 ring-edge"
           : isImported

@@ -5,6 +5,7 @@ import { getPlayerShell, type PlayerShellProps } from "@/lib/player-shells/regis
 import { writePlayerPrefs } from "@/lib/player-prefs";
 import { writePlayerVolume } from "@/lib/player-volume";
 import type { useVideoDownload } from "./hooks/use-video-download";
+import type { SubChoice } from "./hooks/use-playback-controls";
 
 export function ShellLayer({
   shellId,
@@ -77,7 +78,7 @@ export function ShellLayer({
   onPlayPause: () => void;
   onSeek: (sec: number) => void;
   onSeekStep: (delta: number) => void;
-  rememberSubChoice: (t: { lang?: string } | null | undefined) => void;
+  rememberSubChoice: (t: SubChoice) => void;
   onEnterSync?: () => void;
   cropMode?: string;
   onCropMode?: (id: string) => void;
@@ -158,7 +159,8 @@ export function ShellLayer({
       onAddSubtitle={(url, lang, title2) => {
         const p = bridgeRef.current?.addSubtitle(url, lang, title2) ?? Promise.resolve(false);
         void p.then((ok) => {
-          if (ok) rememberSubChoice({ lang });
+          // Remembered by its address too, so this exact subtitle comes back next time.
+          if (ok) rememberSubChoice({ lang, url, external: true });
         });
         return p;
       }}

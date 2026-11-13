@@ -1,13 +1,17 @@
 import { useEffect, useRef } from "react";
 import { hdrOverlayEmitProps } from "@/lib/hdr-overlay";
+import type { SecondSubControls } from "@/lib/player/second-sub-context";
 import type { HdrStagePayload } from "../hdr-overlay-app";
+import type { SubChoice } from "./hooks/use-playback-controls";
 
 export type HdrStageHandlers = {
   playPause: () => void;
   fullscreen: () => void;
   seek: (sec: number) => void;
   seekStep: (delta: number) => void;
-  rememberSub: (t: { lang?: string } | null | undefined) => void;
+  rememberSub: (t: SubChoice) => void;
+  /** The second subtitle, changed from the HDR window's menu (null: none possible). */
+  sub2: SecondSubControls | null;
   pip: () => void;
   cast: () => void;
   back: () => void;
@@ -63,9 +67,19 @@ export function HdrStageBridge({
       await bind("hdr-stage://seek", (p) => h().seek((p as { sec: number }).sec));
       await bind("hdr-stage://seek-step", (p) => h().seekStep((p as { delta: number }).delta));
       await bind("hdr-stage://remember-sub", (p) => {
-        const lang = (p as { lang: string | null }).lang;
-        h().rememberSub(lang ? { lang } : null);
+        const { off, lang, ...track } = p as { off?: boolean; lang?: string | null } & NonNullable<SubChoice>;
+        if (off === true) h().rememberSub(null);
+        // A message with only a language (no "off" field): what the HDR window used to send.
+        else if (off === undefined) h().rememberSub(lang ? { lang } : null);
+        else h().rememberSub({ ...track, lang: lang ?? undefined });
       });
+      // The second subtitle is changed here, in the main window, which also remembers it.
+      await bind("hdr-stage://sub2-select", (p) => h().sub2?.onSelect((p as { id: string | null }).id));
+      await bind("hdr-stage://sub2-add", (p) => {
+        const a = p as { url: string; lang?: string; title?: string };
+        void h().sub2?.onAdd(a.url, a.lang, a.title);
+      });
+      await bind("hdr-stage://sub2-delay", (p) => h().sub2?.onDelay((p as { sec: number }).sec));
       await bind("hdr-stage://pip", () => h().pip());
       await bind("hdr-stage://cast", () => h().cast());
       await bind("hdr-stage://back", () => h().back());

@@ -6,6 +6,7 @@ import { searchSubtitles } from "@/lib/subtitles/search";
 import { rankSubtitleCandidates } from "@/lib/subtitles/candidate-ranking";
 import type { StreamHints } from "@/lib/subtitles/stream-hints";
 import { readPlayerPrefs, type PerShowPrefs } from "@/lib/player-prefs";
+import { episodeSubsKey, findPickedTrack, readEpisodeSubs } from "@/lib/player/sub-memory";
 import { tmdbImdbId } from "@/lib/providers/tmdb";
 import type { Addon } from "@/lib/addons";
 import { gatherSubtitleAddons } from "@/lib/subtitles/addon-source";
@@ -160,9 +161,32 @@ export function useTrackAutoload(params: {
     const preferredLang = (r: { lang?: string }) => langScore(r.lang ?? "", langs) >= 0;
     const setAside = results.filter((r) => !rankedSet.has(r) && preferredLang(r));
     const otherLangs = android ? results.filter((r) => !preferredLang(r)) : [];
-    const matches = [...ranked, ...setAside, ...otherLangs];
+    //   4. Desktop: the subtitles remembered for this episode, when the addons offer them
+    //      again, and the title's second-subtitle language, so they can be put back even
+    //      when they aren't in a preferred language.
+    const memory =
+      engine === "mpv"
+        ? readEpisodeSubs(episodeSubsKey(src.meta.id, src.episode?.season, src.episode?.episode))
+        : null;
+    const rememberedUrls = new Set<string>();
+    for (const pick of [memory?.first, memory?.second]) {
+      if (pick?.kind === "url") rememberedUrls.add(pick.url);
+    }
+    const sub2Lang = engine === "mpv" ? readPlayerPrefs(src.meta.id)?.sub2Lang : undefined;
+    const extraLangs = sub2Lang && langScore(sub2Lang, langs) < 0 ? [sub2Lang] : [];
+    const listed = new Set([...ranked, ...setAside, ...otherLangs]);
+    const extraRanked = extraLangs.length > 0 ? rankSubtitleCandidates(results, extraLangs, hints) : [];
+    const extraRankedSet = new Set(extraRanked);
+    const extra = [
+      ...extraRanked,
+      ...results.filter(
+        (r) => extraLangs.length > 0 && !extraRankedSet.has(r) && langScore(r.lang ?? "", extraLangs) >= 0,
+      ),
+      ...results.filter((r) => rememberedUrls.has(r.url)),
+    ].filter((r, i, all) => !listed.has(r) && all.indexOf(r) === i);
+    const matches = [...ranked, ...setAside, ...otherLangs, ...extra];
     console.info(
-      `[subs/autoload] ${ranked.length} ranked + ${setAside.length} set aside in preferred langs, ${otherLangs.length} other`,
+      `[subs/autoload] ${ranked.length} ranked + ${setAside.length} set aside in preferred langs, ${otherLangs.length} other, ${extra.length} remembered`,
     );
     const perLang = new Map<string, number>();
     // 15 per preferred language on Android: with the best ones first, a longer list only
@@ -174,7 +198,8 @@ export function useTrackAutoload(params: {
     for (const r of matches) {
       const k = (r.lang ?? "und").toLowerCase();
       const n = perLang.get(k) ?? 0;
-      if (n >= maxForLang(r.lang ?? "")) continue;
+      // A remembered subtitle is always added, however many of its language there are.
+      if (n >= maxForLang(r.lang ?? "") && !rememberedUrls.has(r.url)) continue;
       perLang.set(k, n + 1);
       attempted++;
       const ok = await b.addSubtitle(r.url, r.lang, labelForTrack(r), false);
@@ -273,17 +298,28 @@ export function useTrackAutoload(params: {
       const userPicked =
         current != null && autoSubIdRef.current != null && current.id !== autoSubIdRef.current;
       if (!userPicked) {
+        // The second subtitle's track is not a candidate for the first one (picking it would
+        // take the second away).
+        const candidates = snap.subtitleTracks.filter((t) => !t.secondarySelected);
+        // The exact subtitle picked for this episode last time, once the player has it again
+        // (an addon subtitle only if it is offered again). The language memory is the fallback.
+        const episodeMemory = readEpisodeSubs(
+          episodeSubsKey(src.meta.id, src.episode?.season, src.episode?.episode),
+        );
+        const remembered = findPickedTrack(candidates, episodeMemory?.first);
         const nativeAudio =
           settings.forcedSubsWhenNativeAudio &&
           effAudio != null &&
           langScore(effAudio.lang ?? "", subLangs) >= 0;
-        const want = nativeAudio
-          ? (snap.subtitleTracks
-              .filter(isForcedTrack)
-              .sort(
-                (a, b) => langScore(b.lang ?? "", subLangs) - langScore(a.lang ?? "", subLangs),
-              )[0] ?? null)
-          : pickDesiredSub(allow(snap.subtitleTracks), subLangs, settings.preferEmbeddedSubs);
+        const want = remembered
+          ? remembered
+          : nativeAudio
+            ? (candidates
+                .filter(isForcedTrack)
+                .sort(
+                  (a, b) => langScore(b.lang ?? "", subLangs) - langScore(a.lang ?? "", subLangs),
+                )[0] ?? null)
+            : pickDesiredSub(allow(candidates), subLangs, settings.preferEmbeddedSubs);
         if (want && want.id !== current?.id) {
           bridgeRef.current?.setSubtitleTrack(want.id);
           autoSubIdRef.current = want.id;
@@ -300,7 +336,7 @@ export function useTrackAutoload(params: {
         bridgeRef.current?.setSubDelay(prefs.subDelaySec);
       }
     }
-  }, [engine, src.url, src.meta.id, snap.audioTracks, snap.subtitleTracks, snap.rate, snap.subDelaySec, settings]);
+  }, [engine, src.url, src.meta.id, src.episode?.season, src.episode?.episode, snap.audioTracks, snap.subtitleTracks, snap.rate, snap.subDelaySec, settings]);
 
   useEffect(() => {
     if (!subsOffFor(readPlayerPrefs(src.meta.id), settings)) return;

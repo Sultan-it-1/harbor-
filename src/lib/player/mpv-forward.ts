@@ -46,6 +46,14 @@ export function createForwardingMpvBridge(): ForwardingBridge {
       void set("aid", Number(id) || id);
     },
     setSubtitleTrack(id) {
+      // Same rules as the main window's player: turning the first subtitle off ends the second
+      // one, and the second lets go of its track before that track becomes the first.
+      if (id == null || snap.secondarySubTrackId === id) {
+        if (snap.secondarySubTrackId != null) {
+          void set("secondary-sid", "no").then(() => set("sid", id == null ? "no" : Number(id) || id));
+          return;
+        }
+      }
       void set("sid", id == null ? "no" : Number(id) || id);
     },
     setSubVisible(on) {
@@ -53,6 +61,13 @@ export function createForwardingMpvBridge(): ForwardingBridge {
     },
     setSubDelay(sec) {
       void set("sub-delay", sec);
+    },
+    setSecondarySubtitleTrack(id) {
+      if (id != null && snap.subtitleTracks.some((t) => t.selected && t.id === id)) return;
+      void set("secondary-sid", id == null ? "no" : Number(id) || id);
+    },
+    setSecondarySubDelay(sec) {
+      void set("secondary-sub-delay", sec);
     },
     setAudioDelay(sec) {
       void set("audio-delay", sec);
@@ -73,6 +88,14 @@ export function createForwardingMpvBridge(): ForwardingBridge {
     async addSubtitle(url, lang, title, select) {
       try {
         await invoke("mpv_sub_add", { url, lang: lang ?? null, title: title ?? null, select: select ?? true });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async addSecondarySubtitle(url, lang, title) {
+      try {
+        await invoke("mpv_sub_add", { url, lang: lang ?? null, title: title ?? null, select: false, secondary: true });
         return true;
       } catch {
         return false;

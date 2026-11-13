@@ -109,6 +109,127 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
     listeners.forEach((l) => l(next));
   };
 
+  // mpv's own word on which track is the first (sid) and which the second (secondary-sid)
+  // subtitle: an id, null for none, undefined while mpv hasn't said.
+  let mpvSid: string | null | undefined = undefined;
+  let mpvSecondarySid: string | null | undefined = undefined;
+
+  // The address a subtitle was added from. The shell downloads addon subtitles to a temp file
+  // first, so mpv only knows that file; a subtitle mpv loaded straight from the web keeps its
+  // own address.
+  const addonUrlFor = (externalFilename: string): string | undefined =>
+    urlByExternalFilename.get(externalFilename) ??
+    (/^https?:/i.test(externalFilename) ? externalFilename : undefined);
+
+  const trackListHasMainSelection = (list: Array<Record<string, unknown>>): boolean =>
+    list.some((t) => t.type === "sub" && t.selected === true && typeof t["main-selection"] === "number");
+
+  // mpv marks both the first and the second subtitle "selected". Its main-selection field
+  // tells them apart (0 = first, 1 = second). An mpv without it is told apart with sid and
+  // secondary-sid; a lone selected subtitle is the first one (as before) unless mpv says it
+  // is the second.
+  const subRole = (
+    t: Record<string, unknown>,
+    hasMainSelection: boolean,
+    selectedSubs: number,
+  ): "first" | "second" | null => {
+    if (t.selected !== true) return null;
+    const id = String(t.id ?? "");
+    const mainSelection = t["main-selection"];
+    if (hasMainSelection && typeof mainSelection === "number") return mainSelection === 1 ? "second" : "first";
+    if (selectedSubs < 2) return mpvSecondarySid === id && mpvSid !== id ? "second" : "first";
+    if (mpvSid !== undefined) return id === mpvSid ? "first" : "second";
+    if (mpvSecondarySid !== undefined) return id === mpvSecondarySid ? "second" : "first";
+    return "first";
+  };
+
+  const roleSignature = (subs: TrackInfo[]): string =>
+    subs.map((t) => `${t.id}:${t.selected ? 1 : 0}${t.secondarySelected ? 1 : 0}`).join(",");
+
+  const buildTracks = (list: Array<Record<string, unknown>>, selectionOnly = false) => {
+    const hasMainSelection = trackListHasMainSelection(list);
+    const selectedSubs = list.filter((t) => t.type === "sub" && t.selected === true).length;
+    const audio: TrackInfo[] = [];
+    const subs: TrackInfo[] = [];
+    for (const t of list) {
+      const type = String(t.type ?? "");
+      const id = String(t.id ?? "");
+      const lang = (t.lang ?? t.language) as string | undefined;
+      const title = t.title as string | undefined;
+      const codecDesc = (t["codec-desc"] as string | undefined) || (t.codec as string | undefined);
+      const channels = t["demux-channels"] as string | undefined;
+      const channelCount = typeof t["demux-channel-count"] === "number"
+        ? (t["demux-channel-count"] as number)
+        : undefined;
+      const external = t.external === true;
+      const externalFilename = t["external-filename"] as string | undefined;
+      const forced = t.forced === true;
+      const isDefault = t.default === true;
+      const hearingImpaired = t["hearing-impaired"] === true;
+      const selected = t.selected === true;
+      const role = type === "sub" ? subRole(t, hasMainSelection, selectedSubs) : null;
+      const codec = codecDesc ? codecDesc.toUpperCase() : undefined;
+      const baseLabel = title || lang || `${type} ${id}`;
+      const tags: string[] = [];
+      if (codec) tags.push(codec);
+      if (type === "audio" && channels) tags.push(channels);
+      if (forced) tags.push("Forced");
+      if (hearingImpaired) tags.push("SDH");
+      if (external) tags.push("External");
+      const label = tags.length > 0 ? `${baseLabel} · ${tags.join(" · ")}` : baseLabel;
+      const info: TrackInfo = {
+        id,
+        label,
+        lang,
+        kind: type === "audio" ? "audio" : "subtitle",
+        // For subtitles "selected" means the first subtitle only.
+        selected: type === "sub" ? role === "first" : selected,
+        codec,
+        channels,
+        channelCount,
+        title,
+        external,
+        externalFilename,
+        forced,
+        default: isDefault,
+        hearingImpaired,
+        url: external && externalFilename ? addonUrlFor(externalFilename) : undefined,
+      };
+      if (role === "second") info.secondarySelected = true;
+      if (type === "audio") audio.push(info);
+      else if (type === "sub") subs.push(info);
+    }
+    const secondaryId = subs.find((t) => t.secondarySelected)?.id ?? null;
+    if (secondaryId !== snap.secondarySubTrackId) {
+      snap.secondarySubTrackId = secondaryId;
+      // mpv sends no last "empty" line when the second subtitle goes away.
+      if (secondaryId == null) snap.secondarySubText = "";
+    }
+    if (selectionOnly && roleSignature(subs) === roleSignature(snap.subtitleTracks)) return;
+    snap.audioTracks = audio;
+    snap.subtitleTracks = subs;
+  };
+
+  const firstSubId = (): string | null => snap.subtitleTracks.find((t) => t.selected)?.id ?? null;
+
+  // Drops the second subtitle on the page's side right away; mpv's next track-list agrees.
+  const clearSecondaryLocal = () => {
+    snap.secondarySubTrackId = null;
+    snap.secondarySubText = "";
+  };
+
+  const setSecondaryTrack = (id: string | null) => {
+    // The first subtitle's track can't also be the second one.
+    if (id != null && id === firstSubId()) return;
+    if (id == null) clearSecondaryLocal();
+    else snap.secondarySubText = "";
+    invoke("mpv_set_property", {
+      name: "secondary-sid",
+      value: id == null ? "no" : Number(id) || id,
+    }).catch(() => {});
+    emit();
+  };
+
   const handleEvent = (raw: MpvEvent) => {
     if (raw.event === "property-change") {
       const name = raw.name;
@@ -124,59 +245,27 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
       if (name === "track-list" && Array.isArray(data)) {
         const list = data as Array<Record<string, unknown>>;
         pendingTracks["track-list"] = list;
-        const audio: TrackInfo[] = [];
-        const subs: TrackInfo[] = [];
-        for (const t of list) {
-          const type = String(t.type ?? "");
-          const id = String(t.id ?? "");
-          const lang = (t.lang ?? t.language) as string | undefined;
-          const title = t.title as string | undefined;
-          const codecDesc = (t["codec-desc"] as string | undefined) || (t.codec as string | undefined);
-          const channels = t["demux-channels"] as string | undefined;
-          const channelCount = typeof t["demux-channel-count"] === "number"
-            ? (t["demux-channel-count"] as number)
-            : undefined;
-          const external = t.external === true;
-          const externalFilename = t["external-filename"] as string | undefined;
-          const forced = t.forced === true;
-          const isDefault = t.default === true;
-          const hearingImpaired = t["hearing-impaired"] === true;
-          const selected = t.selected === true;
-          const codec = codecDesc ? codecDesc.toUpperCase() : undefined;
-          const baseLabel = title || lang || `${type} ${id}`;
-          const tags: string[] = [];
-          if (codec) tags.push(codec);
-          if (type === "audio" && channels) tags.push(channels);
-          if (forced) tags.push("Forced");
-          if (hearingImpaired) tags.push("SDH");
-          if (external) tags.push("External");
-          const label = tags.length > 0 ? `${baseLabel} · ${tags.join(" · ")}` : baseLabel;
-          const info: TrackInfo = {
-            id,
-            label,
-            lang,
-            kind: type === "audio" ? "audio" : "subtitle",
-            selected,
-            codec,
-            channels,
-            channelCount,
-            title,
-            external,
-            externalFilename,
-            forced,
-            default: isDefault,
-            hearingImpaired,
-            url: external && externalFilename ? (urlByExternalFilename.get(externalFilename) ?? undefined) : undefined,
-          };
-          if (type === "audio") audio.push(info);
-          else if (type === "sub") subs.push(info);
-        }
-        snap.audioTracks = audio;
-        snap.subtitleTracks = subs;
+        buildTracks(list);
+      }
+      if (name === "sid" || name === "secondary-sid") {
+        // A track number, "no" for none, or "auto" before a file has picked its tracks.
+        const id =
+          typeof data === "string" && /^\d+$/.test(data)
+            ? data
+            : data === "no" || data === false
+              ? null
+              : undefined;
+        if (name === "sid") mpvSid = id;
+        else mpvSecondarySid = id;
+        // Only needed to tell the two subtitles apart when track-list has no main-selection.
+        const list = pendingTracks["track-list"] as Array<Record<string, unknown>> | undefined;
+        if (list && !trackListHasMainSelection(list)) buildTracks(list, true);
       }
       if (name === "sub-delay" && typeof data === "number") snap.subDelaySec = data;
       if (name === "audio-delay" && typeof data === "number") snap.audioDelaySec = data;
       if (name === "sub-text") snap.subText = typeof data === "string" ? data : "";
+      if (name === "secondary-sub-text") snap.secondarySubText = typeof data === "string" ? data : "";
+      if (name === "secondary-sub-delay" && typeof data === "number") snap.secondarySubDelaySec = data;
       if (name === "sub-start" && typeof data === "number") snap.subStartSec = data;
       if (name === "dwidth" && typeof data === "number") snap.videoWidth = data;
       if (name === "dheight" && typeof data === "number") snap.videoHeight = data;
@@ -251,6 +340,9 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
       snap.subtitleTracks = [];
       snap.subText = "";
       snap.subStartSec = 0;
+      snap.secondarySubText = "";
+      snap.secondarySubTrackId = null;
+      snap.secondarySubDelaySec = 0;
       snap.positionSec = 0;
       snap.durationSec = 0;
       snap.bufferedSec = 0;
@@ -270,6 +362,11 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
           try {
             suppressEndFileUntil = Date.now() + 1500;
             await invoke("mpv_command", { cmd: ["stop"] });
+            // A second subtitle belongs to the file it was picked for. mpv keeps secondary-sid
+            // as an option and would pick the same track number in the next file, so it is
+            // cleared here; the player puts the remembered one back once the tracks are known.
+            await invoke("mpv_set_property", { name: "secondary-sid", value: "no" }).catch(() => {});
+            await invoke("mpv_set_property", { name: "secondary-sub-delay", value: 0 }).catch(() => {});
             await applyHeaderProps(src.headers);
             const cmd: Array<string | number> = ["loadfile", src.url];
             if (typeof src.startAtSec === "number" && src.startAtSec > 0) {
@@ -286,6 +383,8 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
                     /* fall back to remote URL */
                   }
                 }
+                // Remembered by the address it came from (to put the same one back later).
+                if (url !== s.url) urlByExternalFilename.set(url, s.url);
                 await invoke("mpv_sub_add", {
                   url,
                   lang: s.lang ?? null,
@@ -396,6 +495,7 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
     seek(sec) {
       snap.subText = "";
       snap.subStartSec = 0;
+      snap.secondarySubText = "";
       emit();
       invoke("mpv_command", { cmd: ["seek", sec, "absolute", "exact"] }).catch(() => {});
     },
@@ -416,16 +516,40 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
     },
     setSubtitleTrack(id) {
       if (id == null) {
+        // The second subtitle only shows with a first one: turning the first off ends it too.
+        if (snap.secondarySubTrackId != null) {
+          clearSecondaryLocal();
+          invoke("mpv_set_property", { name: "secondary-sid", value: "no" }).catch(() => {});
+        }
         invoke("mpv_set_property", { name: "sid", value: "no" }).catch(() => {});
         snap.subText = "";
         snap.subStartSec = 0;
         emit();
       } else {
-        invoke("mpv_set_property", { name: "sid", value: Number(id) || id }).catch(() => {});
+        const value = Number(id) || id;
+        if (snap.secondarySubTrackId === id) {
+          // mpv won't make a track the first while it is the second, so the second lets go first.
+          clearSecondaryLocal();
+          invoke("mpv_set_property", { name: "secondary-sid", value: "no" })
+            .catch(() => {})
+            .then(() => invoke("mpv_set_property", { name: "sid", value }))
+            .catch(() => {});
+        } else {
+          invoke("mpv_set_property", { name: "sid", value }).catch(() => {});
+        }
         snap.subText = "";
         snap.subStartSec = 0;
         emit();
       }
+    },
+    setSecondarySubtitleTrack(id) {
+      setSecondaryTrack(id);
+    },
+    setSecondarySubDelay(sec) {
+      invoke("mpv_set_property", { name: "secondary-sub-delay", value: sec }).catch(() => {});
+    },
+    setSecondarySubVisible(on) {
+      invoke("mpv_set_property", { name: "secondary-sub-visibility", value: on }).catch(() => {});
     },
     setSubVisible(on) {
       invoke("mpv_set_property", { name: "sub-visibility", value: on }).catch(() => {});
@@ -470,6 +594,36 @@ export function createMpvBridge(mpvOptions?: MpvOptions): PlayerBridge {
         return true;
       } catch (e) {
         console.warn("[mpv] sub-add failed", e);
+        return false;
+      }
+    },
+    async addSecondarySubtitle(url, lang, title): Promise<boolean> {
+      // Already in the list (an addon subtitle the player loaded by itself): use that track.
+      const existing = snap.subtitleTracks.find((t) => t.url === url && !t.selected);
+      if (existing) {
+        if (!existing.secondarySelected) setSecondaryTrack(existing.id);
+        return true;
+      }
+      let mpvUrl = url;
+      if (/^https?:/i.test(url)) {
+        try {
+          mpvUrl = await invoke<string>("sub_download", { url });
+        } catch (e) {
+          console.warn("[mpv] sub_download failed, falling back to URL", e);
+        }
+      }
+      urlByExternalFilename.set(mpvUrl, url);
+      try {
+        await invoke("mpv_sub_add", {
+          url: mpvUrl,
+          lang: lang ?? null,
+          title: title ?? null,
+          select: false,
+          secondary: true,
+        });
+        return true;
+      } catch (e) {
+        console.warn("[mpv] adding the second subtitle failed", e);
         return false;
       }
     },
