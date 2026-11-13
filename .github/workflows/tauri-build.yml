@@ -1,60 +1,38 @@
 name: tauri-build
 
+# The Windows desktop app (Harbor App), built by hand from the Actions tab or the API: nothing
+# here runs on a push. Only Windows is built: this repository is private, so every runner
+# minute counts against the account's monthly allowance (Windows counts double, macOS ten times).
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# One build per branch at a time: a newer request replaces one still running.
+concurrency:
+  group: tauri-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_OPTIONS: --max-old-space-size=6144
+  # The web UI's "beta" badge is off unless the channel says otherwise.
+  HARBOR_CHANNEL: stable
+
 jobs:
-  build:
-    name: ${{ matrix.platform.name }} (${{ matrix.platform.target }})
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - name: Windows
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            bundle: msi
-          - name: macOS-AppleSilicon
-            runner: macos-latest
-            target: aarch64-apple-darwin
-            bundle: dmg
-          - name: macOS-Intel
-            runner: macos-13
-            target: x86_64-apple-darwin
-            bundle: dmg
-          - name: Linux-x86_64
-            runner: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            bundle: deb,appimage
+  windows:
+    name: Windows (x86_64-pc-windows-msvc)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      TARGET: x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Linux deps
-        if: contains(matrix.platform.runner, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev \
-            libmpv-dev \
-            libgtk-3-dev \
-            patchelf
-
-      - name: Install Mac deps
-        if: contains(matrix.platform.runner, 'macos')
-        run: |
-          brew install mpv pkg-config
-          # Make pkg-config find libmpv from homebrew
-          echo "PKG_CONFIG_PATH=$(brew --prefix mpv)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> $GITHUB_ENV
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform.target }}
+          targets: x86_64-pc-windows-msvc
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -62,91 +40,61 @@ jobs:
             harbor-core
             src-tauri
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install JS deps
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: |
+          # One dependency comes from GitHub by an ssh:// address; fetch it over https instead.
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          pnpm install --frozen-lockfile
 
-      - name: Fetch libmpv (Windows)
-        if: contains(matrix.platform.runner, 'windows')
-        run: pnpm run setup:libmpv
+      - name: Check Arabic translations
+        run: pnpm run check:i18n
 
-      - name: Fetch external binaries
+      # libmpv-2.dll (the player) and mpv.exe (thumbnails, recordings), both pinned by checksum.
+      - name: Fetch libmpv and mpv
+        run: |
+          pnpm run setup:libmpv
+          pnpm run setup:mpv
+
+      - name: Fetch yt-dlp, ffmpeg and ffprobe
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
           cd src-tauri/binaries
-          TARGET="${{ matrix.platform.target }}"
-          EXT=""
-          if [[ "$TARGET" == *"windows"* ]]; then EXT=".exe"; fi
-          
-          echo "Downloading yt-dlp..."
-          if [[ "$TARGET" == *"windows"* ]]; then
-            curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -o "yt-dlp-${TARGET}${EXT}"
-          elif [[ "$TARGET" == *"apple"* ]]; then
-            curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos" -o "yt-dlp-${TARGET}${EXT}"
-          else
-            curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o "yt-dlp-${TARGET}${EXT}"
-          fi
-          chmod +x "yt-dlp-${TARGET}${EXT}" || true
+          curl --retry 6 --retry-delay 4 --retry-all-errors -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -o "yt-dlp-${TARGET}.exe"
+          curl --retry 6 --retry-delay 4 --retry-all-errors -fsSL "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -o ffmpeg.zip
+          unzip -q -j ffmpeg.zip "*/bin/ffmpeg.exe" "*/bin/ffprobe.exe"
+          rm ffmpeg.zip
+          mv ffmpeg.exe "ffmpeg-${TARGET}.exe"
+          mv ffprobe.exe "ffprobe-${TARGET}.exe"
+          ls -la
 
-          echo "Fetching ffmpeg and ffprobe..."
-          if [[ "$TARGET" == *"windows"* ]]; then
-            curl -L "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -o ffmpeg.zip
-            unzip -j ffmpeg.zip "*/bin/ffmpeg.exe" "*/bin/ffprobe.exe"
-            mv ffmpeg.exe "ffmpeg-${TARGET}${EXT}"
-            mv ffprobe.exe "ffprobe-${TARGET}${EXT}"
-          elif [[ "$TARGET" == *"apple"* ]]; then
-            if [[ "$TARGET" == *"aarch64"* ]]; then
-              curl -L "https://www.osxexperts.net/ffmpeg6arm.zip" -o ffmpeg.zip
-              curl -L "https://www.osxexperts.net/ffprobe6arm.zip" -o ffprobe.zip
-            else
-              curl -L "https://www.osxexperts.net/ffmpeg6intel.zip" -o ffmpeg.zip
-              curl -L "https://www.osxexperts.net/ffprobe6intel.zip" -o ffprobe.zip
-            fi
-            unzip ffmpeg.zip
-            unzip ffprobe.zip
-            mv ffmpeg "ffmpeg-${TARGET}${EXT}"
-            mv ffprobe "ffprobe-${TARGET}${EXT}"
-            chmod +x "ffmpeg-${TARGET}${EXT}" "ffprobe-${TARGET}${EXT}" || true
-          else
-            curl -L "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" -o ffmpeg.tar.xz
-            tar -xf ffmpeg.tar.xz --strip-components=1 --wildcards '*/ffmpeg' '*/ffprobe'
-            mv ffmpeg "ffmpeg-${TARGET}${EXT}"
-            mv ffprobe "ffprobe-${TARGET}${EXT}"
-          fi
+      - name: Build the app and its installer
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis
 
-      - name: harbor-core check
-        working-directory: harbor-core
+      - name: Find the installer
+        id: installer
+        shell: bash
         run: |
-          cargo check
-          cargo test --all-targets
+          EXE=$(ls src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe | head -1)
+          [ -n "$EXE" ] || { echo "::error::no installer was made"; exit 1; }
+          ls -la "$EXE"
+          echo "SHA-256: $(sha256sum "$EXE" | cut -d' ' -f1)"
+          echo "path=$EXE" >> "$GITHUB_OUTPUT"
 
-      - name: Tauri build
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The installer itself (not a zip): it downloads as the .exe.
+      - uses: actions/upload-artifact@v7
         with:
-          tauriScript: pnpm tauri
-          args: --target ${{ matrix.platform.target }}
-
-      - name: Upload artifacts
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: harbor-${{ matrix.platform.name }}
-          path: |
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.dmg
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.deb
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.AppImage
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.msi
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/**/*.exe
+          path: ${{ steps.installer.outputs.path }}
+          archive: false
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error

@@ -1,7 +1,7 @@
 {
   "name": "harbor",
   "private": true,
-  "version": "0.9.36",
+  "version": "1.1.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -12,6 +12,7 @@
     "tauri": "tauri",
     "tauri:build:linux-system": "tauri build --config src-tauri/tauri.linux-system.conf.json",
     "setup:libmpv": "node scripts/fetch-libmpv.mjs",
+    "setup:mpv": "node scripts/fetch-mpv.mjs",
     "setup:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
     "setup:fonts": "node scripts/fetch-fonts.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",

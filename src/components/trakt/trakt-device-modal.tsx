@@ -46,7 +46,7 @@ export function TraktDeviceModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
+    <div role="dialog" aria-modal="true"
       className="pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center bg-black/72 backdrop-blur-md animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
@@ -156,7 +156,7 @@ export function TraktDeviceModal({ onClose }: { onClose: () => void }) {
         {connectState.kind === "error" && (
           <ErrorBox
             title={t("Couldn't reach Trakt")}
-            message={connectState.message}
+            message={t(connectState.message)}
             onRetry={beginConnect}
           />
         )}
