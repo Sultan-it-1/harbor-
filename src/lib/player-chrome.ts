@@ -33,6 +33,7 @@ export type PlayerControlId =
   | "screenshot"
   | "pip"
   | "cast"
+  | "external-player"
   | "fullscreen"
   | "window-controls";
 
@@ -174,6 +175,7 @@ export const DEFAULT_DEFAULT_CONFIG: PlayerChromeConfig = {
     { id: "volume", slot: "bottom-left", order: 0 },
     { id: "dvr", slot: "bottom-left", order: 10 },
     { id: "download", slot: "bottom-left", order: 20 },
+    { id: "external-player", slot: "bottom-left", order: 30 },
     { id: "prev-episode", slot: "bottom-center", order: 0 },
     { id: "seek-back", slot: "bottom-center", order: 10 },
     { id: "play-pause", slot: "bottom-center", order: 20 },
@@ -203,6 +205,8 @@ export const DEFAULT_STREMIO_CONFIG: PlayerChromeConfig = {
     { id: "back", slot: "top-left", order: 0 },
     { id: "title-info", slot: "top-left", order: 10 },
     { id: "fullscreen", slot: "top-right", order: 0 },
+    // Where the old "VLC" pill was in this layout.
+    { id: "external-player", slot: "top-right", order: 50 },
     { id: "window-controls", slot: "top-right", order: 100 },
     { id: "play-pause", slot: "bottom-left", order: 0 },
     { id: "volume", slot: "bottom-left", order: 10 },
@@ -258,6 +262,7 @@ export const CONTROL_META: Record<
   screenshot: { label: "Screenshot", group: "actions", defaultSlot: "bottom-right" },
   pip: { label: "Picture-in-picture", group: "actions", defaultSlot: "bottom-right" },
   cast: { label: "Cast", group: "actions", defaultSlot: "bottom-right" },
+  "external-player": { label: "Open in another player", group: "actions", defaultSlot: "bottom-left" },
   fullscreen: { label: "Fullscreen", group: "transport", defaultSlot: "bottom-right" },
   "window-controls": { label: "Window buttons (minimize, maximize, close)", group: "actions", defaultSlot: "top-right" },
 };

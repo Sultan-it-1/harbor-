@@ -37,6 +37,10 @@ export type PlayerOverlayLayersProps = {
   subAssNative: boolean;
   showStats: boolean;
   holdSpeedActive: boolean;
+  /** Holding the left button on the video: the same hold-for-speed as the keyboard's. */
+  onHoldSpeedStart: () => void;
+  onHoldSpeedEnd: () => void;
+  canHoldSpeed: () => boolean;
   videoFillPill: string | null;
   subDropToast: string | null;
   pipMode: boolean;
@@ -109,6 +113,7 @@ export type PlayerOverlayLayersProps = {
   liveOverlay: Live["liveOverlay"];
   setDvrOpen: (fn: (v: boolean) => boolean) => void;
   openDvr: (() => void) | undefined;
+  onOpenExternal: Shell["onOpenExternal"];
   sleep: Shell["sleep"];
   adjacentPrev: PlayEpisode | null;
   adjacentNext: PlayEpisode | null;
@@ -199,6 +204,9 @@ export function PlayerOverlayLayers(p: PlayerOverlayLayersProps) {
         onDoubleClick={p.toggleFullscreen}
         onWheelVolume={p.onVolumeWheel}
         onSeekStep={p.onSeekStep}
+        onHoldStart={p.onHoldSpeedStart}
+        onHoldEnd={p.onHoldSpeedEnd}
+        canHold={p.canHoldSpeed}
       />
 
       <LoaderLayer
@@ -313,6 +321,7 @@ export function PlayerOverlayLayers(p: PlayerOverlayLayersProps) {
           episode={p.src.episode?.episode ?? null}
           download={p.download}
           onOpenDvr={p.openDvr}
+          onOpenExternal={p.onOpenExternal}
           sleep={p.sleep}
         />
       )}

@@ -2,6 +2,7 @@ import type { ControlContext } from "@/components/player/transport/control-rende
 import type { StremioRenderCtx } from "@/components/player/transport/control-renderer-stremio";
 import type { ControlVariant, CustomIconMap, PlayerControlId, TimeFormat, VolumeStyle } from "@/lib/player-chrome";
 import { emptySnapshot, type PlayerCapabilities } from "@/lib/player/bridge";
+import { externalPlayersSupported } from "@/lib/external-player";
 
 const NOOP = () => {};
 const NOOP_NUM = (_: number) => {};
@@ -110,6 +111,9 @@ export function buildDefaultCtx(opts: MockOptions): ControlContext {
     onDownloadReveal: NOOP,
     onDownloadReset: NOOP,
     onOpenDvr: NOOP,
+    // Shown where the real player shows it (the desktop app); picking a player does nothing.
+    onOpenExternal: externalPlayersSupported() ? NOOP : undefined,
+    setExternalMenuOpen: NOOP_BOOL,
     setAudioMenuOpen: NOOP_BOOL,
     setSubtitleMenuOpen: NOOP_BOOL,
     setSpeedMenuOpen: NOOP_BOOL,

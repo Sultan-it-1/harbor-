@@ -9,6 +9,7 @@ mod discord_rp;
 mod dlna;
 mod download;
 mod dvr;
+mod external_player;
 mod fonts;
 mod fullscreen;
 mod hdr_overlay;
@@ -512,6 +513,8 @@ pub fn run() {
             svp::svp_status,
             svp::svp_launch,
             svp::svp_apply,
+            external_player::external_players_list,
+            external_player::external_player_open,
             settings_store::settings_read,
             settings_store::settings_write,
             proc_mem::harbor_process_memory,

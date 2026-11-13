@@ -63,6 +63,8 @@ export type PlayerShellProps = {
   onDownloadReveal?: () => void;
   onDownloadReset?: () => void;
   onOpenDvr?: () => void;
+  /** Desktop only: opens the stream in another installed player. */
+  onOpenExternal?: (player: import("@/lib/external-player").ExternalPlayer) => void | Promise<void>;
   sleep?: import("@/views/player/hooks/use-sleep-timer").SleepTimerState;
 };
 

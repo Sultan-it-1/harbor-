@@ -132,6 +132,10 @@ function HdrOverlayChrome() {
         onClick={() => act("hdr-stage://play-pause")}
         onDoubleClick={() => act("hdr-stage://fullscreen")}
         onSeekStep={(delta) => act("hdr-stage://seek-step", { delta })}
+        // The main window owns playback: it speeds up while the button is held here.
+        onHoldStart={() => act("hdr-stage://hold-speed", { on: true })}
+        onHoldEnd={() => act("hdr-stage://hold-speed", { on: false })}
+        canHold={() => snapRef.current.status === "playing" && !snapRef.current.buffering}
       />
       <ShellLayer
         shellId={payload.shellId}
@@ -180,6 +184,7 @@ function HdrOverlayChrome() {
         season={src.episode?.season ?? null}
         episode={src.episode?.episode ?? null}
         download={download}
+        onOpenExternal={(player) => act("hdr-stage://open-external", { player })}
         sleep={undefined}
       />
     </div>

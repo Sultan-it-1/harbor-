@@ -205,6 +205,54 @@ impl ProxyState {
         self.sessions.write().await.remove(session_id);
     }
 
+    /// When `url` is one of this proxy's own local play addresses, returns the source it
+    /// forwards to and the headers it adds. An external player that can send those headers
+    /// itself can then open the source directly and keep playing after Harbor closes.
+    pub async fn upstream_of(&self, url: &str) -> Option<(String, HashMap<String, String>)> {
+        if self.port == 0 {
+            return None;
+        }
+        let parsed = url::Url::parse(url).ok()?;
+        if parsed.scheme() != "http" || parsed.port() != Some(self.port) {
+            return None;
+        }
+        if !matches!(parsed.host_str(), Some("127.0.0.1") | Some("localhost")) {
+            return None;
+        }
+        let mut segments = parsed.path_segments()?;
+        let route = segments.next()?;
+        let id = segments.next()?;
+        let id = match route {
+            "s" => id.strip_suffix(".ts").unwrap_or(id),
+            "p" => id,
+            _ => return None,
+        };
+        let sessions = self.sessions.read().await;
+        let s = sessions.get(id)?;
+        Some((s.url.clone(), s.headers.clone()))
+    }
+
+    /// A new local address for `url` that adds `headers` to every request, for a player that
+    /// can't send them itself. None when the proxy did not start.
+    pub async fn local_address(&self, url: &str, headers: HashMap<String, String>) -> Option<String> {
+        if self.port == 0 {
+            return None;
+        }
+        let res = self
+            .register(RegisterArgs {
+                url: url.to_string(),
+                headers,
+                transcode: false,
+                profile: None,
+                target_host: None,
+                start_time_sec: None,
+                burn_sub_path: None,
+                burn_sub_style: None,
+            })
+            .await;
+        Some(res.url)
+    }
+
     pub async fn gc_idle(&self) -> usize {
         const PROXY_MAX_AGE: Duration = Duration::from_secs(3 * 60 * 60);
         const HLS_IDLE: Duration = Duration::from_secs(5 * 60);
