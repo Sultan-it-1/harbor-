@@ -6,9 +6,13 @@
 ; Only copies inside this install folder are stopped: an mpv or ffmpeg the user has elsewhere
 ; is left alone. The folder reaches PowerShell through an environment variable, so a quote or
 ; any other character in the path can't break the command.
+; Each process's path comes from Windows' own process list (Win32_Process), not Get-Process:
+; the installer is a 32-bit program, so the PowerShell it starts is the 32-bit one, which can't
+; read a 64-bit process's path through Get-Process (it comes back empty, and nothing was
+; stopped). Taskkill then stops each one by its number, with its child processes.
 !macro HARBOR_STOP_HELPERS
   System::Call 'Kernel32::SetEnvironmentVariable(t "HARBOR_INSTDIR", t "$INSTDIR\")'
-  nsExec::Exec `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$d = $$env:HARBOR_INSTDIR; Get-Process -Name mpv,ffmpeg,ffprobe,yt-dlp -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith($$d, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue"`
+  nsExec::Exec `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$d = $$env:HARBOR_INSTDIR; $$names = @('mpv.exe','ffmpeg.exe','ffprobe.exe','yt-dlp.exe'); Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$names -contains $$_.Name -and $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$d, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { taskkill.exe /F /T /PID $$_.ProcessId | Out-Null }"`
   Pop $0
 !macroend
 
